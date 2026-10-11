@@ -4,7 +4,7 @@ Variabile de mediu: FTP_HOST, FTP_USER, FTP_PASSWORD (obligatorii),
 FTP_PORT (implicit 21), FTP_DIR (implicit "/", folderul subdomeniului e deja
 rădăcina contului FTP).
 
-Se urcă DOAR: site/* și data/indicatori.json (ca date/indicatori.json).
+Se urcă DOAR: site/*, data/indicatori.json și data/liste.json (în folderul date/).
 Baza de date și documentele nu se urcă niciodată.
 """
 import ftplib
@@ -43,11 +43,12 @@ def main():
         rel = os.path.relpath(dirpath, site)
         for n in names:
             files.append((os.path.join(dirpath, n), "" if rel == "." else rel, n))
-    ind = os.path.join(ROOT, "data", "indicatori.json")
-    if os.path.exists(ind):
-        files.append((ind, "date", "indicatori.json"))
-    else:
-        print("atenție: data/indicatori.json nu există", file=sys.stderr)
+    for name in ("indicatori.json", "liste.json"):
+        p = os.path.join(ROOT, "data", name)
+        if os.path.exists(p):
+            files.append((p, "date", name))
+        else:
+            print(f"atenție: data/{name} nu există", file=sys.stderr)
 
     ftp = ftplib.FTP_TLS()
     ftp.connect(host, int(os.environ.get("FTP_PORT", "21")), timeout=60)

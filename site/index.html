@@ -30,6 +30,18 @@ ul{padding-left:18px;margin:8px 0}
 footer{color:var(--muted);font-size:.85rem;padding:24px 0 48px}
 a{color:var(--accent)}
 #eroare{display:none}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 12px}
+.tabs button{font:inherit;font-size:.9rem;padding:6px 12px;border-radius:99px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--card)}
+.filtre{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.filtre input,.filtre select{font:inherit;font-size:.95rem;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+.filtre input{flex:1 1 220px;min-width:0}
+.doc{padding:10px 0;border-bottom:1px solid var(--line)}
+.doc .id{font-weight:600;font-variant-numeric:tabular-nums}
+.doc .t{margin:2px 0;overflow-wrap:anywhere}
+.doc .m{color:var(--muted);font-size:.85rem;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.mai{margin-top:12px;font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--accent);cursor:pointer}
+.mai[hidden]{display:none}
 .skip{position:absolute;left:-999px}.skip:focus{left:8px;top:8px;background:var(--card);padding:6px}
 </style>
 </head>
@@ -73,6 +85,23 @@ a{color:var(--accent)}
     </section>
   </div>
 
+  <section class="card" id="documente" style="margin-bottom:16px">
+    <h2>Documente</h2>
+    <div class="note">Actele publicate de primărie, cu link spre pagina și fișierul original. Lista se actualizează zilnic.</div>
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-t="hcl">Hotărâri de consiliu</button>
+      <button role="tab" aria-selected="false" data-t="pv">Procese-verbale</button>
+      <button role="tab" aria-selected="false" data-t="registre">Registre de urbanism</button>
+    </div>
+    <div class="filtre">
+      <input type="search" id="cauta" placeholder="Caută în titluri (ex. buget, teren, stradă)" aria-label="Caută în titluri">
+      <select id="an" aria-label="Anul"><option value="">Toți anii</option></select>
+    </div>
+    <p class="note" id="numar" aria-live="polite"></p>
+    <div id="lista"></div>
+    <button class="mai" id="mai" hidden>Arată mai multe</button>
+  </section>
+
   <section class="card">
     <h2>Hotărâri cu probleme de publicare</h2>
     <div class="note">Fișier greșit atașat, numere neconcordante sau lipsă în secvența anuală. Fiecare caz trimite la documentul-sursă.</div>
@@ -106,7 +135,7 @@ a{color:var(--accent)}
   fetch("date/indicatori.json",{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(d){
     $("actualizat").textContent = "Date calculate la " + fmtDate(d.calculat_la) + ".";
 
-    var ani = Object.keys(d.hcl_intarziere_publicare||{}).sort();
+    var ani = Object.keys(d.hcl_intarziere_publicare||{}).filter(function(a){return d.hcl_intarziere_publicare[a].fiabil!==false}).sort();
     if(ani.length){
       var last = d.hcl_intarziere_publicare[ani[ani.length-1]];
       $("hcl-med").innerHTML = esc(last.mediana_zile) + ' <span class="unit">zile</span>';
@@ -143,9 +172,53 @@ a{color:var(--accent)}
     }).join("") : '<tr><td colspan="3">Nicio problemă detectată.</td></tr>';
 
     var lipsa = d.hcl_numere_lipsa||{}, parts=[];
-    Object.keys(lipsa).sort().reverse().forEach(function(y){ if(lipsa[y].lipsa_total) parts.push(esc(y)+": "+esc(lipsa[y].lipsa_total)+" numere lipsă din "+esc(lipsa[y].ultimul_nr)); });
+    Object.keys(lipsa).sort().reverse().forEach(function(y){ if(lipsa[y].lipsa_total && lipsa[y].acoperire_completa!==false) parts.push(esc(y)+": "+esc(lipsa[y].lipsa_total)+" numere lipsă din "+esc(lipsa[y].ultimul_nr)); });
     $("lipsa").innerHTML = parts.length ? "Numere lipsă în secvența HCL, pe baza documentelor găsite. "+parts.join("; ")+"." : "";
   }).catch(function(){ $("eroare").style.display="block"; $("actualizat").textContent=""; });
+  // ---------- Liste de documente ----------
+  var L=null, tab="hcl", shown=25;
+  var TIP={ordinara:"ordinară",extraordinara:"extraordinară",extraordinara_de_indata:"de îndată"};
+  var REG={cu:"Certificate de urbanism",ac:"Autorizații de construire"};
+  function norm(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase()}
+  function ziua(s){return s?fmtDate(s):"-"}
+  function an(x){return tab==="hcl"?String(x.an):(tab==="pv"?(x.data||"").slice(0,4):(x.pana_la||"").slice(0,4))}
+  function linkuri(x){
+    var o=[],p=safeUrl(x.pagina),f=safeUrl(x.pdf);
+    if(p)o.push('<a href="'+esc(p)+'" rel="noopener">pagina</a>');
+    if(f)o.push('<a href="'+esc(f)+'" rel="noopener">PDF</a>');
+    if(x.scanat===1)o.push('<span class="tag warn" title="Document scanat: textul nu poate fi căutat sau citit de cititoarele de ecran">scanat</span>');
+    return o.join("");
+  }
+  function item(x){
+    if(tab==="hcl") return '<div class="doc"><div class="id">HCL '+esc(x.nr)+'/'+esc(x.an)+'</div><div class="t">'+esc(x.titlu||"(fără titlu)")+'</div><div class="m"><span>'+(x.data?"adoptată "+esc(ziua(x.data)):"")+(x.postat?" · postată "+esc(ziua(x.postat)):"")+'</span>'+linkuri(x)+'</div></div>';
+    if(tab==="pv") return '<div class="doc"><div class="id">Ședința '+esc(TIP[x.tip]||x.tip||"")+' din '+esc(ziua(x.data))+'</div><div class="t">'+esc(x.titlu||"")+'</div><div class="m">'+(x.postat?"<span>postat "+esc(ziua(x.postat))+"</span>":"")+linkuri(x)+'</div></div>';
+    return '<div class="doc"><div class="id">'+esc(REG[x.tip]||x.tip)+'</div><div class="t">'+esc(x.titlu||"")+'</div><div class="m"><span>'+esc(ziua(x.de_la))+' - '+esc(ziua(x.pana_la))+'</span>'+linkuri(x)+'</div></div>';
+  }
+  function filtrate(){
+    var q=norm($("cauta").value).trim(), a=$("an").value;
+    return (L[tab]||[]).filter(function(x){return (!a||an(x)===a)&&(!q||norm(x.titlu+" "+(x.nr||"")).indexOf(q)>=0)});
+  }
+  function deseneaza(){
+    var f=filtrate();
+    $("numar").textContent=f.length+(f.length===1?" document":" documente");
+    $("lista").innerHTML=f.slice(0,shown).map(item).join("")||'<p class="note">Niciun document găsit.</p>';
+    $("mai").hidden=f.length<=shown;
+  }
+  function ani(){
+    var s={};(L[tab]||[]).forEach(function(x){var y=an(x);if(y)s[y]=1});
+    $("an").innerHTML='<option value="">Toți anii</option>'+Object.keys(s).sort().reverse().map(function(y){return '<option>'+esc(y)+'</option>'}).join("");
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".tabs button"),function(b){
+    b.addEventListener("click",function(){
+      Array.prototype.forEach.call(document.querySelectorAll(".tabs button"),function(o){o.setAttribute("aria-selected",o===b?"true":"false")});
+      tab=b.getAttribute("data-t");shown=25;if(L){ani();deseneaza();}
+    });
+  });
+  $("cauta").addEventListener("input",function(){shown=25;if(L)deseneaza()});
+  $("an").addEventListener("change",function(){shown=25;if(L)deseneaza()});
+  $("mai").addEventListener("click",function(){shown+=50;deseneaza()});
+  fetch("date/liste.json",{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(d){L=d;ani();deseneaza()})
+    .catch(function(){$("numar").textContent="Listele nu sunt disponibile încă."});
 })();
 </script>
 </body>

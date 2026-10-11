@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, unquote
 
 from pypdf import PdfReader
@@ -76,11 +77,16 @@ def ocr_pdf(pdf_path, lang=config.OCR_LANG, dpi=300):
         subprocess.run(["pdftoppm", "-r", str(dpi), "-png", pdf_path, os.path.join(tmp, "p")],
                        check=True, capture_output=True)
         pages = sorted(f for f in os.listdir(tmp) if f.endswith(".png"))
-        texts = []
-        for png in pages:
-            res = subprocess.run(["tesseract", os.path.join(tmp, png), "stdout", "-l", lang, "--psm", "1"],
-                                 check=True, capture_output=True, text=True)
-            texts.append(res.stdout)
+        # Un proces tesseract pe nucleu, fiecare cu un singur fir (OMP_THREAD_LIMIT=1):
+        # mai rapid decât un singur tesseract multi-fir.
+        env = dict(os.environ, OMP_THREAD_LIMIT="1")
+
+        def one(png):
+            return subprocess.run(["tesseract", os.path.join(tmp, png), "stdout", "-l", lang, "--psm", "1"],
+                                  check=True, capture_output=True, text=True, env=env).stdout
+
+        with ThreadPoolExecutor(max_workers=max(1, os.cpu_count() or 1)) as ex:
+            texts = list(ex.map(one, pages))
     return "\n\f".join(texts)
 
 
@@ -118,11 +124,17 @@ def process_downloads(store, session, data_dir=config.DATA_DIR, limit=None, dela
     return stats
 
 
-def process_ocr(store, lang=config.OCR_LANG, limit=None):
-    stats = {"ocr": 0, "erori": 0}
+def process_ocr(store, lang=config.OCR_LANG, limit=None, minutes=None):
+    """OCR pe documentele scanate. `minutes` = buget de timp: după expirare nu mai
+    începe documente noi, iar ce s-a terminat rămâne salvat."""
+    stats = {"ocr": 0, "pagini": 0, "erori": 0, "oprit_la_buget": False}
+    deadline = time.time() + minutes * 60 if minutes else None
     if not ocr_available(lang):
         raise RuntimeError(f"Lipsește pdftoppm, tesseract sau limba „{lang}” (apt install tesseract-ocr-{lang})")
     for row in store.documents_to_ocr(limit):
+        if deadline and time.time() > deadline:
+            stats["oprit_la_buget"] = True
+            break
         try:
             text = ocr_pdf(row["local_path"], lang)
         except Exception as e:
@@ -135,4 +147,6 @@ def process_ocr(store, lang=config.OCR_LANG, limit=None):
         store.update_document(row["url"], text_path=tp, ocr_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
         store.db.commit()
         stats["ocr"] += 1
+        stats["pagini"] += text.count("\f") + 1
+        log.info("OCR %s (%d/%s)", row["url"], stats["ocr"], limit or "-")
     return stats

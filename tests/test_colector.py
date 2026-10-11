@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import sys
@@ -176,8 +177,12 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(ind["contracte_site"]["zile_de_la_ultima"], 285)
         self.assertEqual(ind["pv_intarziere_publicare"]["max_zile"], 40)            # 20.08 -> 29.09
         self.assertEqual(ind["hcl_numere_lipsa"]["2026"]["lipsa_total"], 157)       # doar 3 HCL în setul de test
+        self.assertFalse(ind["hcl_numere_lipsa"]["2026"]["acoperire_completa"])
+        self.assertTrue(ind["hcl_intarziere_publicare"]["2026"]["fiabil"])
+        self.assertIn("de_ocr", ind["documente"])
         md = indicators.to_markdown(ind)
         self.assertIn("HCL - întârzierea publicării", md)
+        self.assertIn("acoperire incompletă", md)
         self.assertNotIn("—", md)
 
     def test_download_and_text_detection(self):
@@ -246,3 +251,71 @@ class TestOCR(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestIndicatoriFiltre(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.store = Store(os.path.join(self.tmp, "t.db"))
+
+    def tearDown(self):
+        self.store.close()
+
+    def test_retrodated_year_and_technical_issues_not_public(self):
+        db = self.store.db
+        for n in range(1, 11):   # 2025: 8 din 10 postate în ziua adoptării -> nefiabil
+            posted = "2025-03-01" if n <= 8 else "2025-03-11"
+            issues = '["nume_fisier_neparsabil"]' if n == 1 else ('["fisier_alt_numar:301"]' if n == 2 else "[]")
+            db.execute("INSERT INTO hcl (year, number, adoption_date, origin, posted, issues, redacted) "
+                       "VALUES (2025, ?, '2025-03-01', 'site', ?, ?, 0)", (n, posted, issues))
+        db.commit()
+        ind = indicators.compute(self.store, today=date(2026, 10, 10))
+        self.assertFalse(ind["hcl_intarziere_publicare"]["2025"]["fiabil"])
+        self.assertTrue(ind["hcl_numere_lipsa"]["2025"]["acoperire_completa"])
+        self.assertEqual([p["nr"] for p in ind["hcl_probleme"]], [2])
+        self.assertEqual(ind["hcl_diagnostic_nume_fisier"], 1)
+        self.assertIn("NEFIABIL", indicators.to_markdown(ind))
+
+
+class TestListeSiWord(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.store = Store(os.path.join(self.tmp, "t.db"))
+        self.client = WPClient(delay=0, session=fakes.FakeSession())
+
+    def tearDown(self):
+        self.store.close()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_liste_have_links(self):
+        from monitor_colector import liste
+        collect.collect_api(self.store, self.client, sources=["hcl", "pv", "cu", "ac"])
+        L = liste.export(self.store)
+        self.assertTrue(L["hcl"] and L["pv"] and L["registre"])
+        h = L["hcl"][0]
+        self.assertEqual((h["an"], h["nr"]), (2026, 160))
+        self.assertTrue(h["pdf"].endswith(".pdf"))
+        self.assertTrue(h["pagina"].startswith("https://"))
+        self.assertNotIn("text", json.dumps(L).lower().replace("text_", ""))
+
+    def test_word_document(self):
+        from docx import Document
+        from monitor_colector import word
+        txt = os.path.join(self.tmp, "a.txt")
+        with open(txt, "w", encoding="utf-8") as f:
+            f.write("HOTĂRÂRE\nprivind aproba-\nrea bugetului\n\nArt. 1 Se aprobă.\f Pagina doi")
+        self.store.add_document("https://x.ro/HCL-1.pdf", None, "arhiva", "HCL 1")
+        self.store.update_document("https://x.ro/HCL-1.pdf", text_path=txt, text_layer=0,
+                                   fetched_at="2026-10-11", local_path=txt)
+        self.store.db.execute("INSERT INTO hcl (year, number, origin, pdf_url, issues, redacted) "
+                              "VALUES (2015, 1, 'arhiva', 'https://x.ro/HCL-1.pdf', '[]', 0)")
+        self.store.db.commit()
+        st = word.export_all(self.store, data_dir=self.tmp)
+        self.assertEqual(st["word"], 1)
+        dest = os.path.join(self.tmp, "texte", "hcl", "HCL 1 din 2015.docx")
+        body = "\n".join(p.text for p in Document(dest).paragraphs)
+        self.assertIn("privind aprobarea bugetului", body)
+        self.assertIn("OCR", body)
+        self.assertNotIn("—", body)
+        self.assertEqual(word.export_all(self.store, data_dir=self.tmp)["existente"], 1)
+        self.assertEqual(word.safe_name('a_b: c/d?'), "a b c d")

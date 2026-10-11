@@ -114,8 +114,10 @@ class Store:
         return self.db.execute(q + (f" LIMIT {int(limit)}" if limit else "")).fetchall()
 
     def documents_to_ocr(self, limit=None):
-        q = ("SELECT * FROM documents WHERE text_layer=0 AND ocr_at IS NULL "
-             "AND local_path IS NOT NULL ORDER BY rowid")
+        # Întâi procesele-verbale (din ele extragem voturile), apoi restul.
+        q = ("SELECT d.* FROM documents d LEFT JOIN posts p ON p.wp_id = d.wp_id "
+             "WHERE d.text_layer=0 AND d.ocr_at IS NULL AND d.local_path IS NOT NULL "
+             "ORDER BY (p.source = 'pv') DESC, d.rowid")
         return self.db.execute(q + (f" LIMIT {int(limit)}" if limit else "")).fetchall()
 
     def update_document(self, url, **fields):
