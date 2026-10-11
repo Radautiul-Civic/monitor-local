@@ -249,8 +249,6 @@ class TestOCR(unittest.TestCase):
             shutil.rmtree(tmp)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestIndicatoriFiltre(unittest.TestCase):
@@ -319,3 +317,67 @@ class TestListeSiWord(unittest.TestCase):
         self.assertNotIn("—", body)
         self.assertEqual(word.export_all(self.store, data_dir=self.tmp)["existente"], 1)
         self.assertEqual(word.safe_name('a_b: c/d?'), "a b c d")
+
+
+class TestRecuperare(unittest.TestCase):
+    @unittest.skipUnless(documents.ocr_available("eng"), "lipsește tesseract/pdftoppm")
+    def test_queue_lots_and_import(self):
+        from monitor_colector import recuperare
+        tmp = tempfile.mkdtemp()
+        try:
+            store = Store(os.path.join(tmp, "t.db"))
+            for i in range(3):
+                pdf = os.path.join(tmp, f"d{i}.pdf")
+                make_scanned_pdf(pdf, f"HOTARARE NUMARUL {i + 1}")
+                url = f"https://x.ro/d{i}.pdf"
+                store.add_document(url, None, "arhiva", f"d{i}")
+                store.update_document(url, local_path=pdf, text_layer=0, pages=1, fetched_at="2026-10-11")
+            store.db.commit()
+            q = recuperare.build_queue(store, data_dir=tmp, per_lot=2)
+            self.assertEqual((q["documente"], q["loturi"]), (3, 2))
+            outs = []
+            for lot in range(2):
+                out = os.path.join(tmp, f"lot{lot}")
+                st = recuperare.ocr_lot(lot, 2, out, data_dir=tmp, lang="eng")
+                self.assertEqual(st["erori"], 0)
+                outs.append(out)
+            self.assertEqual(recuperare.importa(store, outs)["importate"], 3)
+            self.assertEqual(store.documents_to_ocr(), [])
+            row = store.db.execute("SELECT text_path FROM documents WHERE url='https://x.ro/d2.pdf'").fetchone()
+            with open(row["text_path"], encoding="utf-8") as f:
+                self.assertIn("3", f.read())
+            store.close()
+        finally:
+            shutil.rmtree(tmp)
+
+    def test_budget_stops_before_starting(self):
+        from monitor_colector import recuperare
+        tmp = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(tmp, recuperare.QUEUE), "w") as f:
+                json.dump({"documente": [{"url": "u", "local_path": "/nu", "pages": 1}], "loturi": 1}, f)
+            st = recuperare.ocr_lot(0, 1, os.path.join(tmp, "o"), data_dir=tmp, minutes=-1)
+            self.assertTrue(st["oprit_la_buget"])
+            self.assertEqual(st["ocr"], 0)
+        finally:
+            shutil.rmtree(tmp)
+
+
+class TestPublicaIntern(unittest.TestCase):
+    def test_index_lists_docx_escaped(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
+        import publica
+        tmp = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(tmp, "hcl"))
+            open(os.path.join(tmp, "hcl", "HCL 1 din 2015 <b>.docx"), "w").close()
+            h = publica.index_intern(tmp)
+            self.assertIn("noindex", h)
+            self.assertIn("HCL 1 din 2015 &lt;b&gt;", h)
+            self.assertNotIn("<b>", h)
+        finally:
+            shutil.rmtree(tmp)
+
+
+if __name__ == "__main__":
+    unittest.main()

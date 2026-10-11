@@ -7,6 +7,9 @@
   ocr [--max N] [--minute M]  OCR pe PDF-urile scanate (tesseract, limba română)
   word                 textele extrase ca documente Word -> data/texte/<sursa>/*.docx
   indicatori           indicatorii și listele -> data/indicatori.json, .md, data/liste.json
+  coada                coada OCR pentru recuperare -> data/coada-ocr.json
+  ocr-lot --lot I --din N --iesire DIR   OCR pe un lot (rulare paralelă)
+  importa --foldere DIR...              textele din loturi intră în baza de date
   tot                  colecteaza + descarca + ocr + indicatori (pentru cron)
 """
 import argparse
@@ -23,11 +26,15 @@ from .wp import WPClient
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="monitor_colector", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("comanda", choices=["categorii", "colecteaza", "arhiva", "descarca", "ocr", "word", "indicatori", "tot"])
+    ap.add_argument("comanda", choices=["categorii", "colecteaza", "arhiva", "descarca", "ocr", "word", "indicatori", "tot", "coada", "ocr-lot", "importa"])
     ap.add_argument("ani", nargs="*", type=int)
     ap.add_argument("--tot", action="store_true", help="colectare completă, nu incrementală")
     ap.add_argument("--max", type=int, default=None, help="limită de documente")
     ap.add_argument("--minute", type=int, default=None, help="buget de timp pentru OCR")
+    ap.add_argument("--lot", type=int, default=0, help="ocr-lot: numărul lotului (de la 0)")
+    ap.add_argument("--din", type=int, default=1, help="ocr-lot: numărul total de loturi")
+    ap.add_argument("--iesire", default="lot-ocr", help="ocr-lot: folderul rezultatelor")
+    ap.add_argument("--foldere", nargs="*", default=[], help="importa: folderele loturilor")
     ap.add_argument("--surse", default=None, help="ex. hcl,pv (implicit toate din config)")
     ap.add_argument("-v", action="store_true")
     a = ap.parse_args(argv)
@@ -36,6 +43,11 @@ def main(argv=None):
     if a.comanda == "categorii":
         for c in collect.discover():
             print(f"{c['id']:>5}  {c.get('count', 0):>5}  {c['slug']}")
+        return 0
+
+    if a.comanda == "ocr-lot":   # nu scrie în baza de date (rulează pe mai multe mașini)
+        from . import recuperare
+        print(json.dumps(recuperare.ocr_lot(a.lot, a.din, a.iesire, minutes=a.minute), indent=2))
         return 0
 
     store = Store(config.DB_PATH)
@@ -50,6 +62,17 @@ def main(argv=None):
             stats["descarca"] = documents.process_downloads(store, WPClient().s, limit=a.max)
         if a.comanda == "ocr" or (a.comanda == "tot" and documents.ocr_available()):
             stats["ocr"] = documents.process_ocr(store, limit=a.max, minutes=a.minute)
+        if a.comanda in ("coada", "importa"):
+            from . import recuperare
+            if a.comanda == "coada":
+                stats["coada"] = recuperare.build_queue(store)
+                gh = os.environ.get("GITHUB_OUTPUT")
+                if gh:   # matricea de loturi pentru GitHub Actions
+                    with open(gh, "a") as f:
+                        f.write(f"loturi={json.dumps(list(range(stats['coada']['loturi'])))}\n")
+                        f.write(f"din={stats['coada']['loturi']}\n")
+            else:
+                stats["importa"] = recuperare.importa(store, a.foldere)
         if a.comanda == "word":
             from . import word
             stats["word"] = word.export_all(store)
