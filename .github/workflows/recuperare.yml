@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   pregatire:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     outputs:
       loturi: ${{ steps.coada.outputs.loturi }}
@@ -62,7 +62,7 @@ jobs:
   ocr:
     needs: pregatire
     if: ${{ needs.pregatire.outputs.din != '0' && needs.pregatire.outputs.din != '' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 340
     strategy:
       fail-fast: false
@@ -108,7 +108,7 @@ jobs:
   final:
     needs: [pregatire, ocr]
     if: ${{ always() && needs.pregatire.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
