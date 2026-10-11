@@ -1,0 +1,95 @@
+name: Colectare zilnică
+
+on:
+  schedule:
+    - cron: "15 4 * * *"   # 04:15 UTC = 06:15/07:15 ora României
+  workflow_dispatch:
+    inputs:
+      colectare_completa:
+        description: "Colectare completă de la zero (prima rulare)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: colectare
+  cancel-in-progress: false
+
+jobs:
+  colecteaza:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalare Tesseract (limba română) și poppler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ron poppler-utils
+
+      - name: Instalare dependențe
+        run: pip install -r requirements.txt
+
+      - name: Restaurare date (baza SQLite și documentele)
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: date-${{ github.run_id }}
+          restore-keys: date-
+
+      - name: Teste
+        run: python -m unittest discover -s tests
+
+      - name: Colectare completă (doar la cerere)
+        if: ${{ github.event.inputs.colectare_completa == 'true' }}
+        run: |
+          python -m monitor_colector categorii | tee data_categorii.txt
+          python -m monitor_colector colecteaza --tot
+          python -m monitor_colector arhiva
+
+      - name: Colectare zilnică (postări noi sau modificate)
+        run: python -m monitor_colector colecteaza
+        env:
+          MC_DELAY: "1.0"
+
+      - name: Descărcare documente (în tranșe, ca prima rulare să nu fie interminabilă)
+        run: python -m monitor_colector descarca --max 400
+        env:
+          MC_DELAY: "1.0"
+
+      - name: OCR pe PDF-urile scanate (în tranșe)
+        run: python -m monitor_colector ocr --max 60
+        env:
+          MC_OCR_LANG: ron
+
+      - name: Indicatori
+        run: python -m monitor_colector indicatori
+
+      - name: Salvare date pentru rularea următoare
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data
+          key: date-${{ github.run_id }}
+
+      - name: Rapoarte ca artefact (pentru verificare)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapoarte
+          path: |
+            data/indicatori.json
+            data/indicatori.md
+            data_categorii.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Publicare pe hosting (FTPS)
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: python tools/publica.py
