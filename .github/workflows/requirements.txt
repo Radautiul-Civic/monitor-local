@@ -1,4 +1,0 @@
-requests>=2.31
-pypdf>=4.0
-# doar pentru teste (PDF scanat sintetic)
-Pillow>=10.0
