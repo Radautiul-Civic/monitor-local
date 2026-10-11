@@ -57,17 +57,35 @@ jobs:
           MC_DELAY: "1.0"
 
       - name: Descărcare documente (în tranșe, ca prima rulare să nu fie interminabilă)
-        run: python -m monitor_colector descarca --max 400
+        run: python -m monitor_colector descarca --max 1000
         env:
           MC_DELAY: "1.0"
 
-      - name: OCR pe PDF-urile scanate (în tranșe)
-        run: python -m monitor_colector ocr --max 60
+      - name: OCR pe PDF-urile scanate (buget de timp, procesele-verbale primele)
+        # Se oprește singur după 150 de minute; ce s-a terminat rămâne salvat.
+        # Dacă pică, rularea merge mai departe la indicatori, salvare și publicare.
+        run: python -m monitor_colector ocr --minute 150
+        continue-on-error: true
+        timeout-minutes: 170
         env:
           MC_OCR_LANG: ron
 
-      - name: Indicatori
+      - name: Documente Word din textele extrase (pentru verificare)
+        if: always()
+        run: python -m monitor_colector word
+        continue-on-error: true
+
+      - name: Indicatori și liste
+        if: always()
         run: python -m monitor_colector indicatori
+
+      - name: Publicare pe hosting (FTPS)
+        if: always()
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: python tools/publica.py
 
       - name: Salvare date pentru rularea următoare
         uses: actions/cache/save@v4
@@ -77,6 +95,7 @@ jobs:
           key: date-${{ github.run_id }}
 
       - name: Rapoarte ca artefact (pentru verificare)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: rapoarte
@@ -85,12 +104,6 @@ jobs:
             data/indicatori.md
             data_categorii.txt
             data/raw/**
+            data/liste.json
           if-no-files-found: ignore
           retention-days: 14
-
-      - name: Publicare pe hosting (FTPS)
-        env:
-          FTP_HOST: ${{ secrets.FTP_HOST }}
-          FTP_USER: ${{ secrets.FTP_USER }}
-          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-        run: python tools/publica.py
