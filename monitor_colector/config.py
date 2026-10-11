@@ -39,9 +39,10 @@ ARCHIVE_HCL_PAGES = {
     2019: "/monitorul-oficial-local/hotarari-cl/hotarari-adoptate-in-anul-2019/",
     2020: "/monitorul-oficial-local/hotarari-cl/hotarari-adoptate-in-anul-2020/",
     2021: "/monitorul-oficial-local/hotarari-cl/hotarari-adoptate-in-anul-2021/",
-    2022: "/monitorul-oficial-local/hotarari-cl/hotarari-adoptate-in-anul-2022/",
+    # 2022: pagina nu există pe arhivă (linkul „Anul 2022” trimite la 2021)
     2023: "/monitorul-oficial-local/hotarari-cl/hotarari-adoptate-in-anul-2023/",
     2024: "/monitorul-oficial-local-hotarari-cl-hotarari-adoptate-in-anul-2024/",
+    2025: "/monitorul-oficial-local/hotarari-cl/",
 }
 
 DOC_EXTENSIONS = (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".odt", ".ods", ".zip")

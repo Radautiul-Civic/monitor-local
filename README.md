@@ -81,7 +81,8 @@ Documentele: `data/docs/<domeniu>/<cale>`, textul alături, cu extensia `.txt`.
 - Categoria HCL are id 17 și 461 de postări; categoria PV are id 27 și 67 de postări.
 - Registrul HCL de pe site e în urmă față de categorie (până la HCL 145, deși există HCL 160). Colectorul folosește categoria.
 - PV-urile de ședință sunt PDF-uri scanate, fără text: OCR-ul e obligatoriu.
-- Linkul „2022” din registrul HCL trimite la pagina 2021. Pagina 2022 din `ARCHIVE_HCL_PAGES` trebuie verificată la prima rulare.
+- Linkul „Anul 2022” din arhivă trimite la pagina 2021: pagina HCL 2022 nu există pe arhivă, deci 2022 se completează din alte surse (registrul HCL, procese-verbale de publicare).
+- Arhiva are trei formate de listă (2013-2015: „204. Hotarare ...”, 2016-2018: fișiere scanate SKM_*.pdf, 2024: numărul doar în numele fișierului); parserul le tratează pe toate.
 - În arhiva 2023, HCL 288 deschide fișierul HCL 301. Colectorul semnalează automat astfel de cazuri (`fisier_alt_numar`).
 
 ## Teste

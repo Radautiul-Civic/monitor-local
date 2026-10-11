@@ -132,3 +132,28 @@ ARCHIVE_2023 = """
 </ol>
 <a href="https://arhiva.primariaradauti.ro/radauti/prezentare-radauti/">Prezentare Rădăuți</a>
 """
+
+
+# Eșantioane din paginile reale ale arhivei (2014, 2016, 2024), listă scurtată.
+ARCHIVE_2014 = """
+<ol>
+<li><a href="https://arhiva.primariaradauti.ro/wp-content/uploads/2014/02/hcl204.pdf">204. Hotarare privind rectificarea bugetului local de venituri si cheltuieli pe anul 2014</a></li>
+<li><a href="https://arhiva.primariaradauti.ro/wp-content/uploads/2014/02/hcl203.pdf">203. Hotarare privind aprobarea ocuparii temporare a domeniului public</a></li>
+</ol>
+"""
+
+ARCHIVE_2016 = """
+<ol>
+<li><a href="https://arhiva.primariaradauti.ro/wp-content/uploads/2016/01/SKM_364e16012008440.pdf">Hotarare nr.1 privind stabilirea destinatiei de zona pietonala a unui tronson din str. Piata Unirii</a></li>
+<li><a href="https://arhiva.primariaradauti.ro/wp-content/uploads/2016/01/SKM_364e16021512200.pdf">Hotarare nr. 8 de modificare si completare a HCL nr. 111/26.11.2015, privind aprobarea planului</a></li>
+</ol>
+"""
+
+ARCHIVE_2024 = """
+<ol>
+<li><a href="https://arhiva.primariaradauti.ro/wp-content/uploads/2024/02/HCL-nr.-1-din-25.01.2024.pdf">Hotărâre privind organizarea rețelei școlare a unităților de învățământ preuniversitar</a></li>
+<li><a href="https://arhiva.primariaradauti.ro/wp-content/uploads/2024/02/HCL-nr.-3-din-25.01.2024.pdf">Hotărâre de modificare a HCL nr.123 din 27 aprilie 2023,privind stabilirea salariilor</a>
+    <a href="https://arhiva.primariaradauti.ro/wp-content/uploads/2024/02/HCL-nr.-3-din-25.01.2024-anexa.pdf">Anexa</a></li>
+<li><a href="https://arhiva.primariaradauti.ro/wp-content/uploads/2024/02/HCL-nr.-8-din-25.01.2024-blurat.pdf">Hotărârea pentru acordarea de facilități fiscale pentru contribuabilii persoane fizice și juridice</a></li>
+</ol>
+"""

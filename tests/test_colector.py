@@ -90,6 +90,25 @@ class TestParse(unittest.TestCase):
         self.assertEqual(by_nr[15]["issues"], [])                        # nu confundă cu HCL 268
         self.assertEqual(by_nr[208]["date"], date(2023, 8, 30))
 
+    def test_archive_2014_numar_la_inceput(self):
+        items = parse.parse_archive_list(fakes.ARCHIVE_2014, "https://arhiva.primariaradauti.ro", 2014)
+        self.assertEqual(sorted(i["number"] for i in items), [203, 204])
+        self.assertTrue(all(i["issues"] == [] for i in items))
+
+    def test_archive_2016_fisier_scanat_nu_e_problema(self):
+        items = parse.parse_archive_list(fakes.ARCHIVE_2016, "https://arhiva.primariaradauti.ro", 2016)
+        by_nr = {i["number"]: i for i in items}
+        self.assertEqual(sorted(by_nr), [1, 8])        # nu ia HCL 111 din text
+        self.assertEqual(by_nr[1]["issues"], [])        # SKM_*.pdf nu e o eroare de publicare
+
+    def test_archive_2024_numar_din_fisier_si_anexe(self):
+        items = parse.parse_archive_list(fakes.ARCHIVE_2024, "https://arhiva.primariaradauti.ro", 2024)
+        by_nr = {i["number"]: i for i in items}
+        self.assertEqual(sorted(by_nr), [1, 3, 8])      # nu ia HCL 123 din titlu
+        self.assertEqual(by_nr[1]["date"], date(2024, 1, 25))
+        self.assertEqual(len(by_nr[3]["extra_urls"]), 1)  # anexa nu înlocuiește linkul principal
+        self.assertTrue(by_nr[8]["redacted"])
+
 
 class TestPipeline(unittest.TestCase):
     def setUp(self):

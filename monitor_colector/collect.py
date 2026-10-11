@@ -1,5 +1,6 @@
 """Colectarea propriu-zisă: postări din API + arhiva HCL de pe site-ul vechi."""
 import logging
+import os
 from datetime import datetime
 
 from . import config, parse
@@ -58,8 +59,19 @@ def collect_api(store, client=None, sources=None, full=False):
     return stats
 
 
+def _save_raw(html_text, name):
+    """Păstrează HTML-ul brut al paginilor de arhivă (pentru verificarea parserului)."""
+    try:
+        d = os.path.join(config.DATA_DIR, "raw")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, name), "w", encoding="utf-8") as f:
+            f.write(html_text)
+    except OSError as e:
+        log.debug("nu pot salva %s: %s", name, e)
+
+
 def collect_archive(store, client=None, years=None):
-    """HCL 2013-2024 din paginile anuale ale arhivei (HTML, un PDF per hotărâre)."""
+    """HCL 2013-2025 din paginile anuale ale arhivei (HTML, un PDF per hotărâre)."""
     client = client or WPClient(base_url=config.ARCHIVE_URL)
     stats = {}
     for year, path in sorted(config.ARCHIVE_HCL_PAGES.items()):
@@ -71,9 +83,12 @@ def collect_archive(store, client=None, years=None):
             log.warning("arhiva %s: %s", year, e)
             stats[year] = f"eroare: {e}"
             continue
+        _save_raw(page, f"arhiva-{year}.html")
         items = parse.parse_archive_list(page, client.base, year)
         for it in items:
             store.add_document(it["url"], None, "arhiva", it["title"])
+            for extra in it.get("extra_urls", []):
+                store.add_document(extra, None, "arhiva", it["title"] + " (anexă)")
             store.upsert_hcl({**it, "origin": "arhiva", "pdf_url": it["url"]})
         store.db.commit()
         stats[year] = {"hcl": len(items), "probleme": sum(1 for i in items if i["issues"])}

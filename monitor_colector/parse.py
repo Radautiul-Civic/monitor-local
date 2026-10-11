@@ -205,39 +205,67 @@ def parse_dispozitie(title):
 
 # ---------- arhiva veche ----------
 
+_LEADING_NUM = re.compile(r"^\s*(\d{1,4})\s*[.)]\s*(?:hotarar)")
+
+
+def _ref_from_text(text):
+    """Număr din textul linkului: „Hotarare nr. 5 ...” sau „204. Hotarare privind ...”."""
+    ref = parse_hcl_ref(text)
+    if ref:
+        return ref
+    m = _LEADING_NUM.match(norm(text))
+    if m:
+        return {"number": int(m.group(1)), "date": None, "year": None}
+    return None
+
+
 def parse_archive_list(page_html, base_url, year=None):
     """Lista de HCL dintr-o pagină anuală a arhivei: un link PDF per hotărâre.
 
-    Pentru fiecare intrare compară numărul din text cu cel din numele fișierului
-    (ex. în 2023, HCL 288 trimite la fișierul HCL 301).
+    Formate întâlnite pe arhivă:
+      2013-2015  „204. Hotarare privind ...”, fișier hcl204.pdf
+      2016-2018  „Hotarare nr.1 privind ...”, fișier scanat (SKM_....pdf)
+      2019-2023  „Hotarare nr. 108 din 27.04.2023 ...”, fișier hcl-nr.-108-din-....pdf
+      2024       „Hotărâre privind ...” (fără număr), numărul doar în numele fișierului
+
+    Numărul se ia din text, iar când textul nu-l are, din numele fișierului. Când
+    ambele există și diferă, se semnalează (în 2023, HCL 288 trimite la fișierul 301).
+    Mai multe linkuri pentru aceeași hotărâre (anexe) se păstrează în extra_urls.
     """
     p = _LinkParser()
     p.feed(page_html or "")
     items = []
+    by_number = {}
     seen = set()
     for href, text in p.links:
         url = urljoin(base_url, href.strip())
         if not unquote(url).lower().endswith(".pdf") or url in seen:
             continue
-        text = clean_title(text)
-        ref_text = parse_hcl_ref(text)
-        if not ref_text:
-            continue
         seen.add(url)
+        text = clean_title(text)
+        ref_text = _ref_from_text(text)
         ref_file = parse_hcl_ref(url.rsplit("/", 1)[-1])
+        ref = ref_text or ref_file
+        if not ref:
+            continue
+        # un fișier-anexă (același număr) nu înlocuiește linkul principal
+        if ref["number"] in by_number:
+            by_number[ref["number"]]["extra_urls"].append(url)
+            continue
         issues = []
-        if ref_file and ref_file["number"] != ref_text["number"]:
+        if ref_text and ref_file and ref_file["number"] != ref_text["number"]:
             issues.append(f"fisier_alt_numar:{ref_file['number']}")
-        if ref_file is None:
-            issues.append("nume_fisier_neparsabil")
-        dt = ref_text["date"] or (ref_file or {}).get("date")
-        items.append({
-            "number": ref_text["number"],
+        dt = ref["date"] or (ref_file or {}).get("date") or (ref_text or {}).get("date")
+        item = {
+            "number": ref["number"],
             "date": dt,
-            "year": year or (dt.year if dt else ref_text["year"]),
+            "year": year or (dt.year if dt else ref["year"]),
             "title": text,
             "url": url,
+            "extra_urls": [],
             "redacted": "blurat" in url.lower(),
             "issues": issues,
-        })
+        }
+        by_number[ref["number"]] = item
+        items.append(item)
     return items
