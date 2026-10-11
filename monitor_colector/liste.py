@@ -6,6 +6,8 @@ documentelor: acesta poate include date personale, care nu se republică.
 """
 from datetime import date
 
+from .parse import clean_title
+
 
 def _pdf_of(db, wp_id):
     r = db.execute("SELECT url, text_layer FROM documents WHERE wp_id=? ORDER BY rowid LIMIT 1",
@@ -41,4 +43,14 @@ def export(store, today=None):
         reg.append({"tip": r["kind"], "de_la": r["period_start"], "pana_la": r["period_end"],
                     "titlu": r["title"], "postat": r["posted"], "pagina": links.get(r["wp_id"]), "pdf": url})
 
-    return {"generat_la": (today or date.today()).isoformat(), "hcl": hcl, "pv": pv, "registre": reg}
+    def postari(source):
+        out = []
+        for r in db.execute("SELECT wp_id, title, date, link FROM posts WHERE source=? ORDER BY date DESC",
+                            (source,)):
+            url, tl = _pdf_of(db, r["wp_id"])
+            out.append({"titlu": clean_title(r["title"]), "postat": (r["date"] or "")[:10] or None, "pagina": r["link"],
+                        "pdf": url, "scanat": None if tl is None else int(tl == 0)})
+        return out
+
+    return {"generat_la": (today or date.today()).isoformat(), "hcl": hcl, "pv": pv, "registre": reg,
+            "proiecte": postari("proiecte"), "contracte": postari("contracte")}

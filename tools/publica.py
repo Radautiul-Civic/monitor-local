@@ -15,7 +15,6 @@ din texte (pot conține date personale). Se urcă incremental: data/publicat-int
 Baza de date și PDF-urile nu se urcă niciodată.
 """
 import ftplib
-import html
 import json
 import os
 import sys
@@ -63,31 +62,6 @@ def intern_protejat(url=INTERN_URL):
         return False
 
 
-def index_intern(texte_dir):
-    """Pagina intern/index.html: documentele Word grupate pe surse."""
-    parts = ["<!doctype html><html lang='ro'><head><meta charset='utf-8'>"
-             "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-             "<meta name='robots' content='noindex, nofollow'><title>Monitor local - intern</title>"
-             "<style>body{font:16px/1.5 system-ui,sans-serif;max-width:900px;margin:0 auto;padding:16px}"
-             "li{margin:2px 0}h2{margin-top:24px}input{font:inherit;padding:6px 10px;width:100%;box-sizing:border-box}</style>"
-             "</head><body><h1>Texte extrase (uz intern)</h1>"
-             "<p>Text obținut automat din documentele primăriei; poate conține erori și date personale. "
-             "Nu se distribuie public. Documentul oficial e PDF-ul de la sursă.</p>"
-             "<input type='search' id='q' placeholder='Filtrează după nume' oninput=\"var q=this.value.toLowerCase();"
-             "document.querySelectorAll('li').forEach(function(l){l.style.display=l.textContent.toLowerCase().indexOf(q)<0?'none':''})\">"]
-    for src in sorted(os.listdir(texte_dir)):
-        d = os.path.join(texte_dir, src)
-        if not os.path.isdir(d):
-            continue
-        names = sorted((n for n in os.listdir(d) if n.endswith(".docx")), reverse=True)
-        parts.append(f"<h2>{html.escape(src)} ({len(names)})</h2><ul>")
-        parts += [f"<li><a href='texte/{html.escape(src)}/{html.escape(n)}'>{html.escape(n[:-5])}</a></li>"
-                  for n in names]
-        parts.append("</ul>")
-    parts.append("</body></html>")
-    return "".join(parts)
-
-
 def texte_de_urcat(base):
     texte = os.path.join(ROOT, "data", "texte")
     if not os.path.isdir(texte):
@@ -107,10 +81,8 @@ def texte_de_urcat(base):
             if done.get(key) != sig:
                 files.append((p, "/".join(x for x in (base, "intern", rel.replace(os.sep, "/")) if x), n))
             new[key] = sig
-    idx = os.path.join(ROOT, "data", "intern-index.html")
-    with open(idx, "w", encoding="utf-8") as f:
-        f.write(index_intern(texte))
-    files.append((idx, "/".join(x for x in (base, "intern") if x), "index.html"))
+    # pagina internă (aceeași aplicație ca site-ul public, cu linkuri la Word)
+    files.append((os.path.join(ROOT, "site_intern", "index.html"), "/".join(x for x in (base, "intern") if x), "index.html"))
     return files, new
 
 

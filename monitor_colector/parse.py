@@ -24,7 +24,13 @@ def norm(text):
 
 
 def clean_title(text):
-    return re.sub(r"\s+", " ", html.unescape(text or "")).strip()
+    text = text or ""
+    for _ in range(3):   # unele titluri din WordPress sunt codificate de două ori (&amp;#8211;)
+        dec = html.unescape(text)
+        if dec == text:
+            break
+        text = dec
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _date(d, m, y):
@@ -223,7 +229,8 @@ def parse_archive_list(page_html, base_url, year=None):
     """Lista de HCL dintr-o pagină anuală a arhivei: un link PDF per hotărâre.
 
     Formate întâlnite pe arhivă:
-      2013-2015  „204. Hotarare privind ...”, fișier hcl204.pdf
+      2013       „Hotarare privind ...” (fără număr), fișier 97.pdf
+      2014-2015  „204. Hotarare privind ...”, fișier hcl204.pdf
       2016-2018  „Hotarare nr.1 privind ...”, fișier scanat (SKM_....pdf)
       2019-2023  „Hotarare nr. 108 din 27.04.2023 ...”, fișier hcl-nr.-108-din-....pdf
       2024       „Hotărâre privind ...” (fără număr), numărul doar în numele fișierului
@@ -246,6 +253,11 @@ def parse_archive_list(page_html, base_url, year=None):
         ref_text = _ref_from_text(text)
         ref_file = parse_hcl_ref(url.rsplit("/", 1)[-1])
         ref = ref_text or ref_file
+        if not ref:
+            # 2013: fișierul e doar numărul („97.pdf”), iar titlul nu-l conține
+            m = re.fullmatch(r"(\d{1,4})\.pdf", unquote(url.rsplit("/", 1)[-1]).lower())
+            if m and norm(text).startswith("hotarar"):
+                ref = {"number": int(m.group(1)), "date": None, "year": None}
         if not ref:
             continue
         # un fișier-anexă (același număr) nu înlocuiește linkul principal

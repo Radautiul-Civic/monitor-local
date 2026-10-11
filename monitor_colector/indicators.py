@@ -8,6 +8,8 @@ from collections import defaultdict
 from datetime import date
 from statistics import median
 
+from . import config
+
 
 def _d(s):
     return date.fromisoformat(s[:10]) if s else None
@@ -31,8 +33,8 @@ def compute(store, today=None):
     # adoptării, postările au fost cel mai probabil retrodatate (ex. la migrarea
     # site-ului): data postării nu măsoară publicarea reală, deci anul nu se afișează.
     out["hcl_intarziere_publicare"] = {
-        str(y): {"hcl": len(v), "mediana_zile": median(v), "max_zile": max(v),
-                 "fiabil": sum(1 for x in v if x == 0) <= len(v) / 2}
+        str(y): {"hcl": len(v), "medie_zile": round(sum(v) / len(v), 1), "mediana_zile": median(v),
+                 "max_zile": max(v), "fiabil": sum(1 for x in v if x == 0) <= len(v) / 2}
         for y, v in sorted(lags.items())}
     out["hcl_cele_mai_intarziate"] = [
         {"an": y, "nr": n, "zile": lag} for lag, y, n in sorted(slow, reverse=True)[:10]]
@@ -45,7 +47,7 @@ def compute(store, today=None):
         # Un an cu acoperire sub 90% înseamnă că nu avem încă toate documentele
         # (limitare a colectorului, nu o constatare despre primărie): nu se publică.
         completa = r["c"] >= 0.9 * r["mx"]
-        gaps[str(r["year"])] = {"ultimul_nr": r["mx"], "gasite": r["c"], "lipsa": missing[:50],
+        gaps[str(r["year"])] = {"ultimul_nr": r["mx"], "gasite": r["c"], "lipsa": missing,
                                 "lipsa_total": len(missing), "acoperire_completa": completa}
     out["hcl_numere_lipsa"] = gaps
 
@@ -59,9 +61,12 @@ def compute(store, today=None):
         pr = [x for x in todas if x not in TEHNICE]
         if len(pr) != len(todas):
             tehnice += 1
-        if pr:
+        ver = config.VERIFICARI_HCL.get(f"{r['year']}/{r['number']}")
+        if pr and not (ver and ver["stare"] == "fals"):
             issues.append({"an": r["year"], "nr": r["number"], "sursa": r["origin"],
-                           "probleme": pr, "pdf": r["pdf_url"]})
+                           "probleme": pr, "pdf": r["pdf_url"],
+                           "verificare": ver["stare"] if ver else "neverificat",
+                           "nota": ver["nota"] if ver else None})
     out["hcl_probleme"] = issues
     out["hcl_diagnostic_nume_fisier"] = tehnice
     out["hcl_anonimizate"] = db.execute("SELECT COUNT(*) FROM hcl WHERE redacted=1").fetchone()[0]
@@ -74,7 +79,8 @@ def compute(store, today=None):
         if r["session_date"]:
             types[r["session_date"][:4]][r["session_type"] or "necunoscut"] += 1
     out["pv_intarziere_publicare"] = (
-        {"pv": len(pv_lags), "mediana_zile": median(pv_lags), "max_zile": max(pv_lags)} if pv_lags else None)
+        {"pv": len(pv_lags), "medie_zile": round(sum(pv_lags) / len(pv_lags), 1),
+         "mediana_zile": median(pv_lags), "max_zile": max(pv_lags)} if pv_lags else None)
     out["sedinte_pe_tip"] = {y: dict(v) for y, v in sorted(types.items())}
 
     # --- Registre CU / AC: cât de vechi e ultima perioadă publicată ---
@@ -105,6 +111,31 @@ def compute(store, today=None):
         pe_surse[r["s"]] = {"total": r["n"], "descarcate": r["desc"] or 0, "cu_text": r["txt"] or 0,
                             "scanate": r["scan"] or 0, "ocr_facut": r["ocr"] or 0}
     out["documente_pe_surse"] = pe_surse
+
+    # --- HCL pe ani: câte, acoperire, scanate, durata medie de publicare ---
+    tl = {r["url"]: r["text_layer"] for r in db.execute("SELECT url, text_layer FROM documents")}
+    pe_ani = {}
+    for r in db.execute("SELECT year, MAX(number) AS mx, COUNT(*) AS c, "
+                        "SUM(origin='site') AS site, SUM(origin='arhiva') AS arh FROM hcl GROUP BY year"):
+        pdfs = [x[0] for x in db.execute("SELECT pdf_url FROM hcl WHERE year=?", (r["year"],))]
+        lag = out["hcl_intarziere_publicare"].get(str(r["year"]))
+        pe_ani[str(r["year"])] = {
+            "gasite": r["c"], "ultimul_nr": r["mx"],
+            "acoperire_pct": round(100 * r["c"] / r["mx"]) if r["mx"] else None,
+            "scanate": sum(1 for u in pdfs if tl.get(u) == 0),
+            "cu_text": sum(1 for u in pdfs if tl.get(u) == 1),
+            "sursa": "site" if not r["arh"] else ("arhiva" if not r["site"] else "site și arhivă"),
+            "medie_publicare_zile": lag["medie_zile"] if lag and lag["fiabil"] else None,
+        }
+    out["hcl_pe_ani"] = pe_ani
+
+    # --- Proiecte de HCL și contracte, pe ani (după data postării) ---
+    for key, src in (("proiecte_pe_ani", "proiecte"), ("contracte_pe_ani", "contracte")):
+        out[key] = {r[0]: r[1] for r in db.execute(
+            "SELECT substr(date,1,4) AS y, COUNT(*) FROM posts WHERE source=? GROUP BY y ORDER BY y", (src,))}
+
+    from . import stadiu
+    out["stadiu"] = stadiu.compute(out)
     return out
 
 
@@ -113,7 +144,7 @@ def to_markdown(ind):
     L.append("## HCL - întârzierea publicării (zile de la adoptare la postare)")
     for y, v in ind["hcl_intarziere_publicare"].items():
         nf = "" if v.get("fiabil", True) else " - NEFIABIL (date de postare probabil retrodatate), nu se afișează"
-        L.append(f"- {y}: {v['hcl']} HCL, mediană {v['mediana_zile']} zile, maxim {v['max_zile']} zile{nf}")
+        L.append(f"- {y}: {v['hcl']} HCL, durată medie {v.get('medie_zile')} zile, maxim {v['max_zile']} zile{nf}")
     L += ["", "## HCL - numere lipsă în secvență"]
     for y, v in ind["hcl_numere_lipsa"].items():
         if not v.get("acoperire_completa", True):
@@ -123,10 +154,10 @@ def to_markdown(ind):
         L.append(f"- {y}: ultimul nr. {v['ultimul_nr']}, găsite {v['gasite']}, lipsă {v['lipsa_total']}{extra}")
     L += ["", f"## HCL cu probleme de publicare: {len(ind['hcl_probleme'])}"]
     for p in ind["hcl_probleme"][:20]:
-        L.append(f"- HCL {p['nr']}/{p['an']} ({p['sursa']}): {', '.join(p['probleme'])}")
+        L.append(f"- HCL {p['nr']}/{p['an']} ({p['sursa']}, {p.get('verificare')}): {', '.join(p['probleme'])}")
     pv = ind["pv_intarziere_publicare"]
     L += ["", "## Procese-verbale"]
-    L.append(f"- întârziere: mediană {pv['mediana_zile']} zile, maxim {pv['max_zile']} zile ({pv['pv']} PV)"
+    L.append(f"- întârziere: medie {pv.get('medie_zile')} zile, maxim {pv['max_zile']} zile ({pv['pv']} PV)"
              if pv else "- fără date")
     for y, t in ind["sedinte_pe_tip"].items():
         L.append(f"- {y}: " + ", ".join(f"{k} {v}" for k, v in sorted(t.items())))
@@ -145,4 +176,7 @@ def to_markdown(ind):
     L += [f"- {k}: {v['total']} total, {v['descarcate']} descărcate, {v['cu_text']} cu text, "
           f"{v['scanate']} scanate, {v['ocr_facut']} OCR" for k, v in ind.get("documente_pe_surse", {}).items()]
     L.append(f"- diagnostic: {ind.get('hcl_diagnostic_nume_fisier', 0)} HCL cu nume de fișier necitit de parser")
+    L += ["", "## Stadiul monitorului"]
+    for it in ind.get("stadiu", []):
+        L.append(f"- [{it['stare']}] {it['sectiune']} / {it['element']}: {it['detaliu']}")
     return "\n".join(L) + "\n"

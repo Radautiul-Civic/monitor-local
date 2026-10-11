@@ -3,6 +3,7 @@
 Rezultatul e pentru verificare internă (artefactul rularii), nu pentru publicare:
 textul poate conține date personale.
 """
+import json
 import logging
 import os
 import re
@@ -14,6 +15,7 @@ from docx.oxml.ns import qn
 from docx.shared import Pt
 
 from . import config
+from .parse import clean_title
 
 log = logging.getLogger(__name__)
 
@@ -110,7 +112,7 @@ def _title_for(db, row):
     p = db.execute("SELECT source, title FROM posts WHERE wp_id=?", (row["wp_id"],)).fetchone() \
         if row["wp_id"] else None
     if p:
-        return p["source"], p["title"] or row["link_text"]
+        return p["source"], clean_title(p["title"]) or row["link_text"]
     base = os.path.splitext(os.path.basename(row["url"]))[0]
     return row["origin"] or "altele", row["link_text"] or base
 
@@ -120,6 +122,7 @@ def export_all(store, data_dir=config.DATA_DIR, only_new=True):
     db = store.db
     stats = {"word": 0, "existente": 0, "erori": 0}
     used = set()
+    index = []   # data/texte/index.json: legătura PDF -> Word, pentru pagina internă
     for row in db.execute("SELECT url, wp_id, origin, link_text, text_path, text_layer FROM documents "
                           "WHERE text_path IS NOT NULL ORDER BY rowid"):
         src, title = _title_for(db, row)
@@ -130,6 +133,8 @@ def export_all(store, data_dir=config.DATA_DIR, only_new=True):
             dest = os.path.join(data_dir, "texte", safe_name(src, 40), f"{name} ({k}).docx")
             k += 1
         used.add(dest)
+        index.append({"pdf": row["url"], "word": os.path.relpath(dest, os.path.join(data_dir, "texte")).replace(os.sep, "/"),
+                      "sursa": src, "titlu": title, "ocr": int(row["text_layer"] == 0)})
         if only_new and os.path.exists(dest) and os.path.getmtime(dest) >= os.path.getmtime(row["text_path"]):
             stats["existente"] += 1
             continue
@@ -141,4 +146,7 @@ def export_all(store, data_dir=config.DATA_DIR, only_new=True):
         except Exception as e:
             log.warning("Word %s: %s", row["url"], e)
             stats["erori"] += 1
+    os.makedirs(os.path.join(data_dir, "texte"), exist_ok=True)
+    with open(os.path.join(data_dir, "texte", "index.json"), "w", encoding="utf-8") as f:
+        json.dump(index, f, ensure_ascii=False, separators=(",", ":"))
     return stats

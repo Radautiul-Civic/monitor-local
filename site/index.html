@@ -4,222 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Monitor local</title>
-<meta name="description" content="Monitor local: cum publică Primăria Municipiului Rădăuți actele autorității locale, cu indicatori calculați din surse publice.">
-<style>
-:root{--bg:#f6f5f1;--card:#fff;--ink:#1b1f23;--muted:#5c6670;--line:#e2e0d8;--accent:#0b5c8a;--warn:#b4570a;--ok:#2e7d4f;--bad:#b3261e}
-@media (prefers-color-scheme:dark){:root{--bg:#14171a;--card:#1c2024;--ink:#e9ecef;--muted:#9aa4ad;--line:#2b3036;--accent:#6bb6e6;--warn:#e6a15c;--ok:#6fcf97;--bad:#f2837a}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-.wrap{max-width:960px;margin:0 auto;padding:0 16px}
-header{padding:32px 0 16px}
-h1{font-size:1.9rem;margin:0 0 4px;line-height:1.2}
-.sub{color:var(--muted);margin:0}
-h2{font-size:1.15rem;margin:0 0 4px}
-.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin:16px 0}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
-.big{font-size:2.2rem;font-weight:700;line-height:1.1}
-.unit{font-size:.9rem;color:var(--muted);font-weight:400}
-.note{color:var(--muted);font-size:.9rem;margin:4px 0 12px}
-table{width:100%;border-collapse:collapse;font-size:.95rem}
-th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}
-th{color:var(--muted);font-weight:600}
-td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
-.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:.8rem;border:1px solid currentColor}
-.warn{color:var(--warn)}.bad{color:var(--bad)}.ok{color:var(--ok)}
-ul{padding-left:18px;margin:8px 0}
-footer{color:var(--muted);font-size:.85rem;padding:24px 0 48px}
-a{color:var(--accent)}
-#eroare{display:none}
-.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 12px}
-.tabs button{font:inherit;font-size:.9rem;padding:6px 12px;border-radius:99px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
-.tabs button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--card)}
-.filtre{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-.filtre input,.filtre select{font:inherit;font-size:.95rem;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
-.filtre input{flex:1 1 220px;min-width:0}
-.doc{padding:10px 0;border-bottom:1px solid var(--line)}
-.doc .id{font-weight:600;font-variant-numeric:tabular-nums}
-.doc .t{margin:2px 0;overflow-wrap:anywhere}
-.doc .m{color:var(--muted);font-size:.85rem;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-.mai{margin-top:12px;font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--accent);cursor:pointer}
-.mai[hidden]{display:none}
-.skip{position:absolute;left:-999px}.skip:focus{left:8px;top:8px;background:var(--card);padding:6px}
-</style>
+<meta name="description" content="Monitor local: ce publică Primăria Municipiului Rădăuți - hotărâri, ședințe, urbanism, achiziții - verificat zilnic din surse publice.">
+<link rel="stylesheet" href="assets/app.css">
 </head>
-<body>
-<a class="skip" href="#continut">Sari la conținut</a>
+<body data-base="" data-mode="public">
+<a class="skip" href="#app">Sari la conținut</a>
+<header class="top"><div class="wrap bar">
+  <a class="brand" href="#acasa"><b>Monitor local</b><span>Rădăuți · Asociația Rădăuțiul Civic</span></a>
+  <nav class="main" id="nav" aria-label="Secțiuni"></nav>
+</div></header>
 <div class="wrap">
-<header>
-  <h1>Monitor local</h1>
-  <p class="sub">Monitorizarea autorității locale din Rădăuți: cum publică Primăria Municipiului actele, calculat din surse publice.</p>
-  <p class="sub" id="actualizat">Se încarcă datele...</p>
-</header>
-
-<main id="continut">
-  <div id="eroare" class="card"><strong>Datele nu sunt disponibile momentan.</strong> Reîncercăm la următoarea actualizare zilnică.</div>
-
-  <div class="grid">
-    <section class="card">
-      <h2>Hotărâri de consiliu</h2>
-      <div class="big" id="hcl-med">-</div>
-      <div class="note">mediana dintre adoptare și publicarea pe site, în ultimul an cu date</div>
-      <table id="t-hcl"><thead><tr><th>An</th><th class="n">HCL</th><th class="n">Mediană</th><th class="n">Maxim</th></tr></thead><tbody></tbody></table>
-    </section>
-
-    <section class="card">
-      <h2>Procese-verbale de ședință</h2>
-      <div class="big" id="pv-med">-</div>
-      <div class="note">mediana dintre ședință și publicarea procesului-verbal</div>
-      <div id="pv-detalii"></div>
-    </section>
-
-    <section class="card">
-      <h2>Registre de urbanism</h2>
-      <div class="note">Certificate de urbanism și autorizații de construire: cât de recentă e ultima perioadă publicată.</div>
-      <table id="t-urb"><thead><tr><th>Registru</th><th>Până la</th><th class="n">Zile neacoperite</th></tr></thead><tbody></tbody></table>
-    </section>
-
-    <section class="card">
-      <h2>Contracte publicate pe site</h2>
-      <div class="big" id="contracte">-</div>
-      <div class="note" id="contracte-nota">de la ultima postare din categoria „contracte” a site-ului primăriei</div>
-    </section>
-  </div>
-
-  <section class="card" id="documente" style="margin-bottom:16px">
-    <h2>Documente</h2>
-    <div class="note">Actele publicate de primărie, cu link spre pagina și fișierul original. Lista se actualizează zilnic.</div>
-    <div class="tabs" role="tablist">
-      <button role="tab" aria-selected="true" data-t="hcl">Hotărâri de consiliu</button>
-      <button role="tab" aria-selected="false" data-t="pv">Procese-verbale</button>
-      <button role="tab" aria-selected="false" data-t="registre">Registre de urbanism</button>
-    </div>
-    <div class="filtre">
-      <input type="search" id="cauta" placeholder="Caută în titluri (ex. buget, teren, stradă)" aria-label="Caută în titluri">
-      <select id="an" aria-label="Anul"><option value="">Toți anii</option></select>
-    </div>
-    <p class="note" id="numar" aria-live="polite"></p>
-    <div id="lista"></div>
-    <button class="mai" id="mai" hidden>Arată mai multe</button>
-  </section>
-
-  <section class="card">
-    <h2>Hotărâri cu probleme de publicare</h2>
-    <div class="note">Fișier greșit atașat, numere neconcordante sau lipsă în secvența anuală. Fiecare caz trimite la documentul-sursă.</div>
-    <table id="t-probleme"><thead><tr><th>HCL</th><th>Problemă</th><th>Document</th></tr></thead><tbody></tbody></table>
-    <p class="note" id="lipsa"></p>
-  </section>
-
-  <section class="card" style="margin-top:16px">
-    <h2>Ce urmează</h2>
-    <ul>
-      <li>Achiziții publice din SICAP pentru Municipiul Rădăuți.</li>
-      <li>Litigii în care primăria e parte (portal.just.ro, ReJust).</li>
-      <li>Voturile consilierilor, extrase din procesele-verbale.</li>
-    </ul>
-  </section>
-</main>
-
-<footer>
-  <p>Date colectate zilnic din surse publice (site-ul primăriei, arhiva sa, portaluri ale justiției). Indicatorii sunt observații la o anumită dată, nu acuzații; fiecare duce la documentul-sursă. Un proiect al <a href="https://radautiulcivic.ro">Asociației Rădăuțiul Civic</a>.</p>
-</footer>
+  <main id="app"><p class="updated">Se încarcă datele...</p></main>
+  <footer>
+    <p id="actualizat"></p>
+    <p>Datele sunt colectate zilnic, automat, din surse publice: site-ul Primăriei Municipiului Rădăuți și arhiva sa. Indicatorii sunt observații la o anumită dată, nu acuzații; fiecare duce la documentul-sursă. Documentele oficiale rămân la primărie: aici găsești doar linkuri spre ele.</p>
+    <p>Un proiect al <a href="https://radautiulcivic.ro">Asociației Rădăuțiul Civic</a>. Ai găsit o greșeală? Scrie-ne.</p>
+  </footer>
 </div>
-
-<script>
-(function(){
-  var $ = function(id){return document.getElementById(id)};
-  function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
-  function safeUrl(u){return /^https?:\/\//.test(u||"") ? u : null}
-  function fmtDate(s){if(!s)return "-";var d=new Date(s);return isNaN(d)?s:d.toLocaleDateString("ro-RO",{day:"numeric",month:"long",year:"numeric"})}
-  function row(cells){return "<tr>"+cells.join("")+"</tr>"}
-
-  fetch("date/indicatori.json",{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(d){
-    $("actualizat").textContent = "Date calculate la " + fmtDate(d.calculat_la) + ".";
-
-    var ani = Object.keys(d.hcl_intarziere_publicare||{}).filter(function(a){return d.hcl_intarziere_publicare[a].fiabil!==false}).sort();
-    if(ani.length){
-      var last = d.hcl_intarziere_publicare[ani[ani.length-1]];
-      $("hcl-med").innerHTML = esc(last.mediana_zile) + ' <span class="unit">zile</span>';
-      $("t-hcl").tBodies[0].innerHTML = ani.slice().reverse().map(function(a){
-        var v=d.hcl_intarziere_publicare[a];
-        return row(["<td>"+esc(a)+"</td>",'<td class="n">'+esc(v.hcl)+"</td>",'<td class="n">'+esc(v.mediana_zile)+"</td>",'<td class="n">'+esc(v.max_zile)+"</td>"]);
-      }).join("");
-    }
-
-    var pv = d.pv_intarziere_publicare;
-    if(pv){
-      $("pv-med").innerHTML = esc(pv.mediana_zile) + ' <span class="unit">zile</span>';
-      var tipuri = d.sedinte_pe_tip||{}, h="";
-      Object.keys(tipuri).sort().reverse().forEach(function(y){
-        h += "<p class='note'><strong>"+esc(y)+":</strong> "+Object.keys(tipuri[y]).sort().map(function(k){return esc(k)+" "+esc(tipuri[y][k])}).join(", ")+"</p>";
-      });
-      $("pv-detalii").innerHTML = "<p class='note'>Maxim "+esc(pv.max_zile)+" zile, din "+esc(pv.pv)+" procese-verbale.</p>"+h;
-    }
-
-    var reg = d.registre_urbanism||{}, nume={cu:"Certificate de urbanism",ac:"Autorizații de construire"};
-    $("t-urb").tBodies[0].innerHTML = Object.keys(reg).map(function(k){
-      var z=reg[k].zile_neacoperite, cls = z==null?"":(z>180?"bad":(z>90?"warn":"ok"));
-      return row(["<td>"+esc(nume[k]||k)+"</td>","<td>"+esc(fmtDate(reg[k].ultima_perioada_pana_la))+"</td>",'<td class="n '+cls+'">'+esc(z==null?"-":z)+"</td>"]);
-    }).join("");
-
-    var c = d.contracte_site||{};
-    $("contracte").innerHTML = (c.zile_de_la_ultima==null?"-":esc(c.zile_de_la_ultima)) + ' <span class="unit">zile</span>';
-    $("contracte-nota").textContent = "de la ultima postare din categoria „contracte” a site-ului primăriei (" + fmtDate(c.ultima_postare) + ")";
-
-    var pr = d.hcl_probleme||[];
-    $("t-probleme").tBodies[0].innerHTML = pr.length ? pr.map(function(p){
-      var u=safeUrl(p.pdf);
-      return row(["<td>"+esc(p.nr)+"/"+esc(p.an)+"</td>","<td>"+(p.probleme||[]).map(function(x){return '<span class="tag warn">'+esc(x)+"</span> "}).join("")+"</td>","<td>"+(u?'<a href="'+esc(u)+'" rel="noopener">document</a>':"-")+"</td>"]);
-    }).join("") : '<tr><td colspan="3">Nicio problemă detectată.</td></tr>';
-
-    var lipsa = d.hcl_numere_lipsa||{}, parts=[];
-    Object.keys(lipsa).sort().reverse().forEach(function(y){ if(lipsa[y].lipsa_total && lipsa[y].acoperire_completa!==false) parts.push(esc(y)+": "+esc(lipsa[y].lipsa_total)+" numere lipsă din "+esc(lipsa[y].ultimul_nr)); });
-    $("lipsa").innerHTML = parts.length ? "Numere lipsă în secvența HCL, pe baza documentelor găsite. "+parts.join("; ")+"." : "";
-  }).catch(function(){ $("eroare").style.display="block"; $("actualizat").textContent=""; });
-  // ---------- Liste de documente ----------
-  var L=null, tab="hcl", shown=25;
-  var TIP={ordinara:"ordinară",extraordinara:"extraordinară",extraordinara_de_indata:"de îndată"};
-  var REG={cu:"Certificate de urbanism",ac:"Autorizații de construire"};
-  function norm(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase()}
-  function ziua(s){return s?fmtDate(s):"-"}
-  function an(x){return tab==="hcl"?String(x.an):(tab==="pv"?(x.data||"").slice(0,4):(x.pana_la||"").slice(0,4))}
-  function linkuri(x){
-    var o=[],p=safeUrl(x.pagina),f=safeUrl(x.pdf);
-    if(p)o.push('<a href="'+esc(p)+'" rel="noopener">pagina</a>');
-    if(f)o.push('<a href="'+esc(f)+'" rel="noopener">PDF</a>');
-    if(x.scanat===1)o.push('<span class="tag warn" title="Document scanat: textul nu poate fi căutat sau citit de cititoarele de ecran">scanat</span>');
-    return o.join("");
-  }
-  function item(x){
-    if(tab==="hcl") return '<div class="doc"><div class="id">HCL '+esc(x.nr)+'/'+esc(x.an)+'</div><div class="t">'+esc(x.titlu||"(fără titlu)")+'</div><div class="m"><span>'+(x.data?"adoptată "+esc(ziua(x.data)):"")+(x.postat?" · postată "+esc(ziua(x.postat)):"")+'</span>'+linkuri(x)+'</div></div>';
-    if(tab==="pv") return '<div class="doc"><div class="id">Ședința '+esc(TIP[x.tip]||x.tip||"")+' din '+esc(ziua(x.data))+'</div><div class="t">'+esc(x.titlu||"")+'</div><div class="m">'+(x.postat?"<span>postat "+esc(ziua(x.postat))+"</span>":"")+linkuri(x)+'</div></div>';
-    return '<div class="doc"><div class="id">'+esc(REG[x.tip]||x.tip)+'</div><div class="t">'+esc(x.titlu||"")+'</div><div class="m"><span>'+esc(ziua(x.de_la))+' - '+esc(ziua(x.pana_la))+'</span>'+linkuri(x)+'</div></div>';
-  }
-  function filtrate(){
-    var q=norm($("cauta").value).trim(), a=$("an").value;
-    return (L[tab]||[]).filter(function(x){return (!a||an(x)===a)&&(!q||norm(x.titlu+" "+(x.nr||"")).indexOf(q)>=0)});
-  }
-  function deseneaza(){
-    var f=filtrate();
-    $("numar").textContent=f.length+(f.length===1?" document":" documente");
-    $("lista").innerHTML=f.slice(0,shown).map(item).join("")||'<p class="note">Niciun document găsit.</p>';
-    $("mai").hidden=f.length<=shown;
-  }
-  function ani(){
-    var s={};(L[tab]||[]).forEach(function(x){var y=an(x);if(y)s[y]=1});
-    $("an").innerHTML='<option value="">Toți anii</option>'+Object.keys(s).sort().reverse().map(function(y){return '<option>'+esc(y)+'</option>'}).join("");
-  }
-  Array.prototype.forEach.call(document.querySelectorAll(".tabs button"),function(b){
-    b.addEventListener("click",function(){
-      Array.prototype.forEach.call(document.querySelectorAll(".tabs button"),function(o){o.setAttribute("aria-selected",o===b?"true":"false")});
-      tab=b.getAttribute("data-t");shown=25;if(L){ani();deseneaza();}
-    });
-  });
-  $("cauta").addEventListener("input",function(){shown=25;if(L)deseneaza()});
-  $("an").addEventListener("change",function(){shown=25;if(L)deseneaza()});
-  $("mai").addEventListener("click",function(){shown+=50;deseneaza()});
-  fetch("date/liste.json",{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(d){L=d;ani();deseneaza()})
-    .catch(function(){$("numar").textContent="Listele nu sunt disponibile încă."});
-})();
-</script>
+<script src="assets/app.js"></script>
 </body>
 </html>

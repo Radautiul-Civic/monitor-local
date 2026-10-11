@@ -19,6 +19,7 @@ CUI_UAT = "4244148"
 # ID-urile observate la 10.10.2026 sunt doar informative; colectorul le rezolvă după slug.
 CATEGORIES = {
     "hcl": "hotarari-hcl",                         # id 17, 461 postări
+    "proiecte": "proiecte-hcl",                    # id 26, 141 postări
     "pv": "pv-sedinte-cl",                         # id 27, 67 postări
     "cu": "certificate-de-urbanism",               # id 86
     "ac": "autorizatii-de-constructie-desfiintare",  # id 87
@@ -46,3 +47,11 @@ ARCHIVE_HCL_PAGES = {
 }
 
 DOC_EXTENSIONS = (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".odt", ".ods", ".zip")
+
+# Verificări manuale ale problemelor semnalate automat (an/număr -> rezultat).
+# "fals": semnalarea nu e o problemă reală și nu se afișează.
+# "confirmat": problema e reală și se afișează public, cu nota de mai jos.
+VERIFICARI_HCL = {
+    "2014/188": {"stare": "fals", "nota": "Doar numele fișierului are o greșeală de tastare (1881); documentul atașat e HCL 188/2014."},
+    "2023/288": {"stare": "confirmat", "nota": "La HCL 288/2023 este atașat documentul hotărârii nr. 301/2023."},
+}

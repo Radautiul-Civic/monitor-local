@@ -180,6 +180,9 @@ class TestPipeline(unittest.TestCase):
         self.assertFalse(ind["hcl_numere_lipsa"]["2026"]["acoperire_completa"])
         self.assertTrue(ind["hcl_intarziere_publicare"]["2026"]["fiabil"])
         self.assertIn("de_ocr", ind["documente"])
+        self.assertIn("medie_zile", ind["hcl_intarziere_publicare"]["2026"])
+        self.assertIn("2026", ind["hcl_pe_ani"])
+        self.assertTrue(ind["stadiu"])
         md = indicators.to_markdown(ind)
         self.assertIn("HCL - întârzierea publicării", md)
         self.assertIn("acoperire incompletă", md)
@@ -271,6 +274,7 @@ class TestIndicatoriFiltre(unittest.TestCase):
         self.assertFalse(ind["hcl_intarziere_publicare"]["2025"]["fiabil"])
         self.assertTrue(ind["hcl_numere_lipsa"]["2025"]["acoperire_completa"])
         self.assertEqual([p["nr"] for p in ind["hcl_probleme"]], [2])
+        self.assertEqual(ind["hcl_probleme"][0]["verificare"], "neverificat")
         self.assertEqual(ind["hcl_diagnostic_nume_fisier"], 1)
         self.assertIn("NEFIABIL", indicators.to_markdown(ind))
 
@@ -319,6 +323,56 @@ class TestListeSiWord(unittest.TestCase):
         self.assertEqual(word.safe_name('a_b: c/d?'), "a b c d")
 
 
+class TestArhiva2013(unittest.TestCase):
+    def test_number_only_filename(self):
+        html = ('<a href="/wp-content/uploads/2013/97.pdf">Hotarare de modificare si completare HCL nr.83 din '
+                '05.07.2012 privind constituirea unui nucleu</a>'
+                '<a href="/wp-content/uploads/2013/96.pdf">Hotarare privind aprobarea documentatiei</a>'
+                '<a href="/wp-content/uploads/2013/anexa.pdf">Anexa fara numar</a>')
+        items = parse.parse_archive_list(html, "https://arhiva.primariaradauti.ro", 2013)
+        self.assertEqual(sorted(i["number"] for i in items), [96, 97])
+        self.assertTrue(all(i["year"] == 2013 for i in items))
+
+
+class TestVerificari(unittest.TestCase):
+    def test_false_positive_hidden_confirmed_kept(self):
+        tmp = tempfile.mkdtemp()
+        store = Store(os.path.join(tmp, "t.db"))
+        for y, n, iss in ((2014, 188, '["fisier_alt_numar:1881"]'), (2023, 288, '["fisier_alt_numar:301"]')):
+            store.db.execute("INSERT INTO hcl (year, number, origin, pdf_url, issues, redacted) VALUES (?,?,?,?,?,0)",
+                             (y, n, "arhiva", f"https://x.ro/{n}.pdf", iss))
+        store.db.commit()
+        pr = indicators.compute(store, today=date(2026, 10, 11))["hcl_probleme"]
+        self.assertEqual([(p["an"], p["nr"], p["verificare"]) for p in pr], [(2023, 288, "confirmat")])
+        store.close()
+        shutil.rmtree(tmp)
+
+
+class TestStadiu(unittest.TestCase):
+    def test_years_and_states(self):
+        from monitor_colector import stadiu
+        ind = {"hcl_pe_ani": {"2020": {"gasite": 150, "ultimul_nr": 267, "acoperire_pct": 56},
+                              "2021": {"gasite": 200, "ultimul_nr": 290, "acoperire_pct": 69},
+                              "2023": {"gasite": 321, "ultimul_nr": 322, "acoperire_pct": 100}},
+               "registre_urbanism": {"cu": {"ultima_perioada_pana_la": "2026-06-30", "zile_neacoperite": 103}},
+               "contracte_site": {"ultima_postare": "2025-12-29", "zile_de_la_ultima": 286}}
+        st = stadiu.compute(ind)
+        el = {x["element"]: x for x in st}
+        self.assertEqual(el["Hotărâri 2022"]["stare"], "lipsa")
+        self.assertEqual(el["Hotărâri 2020-2021"]["stare"], "partial")
+        self.assertIn("30 iunie 2026", el["Certificate de urbanism"]["detaliu"])
+        self.assertEqual(el["Autorizații de construire"]["stare"], "lipsa")
+        self.assertEqual(stadiu._interval([2013, 2014, 2015, 2018]), "2013-2015, 2018")
+        self.assertTrue(all("—" not in x["detaliu"] for x in st))
+
+
+class TestTitluri(unittest.TestCase):
+    def test_double_encoded_entities(self):
+        self.assertEqual(parse.clean_title("emise &amp;#8211; 30.11.2025"), "emise \u2013 30.11.2025")
+        self.assertEqual(parse.clean_title("A &amp;amp; B"), "A & B")
+        self.assertEqual(parse.clean_title("  simplu   titlu "), "simplu titlu")
+
+
 class TestRecuperare(unittest.TestCase):
     @unittest.skipUnless(documents.ocr_available("eng"), "lipsește tesseract/pdftoppm")
     def test_queue_lots_and_import(self):
@@ -359,22 +413,6 @@ class TestRecuperare(unittest.TestCase):
             st = recuperare.ocr_lot(0, 1, os.path.join(tmp, "o"), data_dir=tmp, minutes=-1)
             self.assertTrue(st["oprit_la_buget"])
             self.assertEqual(st["ocr"], 0)
-        finally:
-            shutil.rmtree(tmp)
-
-
-class TestPublicaIntern(unittest.TestCase):
-    def test_index_lists_docx_escaped(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
-        import publica
-        tmp = tempfile.mkdtemp()
-        try:
-            os.makedirs(os.path.join(tmp, "hcl"))
-            open(os.path.join(tmp, "hcl", "HCL 1 din 2015 <b>.docx"), "w").close()
-            h = publica.index_intern(tmp)
-            self.assertIn("noindex", h)
-            self.assertIn("HCL 1 din 2015 &lt;b&gt;", h)
-            self.assertNotIn("<b>", h)
         finally:
             shutil.rmtree(tmp)
 
