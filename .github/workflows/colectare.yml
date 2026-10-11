@@ -84,6 +84,7 @@ jobs:
             data/indicatori.json
             data/indicatori.md
             data_categorii.txt
+            data/raw/**
           if-no-files-found: ignore
           retention-days: 14
 
