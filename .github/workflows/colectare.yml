@@ -75,7 +75,7 @@ jobs:
         run: python -m monitor_colector urbanism
         continue-on-error: true
 
-      - name: Achiziții din SICAP (zilnic ultimele 90 de zile; complet din 2018 la cerere)
+      - name: Achiziții din SICAP și câștigătorii licitațiilor (zilnic ultimele 90 de zile; complet din 2018 la cerere)
         if: always()
         run: |
           if [ "${{ github.event.inputs.colectare_completa }}" = "true" ]; then
@@ -85,6 +85,17 @@ jobs:
           fi
         continue-on-error: true
         timeout-minutes: 150
+
+      - name: Litigii (portal.just.ro; complet din 2010 la prima rulare)
+        if: always()
+        run: |
+          if [ "${{ github.event.inputs.colectare_completa }}" = "true" ]; then
+            python -m monitor_colector litigii --tot
+          else
+            python -m monitor_colector litigii
+          fi
+        continue-on-error: true
+        timeout-minutes: 90
 
       - name: Documente Word din textele extrase (pentru verificare)
         if: always()
@@ -124,5 +135,8 @@ jobs:
             data/liste.json
             data/sicap.json
             data/sicap-de-verificat.txt
+            data/sicap-castigatori-proba.json
+            data/voturi-proba.txt
+            data/litigii.json
           if-no-files-found: ignore
           retention-days: 14
