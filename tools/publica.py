@@ -121,7 +121,7 @@ def main():
             if n.endswith(".html"):
                 local = cu_versiune(local)
             files.append((local, "" if rel == "." else rel, n))
-    for name in ("indicatori.json", "liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json"):
+    for name in ("indicatori.json", "liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json", "litigii.json"):
         p = os.path.join(ROOT, "data", name)
         if os.path.exists(p):
             files.append((p, "date", name))
@@ -133,6 +133,12 @@ def main():
         tf, manifest = texte_de_urcat(base)
         print(f"intern: {len(tf)} fișiere noi sau modificate")
         files += tf
+        # date doar pentru pagina internă (ex. numele părților din litigii, voturile neverificate)
+        di = os.path.join(ROOT, "data", "intern-date")
+        if os.path.isdir(di):
+            for n in sorted(os.listdir(di)):
+                if n.endswith(".json"):
+                    files.append((os.path.join(di, n), "/".join(x for x in (base, "intern", "date-intern") if x), n))
     else:
         print("intern: folderul nu cere parolă (sau nu există); textele NU se urcă", file=sys.stderr)
 

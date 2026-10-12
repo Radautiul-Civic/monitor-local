@@ -152,6 +152,20 @@ def compute(store, today=None):
             "ultima": db.execute("SELECT MAX(data_finalizare) FROM sicap_da").fetchone()[0]}
     except Exception:
         out["sicap"] = None
+    try:
+        from . import litigii
+        ex = litigii.export(store, public=True, azi=today)
+        out["litigii"] = {"total": len(ex["dosare"]), "in_curs": sum(1 for d in ex["dosare"] if d["stare"] == "în curs"),
+                          "primul_an": min((d["an"] for d in ex["dosare"] if d["an"]), default=None)} if ex["dosare"] else None
+    except Exception:
+        out["litigii"] = None
+    try:
+        from . import voturi
+        vx = voturi.export(store)
+        out["voturi"] = {"sedinte": len(vx["sedinte"]), "cu_voturi": sum(1 for x in vx["sedinte"] if x["voturi"]),
+                         "voturi": sum(len(x["voturi"]) for x in vx["sedinte"])}
+    except Exception:
+        out["voturi"] = None
     from . import stadiu
     out["stadiu"] = stadiu.compute(out)
     return out

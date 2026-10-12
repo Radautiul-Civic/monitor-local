@@ -23,7 +23,8 @@
     { id: "acasa", nume: "Acasă" },
     { id: "decizii", nume: "Decizii locale", sub: [["hcl", "Hotărâri de Consiliu Local"], ["sedinte", "Ședințe și procese-verbale"], ["proiecte", "Proiecte de hotărâre"]] },
     { id: "urbanism", nume: "Urbanism", sub: [["cu", "Certificate de urbanism"], ["ac", "Autorizații de construire"]] },
-    { id: "achizitii", nume: "Achiziții publice", sub: [["contracte", "Contracte"], ["sicap", "SICAP"]] }
+    { id: "achizitii", nume: "Achiziții publice", sub: [["contracte", "Contracte"], ["sicap", "SICAP"]] },
+    { id: "litigii", nume: "Litigii" }
   ];
   if (INTERN) { SECTIUNI.push({ id: "texte", nume: "Toate textele" }); SECTIUNI.push({ id: "arhiva", nume: "Arhiva de siguranță" }); }
 
@@ -199,6 +200,7 @@
       (an ? tile("Ședințe ale consiliului în " + an, nS, "", "<strong>" + nEx + " extraordinare</strong> sau de îndată, " + (s.ordinara || 0) + " ordinare", "#decizii/sedinte") : "") +
       (reg.cu ? tile("Zile fără registru de urbanism publicat", nr(reg.cu.zile_neacoperite), zile(reg.cu.zile_neacoperite), "ultimul registru acoperă până la " + zi(reg.cu.ultima_perioada_pana_la), "#urbanism/cu") : "") +
       (c.zile_de_la_ultima != null ? tile("Zile de la ultimul contract publicat", nr(c.zile_de_la_ultima), zile(c.zile_de_la_ultima), "ultimul: " + zi(c.ultima_postare), "#achizitii/contracte") : "") +
+      (IND.litigii && IND.litigii.total ? tile("Dosare în instanță", nr(IND.litigii.total), "", "în care e parte municipiul, din " + IND.litigii.primul_an + "; <strong>" + nr(IND.litigii.in_curs) + " în curs</strong>", "#litigii") : "") +
       (IND.sicap && IND.sicap.achizitii_directe ? tile("Achiziții publice în SICAP", nr(IND.sicap.achizitii_directe), "", "achiziții directe din 2018, la " + IND.sicap.institutii + " instituții din Rădăuți; vezi furnizorii și sumele", "#achizitii/sicap") : "") +
       (scanPct != null ? tile("Documente publicate doar ca scanare", scanPct + "%", "", nr(d.scanate) + " din " + nr(d.descarcate) + ": textul nu poate fi căutat și nu e accesibil cititoarelor de ecran") : "") +
       "</div>";
@@ -322,8 +324,9 @@
       legend(tipuri.map(function (t) { return [t[1], t[2]]; })) + '<div class="chart" id="ch-sed"></div>' +
       '<details class="tbl"><summary>Vezi tabelul</summary><div class="tw"><table><thead><tr><th>An</th>' + tipuri.map(function (t) { return '<th class="n">' + t[1] + "</th>"; }).join("") + '<th class="n">Total</th></tr></thead><tbody>' +
       ani.slice().reverse().map(function (y) { var v = sed[y], t = 0; return "<tr><td>" + y + "</td>" + tipuri.map(function (k) { t += v[k[0]] || 0; return '<td class="n">' + (v[k[0]] || 0) + "</td>"; }).join("") + '<td class="n">' + t + "</td></tr>"; }).join("") +
-      '</tbody></table></div></details></section><section class="card section"><h2>Procese-verbale</h2><div id="lst"></div></section>';
+      '</tbody></table></div></details></section>' + (INTERN ? '<div id="vt"></div>' : "") + '<section class="card section"><h2>Procese-verbale</h2><div id="lst"></div></section>';
     el.innerHTML = h;
+    if (INTERN) voturiIntern($("vt"));
     chart($("ch-sed"), {
       cats: ani, stacked: true, label: "Ședințe pe ani după tip",
       series: tipuri.map(function (t) { return { name: t[1], color: t[2], values: ani.map(function (y) { return sed[y][t[0]] || 0; }) }; }),
@@ -490,9 +493,11 @@
 
   function sxPrep(d) {
     var A = [];
-    d.da.forEach(function (r) { A.push({ t: "da", id: r[0], i: r[1], d: r[2], an: (r[2] || "").slice(0, 4), f: r[3], c: r[4], lei: r[5], eur: r[6], o: r[7], cod: r[8], niv: r[9] }); });
-    d.can.forEach(function (r) { A.push({ t: "can", id: r[0], i: r[1], d: r[2], an: (r[2] || "").slice(0, 4), f: -1, c: r[3], lei: r[4], eur: r[5], o: r[6], cod: r[7], proc: r[8], niv: 0 }); });
-    d.cn.forEach(function (r) { A.push({ t: "cn", id: r[0], i: r[1], d: r[2], an: (r[2] || "").slice(0, 4), f: -1, c: r[3], lei: r[4], eur: r[5], o: r[6], cod: r[7], proc: r[8], stare: r[9], cont: r[10], niv: 0 }); });
+    var stari = d.stari || [];
+    d.da.forEach(function (r) { A.push({ t: "da", id: r[0], i: r[1], d: r[2], an: (r[2] || "").slice(0, 4), f: r[3], c: r[4], lei: r[5], eur: r[6], o: r[7], cod: r[8], niv: r[9], stare: stari[r[10]] || "", ok: r[11] !== 0 }); });
+    d.can.forEach(function (r) { A.push({ t: "can", id: r[0], i: r[1], d: r[2], an: (r[2] || "").slice(0, 4), f: r[10] != null ? r[10] : -1, c: r[3], lei: r[4], eur: r[5], o: r[6], cod: r[7], proc: r[8], nrc: r[11] || "", niv: 0, ok: true }); });
+    d.cn.forEach(function (r) { A.push({ t: "cn", id: r[0], i: r[1], d: r[2], an: (r[2] || "").slice(0, 4), f: -1, c: r[3], lei: r[4], eur: r[5], o: r[6], cod: r[7], proc: r[8], stare: r[9], cont: r[10], niv: 0, ok: true }); });
+    d.castigatori = d.can.some(function (r) { return r[10] != null && r[10] >= 0; });
     d.A = A;
     d.div = d.cpv.map(function (c) { return /^\d{2}/.test(c) ? c.slice(0, 2) : "--"; });
     var ani = {}; A.forEach(function (x) { if (x.an) ani[x.an] = 1; });
@@ -509,7 +514,7 @@
   function cat(c) { var k = SX.div[c]; return CPV[k] || (k === "--" ? "Fără cod CPV" : "CPV " + k); }
 
   // filtrele, păstrate în adresă (#achizitii/sicap?i=..&t=..), ca o căutare să poată fi trimisă mai departe
-  var FKEYS = ["i", "t", "a0", "a1", "c", "q", "min", "ab"];
+  var FKEYS = ["i", "t", "a0", "a1", "c", "q", "min", "ab", "nf"];
   function sxFiltre(q) { var F = {}; FKEYS.forEach(function (k) { F[k] = q[k] || ""; }); return F; }
   function sxHash(F, baza) {
     var p = FKEYS.filter(function (k) { return F[k]; }).map(function (k) { return k + "=" + encodeURIComponent(F[k]); });
@@ -524,6 +529,7 @@
       if (F.a1 && x.an > F.a1) return false;
       if (F.c && SX.div[x.c] !== F.c) return false;
       if (x.niv === 2 && !F.ab) return false;
+      if (!x.ok && !F.nf) return false;
       if (min && (x.lei || 0) < min) return false;
       if (q) {
         if (x._s == null) x._s = norm([x.o, x.cod, SX.cpv[x.c], x.f >= 0 ? SX.furn[x.f].join(" ") : "", SX.inst[x.i][1]].join(" "));
@@ -587,15 +593,17 @@
       '<select id="f-min" aria-label="Valoarea minimă">' + opt("", "Orice valoare", F.min) + ["10000", "50000", "100000", "270000", "1000000"].map(function (v) { return opt(v, "peste " + nr(+v) + " lei", F.min); }).join("") + "</select>" +
       segMon() + "</div>" +
       '<div class="sx-act"><label class="chk"><input type="checkbox" id="f-ab"' + (F.ab ? " checked" : "") + "> include valorile aberante din SICAP</label>" +
+      '<label class="chk"><input type="checkbox" id="f-nf"' + (F.nf ? " checked" : "") + "> include achizițiile directe neîncheiate</label>" +
       '<a href="#achizitii/sicap" id="f-reset">Șterge filtrele</a></div></div><div id="sx-out"></div>';
     function citeste() {
       ["i", "t", "c", "q", "a0", "a1", "min"].forEach(function (k) { F[k] = $("f-" + k).value; });
       F.ab = $("f-ab").checked ? "1" : "";
+      F.nf = $("f-nf").checked ? "1" : "";
       if (F.a0 && F.a1 && F.a0 > F.a1) { var t = F.a0; F.a0 = F.a1; F.a1 = t; }
       history.replaceState(null, "", sxHash(F));
       sxOut($("sx-out"), F);
     }
-    ["f-i", "f-t", "f-c", "f-a0", "f-a1", "f-min", "f-ab"].forEach(function (id) { $(id).addEventListener("change", citeste); });
+    ["f-i", "f-t", "f-c", "f-a0", "f-a1", "f-min", "f-ab", "f-nf"].forEach(function (id) { $(id).addEventListener("change", citeste); });
     var tq; $("f-q").addEventListener("input", function () { clearTimeout(tq); tq = setTimeout(citeste, 250); });
     legaSeg(el, function () { sxOut($("sx-out"), F); });
     SXR = function (patch) { Object.keys(patch).forEach(function (k) { F[k] = patch[k]; }); location.hash = sxHash(F); };
@@ -618,15 +626,16 @@
     var ani = Object.keys(nAni).sort();
     if (!rows.length) { el.innerHTML = '<section class="card section"><p class="empty">Nicio achiziție nu corespunde filtrelor.</p></section>'; return; }
     var perioada = ani.length ? (ani[0] === ani[ani.length - 1] ? "în " + ani[0] : "din " + ani[0] + " până în " + ani[ani.length - 1]) : "";
-    var gf = grup(da, function (x) { return x.f >= 0 ? x.f : null; });
+    var cuF = rows.filter(function (x) { return x.f >= 0; });
+    var gf = grup(cuF, function (x) { return x.f; });
     var fk = Object.keys(gf).sort(function (a, b) { return gf[b].v - gf[a].v; });
-    var top5 = fk.slice(0, 5).reduce(function (a, k) { return a + gf[k].v; }, 0), vda = suma(da);
+    var top5 = fk.slice(0, 5).reduce(function (a, k) { return a + gf[k].v; }, 0), vda = suma(da), vf = suma(cuF);
     var maxRow = rows.reduce(function (m, x) { return val(x) > val(m) ? x : m; }, rows[0]);
     // cifrele principale
     h += '<div class="grid">' +
       tile(cumparari ? "Total cumpărat" : "Valoarea estimată a licitațiilor", bani(tot), "", nr(rows.length) + (cumparari ? " achiziții și contracte, " : " licitații, ") + perioada);
     if (!F.t && tot) h += tile("Cumpărat fără licitație", Math.round(100 * vda / tot) + "%", "", "din valoare: " + nr(da.length) + " achiziții directe, " + bani(vda));
-    if (fk.length) h += tile("Furnizori diferiți", nr(fk.length), "", "primii 5 au primit <strong>" + Math.round(100 * top5 / (vda || 1)) + "%</strong> din banii pe achiziții directe");
+    if (fk.length) h += tile("Furnizori diferiți", nr(fk.length), "", "primii 5 au primit <strong>" + Math.round(100 * top5 / (vf || 1)) + "%</strong> din banii cu furnizor cunoscut");
     h += tile("Cea mai mare valoare", bani(val(maxRow)), "", esc((maxRow.f >= 0 ? SX.furn[maxRow.f][1] + ": " : "") + (maxRow.o || "").slice(0, 70))) + "</div>";
     // pe ani
     var gA = {}; rows.forEach(function (x) { var g = gA[x.an] || (gA[x.an] = { da: 0, can: 0, cn: 0, nda: 0, ncan: 0, ncn: 0 }); g[x.t] += val(x); g["n" + x.t]++; });
@@ -646,8 +655,8 @@
       '<section class="card"><h2>În ce lună se cumpără</h2><p class="note">Valoarea pe luni, adunată pe toți anii selectați, în ' + uL.n + '. Un vârf în decembrie arată cheltuieli făcute la final de an.</p><div class="chart" id="ch-l"></div></section></div>';
     // furnizori și categorii
     var gc = grup(rows, function (x) { return SX.div[x.c]; }), ck = Object.keys(gc).sort(function (a, b) { return gc[b].v - gc[a].v; });
-    h += '<div class="grid two">' + (fk.length ? '<section class="card"><h2>Furnizorii cu cele mai mari sume</h2><p class="note">Achiziții directe. Apasă pe un furnizor ca să vezi tot ce a vândut instituțiilor din Rădăuți.</p>' +
-      hbl(fk.slice(0, 10).map(function (k) { var Fn = SX.furn[k]; return { l: Fn[1] || Fn[0], v: gf[k].v, href: Fn[0] ? "#achizitii/sicap/furnizor/" + encodeURIComponent(Fn[0]) : null }; }), bani, vda) + "</section>" : "") +
+    h += '<div class="grid two">' + (fk.length ? '<section class="card"><h2>Furnizorii cu cele mai mari sume</h2><p class="note">' + (SX.castigatori ? "Achiziții directe și contracte câștigate la licitație." : "Achiziții directe.") + " Apasă pe un furnizor ca să vezi tot ce a vândut instituțiilor din Rădăuți.</p>" +
+      hbl(fk.slice(0, 10).map(function (k) { var Fn = SX.furn[k]; return { l: Fn[1] || Fn[0], v: gf[k].v, href: Fn[0] ? "#achizitii/sicap/furnizor/" + encodeURIComponent(Fn[0]) : null }; }), bani, vf) + "</section>" : "") +
       '<section class="card"><h2>Pe ce s-au dat banii</h2><p class="note">Pe categorii de produse și servicii (codul CPV). Apasă pe o categorie ca să o filtrezi.</p>' +
       hbl(ck.slice(0, 12).map(function (k) { return { l: CPV[k] || (k === "--" ? "Fără cod CPV" : "CPV " + k), v: gc[k].v, href: F.c ? null : sxHash(Object.assign({}, F, { c: k })) }; }), bani, tot) + "</section></div>";
     if (F.i === "") {
@@ -662,8 +671,8 @@
       h += '<section class="card section"><h2>Cât de mari sunt achizițiile directe</h2><p class="note">Câte achiziții directe intră în fiecare treaptă de valoare (în lei). Pragul legal pentru o achiziție directă este 270.120 lei la produse și servicii și 900.400 lei la lucrări (din iulie 2022).</p>' +
         hbl(B.map(function (b, i) { return { l: b[0], v: bn[i] }; }), function (v) { return nr(v); }, da.length) + "</section>";
     }
-    h += '<div id="sx-semn"></div><div id="sx-ver"></div>';
-    if (fk.length) h += '<section class="card section"><h2>Toți furnizorii</h2><p class="note">Achiziții directe, după filtrele de mai sus.</p><div id="sx-f"></div></section>';
+    h += '<div id="sx-semn"></div><div id="sx-ver"></div><div id="sx-nf"></div>';
+    if (fk.length) h += '<section class="card section"><h2>Toți furnizorii</h2><p class="note">' + (SX.castigatori ? "Achiziții directe și contracte câștigate la licitație" : "Achiziții directe") + ', după filtrele de mai sus.</p><div id="sx-f"></div></section>';
     h += '<section class="card section"><h2>Toate achizițiile</h2><p class="note">Fiecare rând duce la pagina din SICAP; numele furnizorului duce la pagina lui.</p><div id="sx-l"></div></section>';
     el.innerHTML = h;
     // grafice
@@ -681,13 +690,14 @@
       tooltip: function (i) { var g = gL[LL[i]] || { v: 0, n: 0 }; return "<b>" + LUNI[LL[i] - 1] + "</b><br>" + bani(g.v) + "<br>" + nr(g.n) + " achiziții"; } });
     sxSemnale($("sx-semn"), da, "Achiziții directe repetate la același furnizor");
     sxVerificat($("sx-ver"), F);
+    sxNeincheiate($("sx-nf"), F);
     if (fk.length) sxFurnizori($("sx-f"), gf, fk);
     sxLista($("sx-l"), rows);
   }
 
   function sxSemnale(el, da, titlu) {
     var g = {};
-    da.forEach(function (x) { if (x.niv === 2 || !(x.f >= 0) || !SX.furn[x.f][0]) return; var c = SX.cpv[x.c] || "", k = x.an + "|" + x.i + "|" + x.f + "|" + c.slice(0, 3); (g[k] = g[k] || []).push(x); });
+    da.forEach(function (x) { if (x.t !== "da" || !x.ok || x.niv === 2 || !(x.f >= 0) || !SX.furn[x.f][0]) return; var c = SX.cpv[x.c] || "", k = x.an + "|" + x.i + "|" + x.f + "|" + c.slice(0, 3); (g[k] = g[k] || []).push(x); });
     var out = [];
     Object.keys(g).forEach(function (k) {
       var l = g[k]; if (l.length < 2) return;
@@ -707,7 +717,7 @@
   }
 
   function sxVerificat(el, F) {
-    var G = Object.assign({}, F, { t: "da", ab: "1", min: "" }), v = sxFilt(G).filter(function (x) { return x.niv; }).sort(function (a, b) { return (b.lei || 0) - (a.lei || 0); });
+    var G = Object.assign({}, F, { t: "da", ab: "1", min: "", nf: "" }), v = sxFilt(G).filter(function (x) { return x.niv && x.ok; }).sort(function (a, b) { return (b.lei || 0) - (a.lei || 0); });
     if (!v.length) { el.innerHTML = ""; return; }
     var ab = v.filter(function (x) { return x.niv === 2; }).length;
     el.innerHTML = '<section class="card section"><h2>Valori de verificat în SICAP</h2><p class="note">Achiziții directe trecute în SICAP cu o valoare peste pragul legal, chiar și cu TVA inclus. ' +
@@ -717,6 +727,17 @@
         return '<div class="doc"><div class="h"><span class="id">' + esc(zi(x.d)) + " · " + lei(x.lei) + '</span><span class="tag"' + (x.niv === 2 ? ' style="border-color:var(--bad)"' : "") + ">" + (x.niv === 2 ? "valoare aberantă" : "peste pragul legal") + "</span></div>" +
           '<div class="t">' + esc(x.o) + '</div><div class="m"><span>' + esc(SX.inst[x.i][1]) + "</span>" + fLink(x.f) + '<a href="' + url(x) + '" rel="noopener">în SICAP (' + esc(x.cod) + ")</a></div></div>";
       }).join("") + (v.length > 15 ? '<p class="note">Și încă ' + (v.length - 15) + ".</p>" : "") + "</section>";
+  }
+
+  function sxNeincheiate(el, F) {
+    if (F.nf) { el.innerHTML = ""; return; }
+    var v = sxFilt(Object.assign({}, F, { t: "da", nf: "1", ab: "1" })).filter(function (x) { return !x.ok; }).sort(function (a, b) { return (b.lei || 0) - (a.lei || 0); });
+    if (!v.length) { el.innerHTML = ""; return; }
+    var ps = {}; v.forEach(function (x) { ps[x.stare || "fără stare"] = (ps[x.stare || "fără stare"] || 0) + 1; });
+    el.innerHTML = '<section class="card section"><h2>Achiziții directe neîncheiate</h2><p class="note">Achiziții directe pornite în SICAP, dar care nu s-au încheiat: furnizorul a refuzat condițiile, oferta a fost respinsă sau achiziția a fost anulată. ' +
+      "Nu sunt bani cheltuiți, așa că nu intră în totaluri și grafice. Le poți include cu bifa de sus. " + nr(v.length) + " achiziții: " +
+      Object.keys(ps).sort(function (a, b) { return ps[b] - ps[a]; }).map(function (k) { return esc(k.toLowerCase()) + " " + nr(ps[k]); }).join(", ") + ".</p>" +
+      v.slice(0, 10).map(function (x) { return sxItem(x, true); }).join("") + (v.length > 10 ? '<p class="note">Cele mai mari 10, după valoare. Bifează „include achizițiile directe neîncheiate” ca să le vezi pe toate în listă.</p>' : "") + "</section>";
   }
 
   function sxFurnizori(el, gf, fk) {
@@ -742,11 +763,12 @@
     var m = [];
     if (cuInst) m.push("<span>" + esc(SX.inst[x.i][1]) + "</span>");
     if (x.f >= 0) m.push(fLink(x.f));
-    if (x.t !== "da" && x.proc) m.push("<span>" + esc(x.proc) + (x.stare ? " · " + esc(x.stare) : "") + (x.cont ? " · contestată" : "") + "</span>");
+    if (x.t !== "da" && x.proc) m.push("<span>" + esc(x.proc) + (x.t === "cn" && x.stare ? " · " + esc(x.stare) : "") + (x.cont ? " · contestată" : "") + (x.nrc ? " · contract " + esc(x.nrc) : "") + "</span>");
     m.push("<span>" + esc(cat(x.c)) + "</span>");
     m.push('<a href="' + url(x) + '" rel="noopener">în SICAP' + (x.cod ? " (" + esc(x.cod) + ")" : "") + "</a>");
     return '<div class="doc"><div class="h"><span class="id">' + esc(zi(x.d)) + (x.lei ? " · " + bani(val(x)) : "") + '</span><span class="tag">' + TIPS[x.t] + "</span>" +
-      (x.niv ? '<span class="tag" style="border-color:var(--' + (x.niv === 2 ? "bad" : "warn") + ')">' + (x.niv === 2 ? "valoare aberantă" : "peste pragul legal") + "</span>" : "") + "</div>" +
+      (!x.ok ? '<span class="tag" style="border-color:var(--plan)">neîncheiată: ' + esc((x.stare || "").toLowerCase()) + "</span>" : "") +
+      (x.ok && x.niv ? '<span class="tag" style="border-color:var(--' + (x.niv === 2 ? "bad" : "warn") + ')">' + (x.niv === 2 ? "valoare aberantă" : "peste pragul legal") + "</span>" : "") + "</div>" +
       '<div class="t">' + esc(x.o || "(fără titlu)") + '</div><div class="m">' + m.join("") + "</div></div>";
   }
   function sxLista(el, rows, cuInst) {
@@ -769,18 +791,19 @@
     if (f == null) { el.innerHTML = head("Achiziții publice", "", r) + inapoi + '<section class="card section"><p class="empty">Furnizorul cu CUI ' + esc(cui) + " nu apare în achizițiile instituțiilor din Rădăuți.</p></section>"; return; }
     var Fn = SX.furn[f];
     function deseneaza() {
-      var all = SX.A.filter(function (x) { return x.f === f; }), rows = all.filter(function (x) { return x.niv < 2; });
+      var all = SX.A.filter(function (x) { return x.f === f; }), rows = all.filter(function (x) { return x.niv < 2 && x.ok; });
+      var nDa = rows.filter(function (x) { return x.t === "da"; }).length, nCan = rows.length - nDa;
       var tot = suma(rows), ani = {}; all.forEach(function (x) { ani[x.an] = 1; }); var ak = Object.keys(ani).sort();
       var gi = grup(rows, function (x) { return x.i; }), ik = Object.keys(gi).sort(function (a, b) { return gi[b].v - gi[a].v; });
       var gc = grup(rows, function (x) { return SX.div[x.c]; }), ck = Object.keys(gc).sort(function (a, b) { return gc[b].v - gc[a].v; });
       // locul în clasamentul furnizorilor (achiziții directe, toți anii)
-      var tf = {}; SX.A.forEach(function (x) { if (x.t === "da" && x.niv < 2 && x.f >= 0) tf[x.f] = (tf[x.f] || 0) + val(x); });
+      var tf = {}; SX.A.forEach(function (x) { if (x.ok && x.niv < 2 && x.f >= 0) tf[x.f] = (tf[x.f] || 0) + val(x); });
       var loc = 1 + Object.keys(tf).filter(function (k) { return tf[k] > (tf[f] || 0); }).length;
-      var h = head(Fn[1] || ("CUI " + Fn[0]), "CUI " + esc(Fn[0]) + ". Tot ce a vândut instituțiilor din Rădăuți prin achiziții directe în SICAP, din 2018.", r) + inapoi +
+      var h = head(Fn[1] || ("CUI " + Fn[0]), "CUI " + esc(Fn[0]) + ". Tot ce a vândut instituțiilor din Rădăuți prin SICAP, din 2018: achiziții directe" + (SX.castigatori ? " și contracte câștigate la licitație" : "") + ".", r) + inapoi +
         '<div class="filters">' + segMon() + "</div>" +
-        '<div class="grid">' + tile("Total primit", bani(tot), "", nr(rows.length) + " achiziții directe, " + (ak.length ? (ak.length > 1 ? ak[0] + "-" + ak[ak.length - 1] : "în " + ak[0]) : "")) +
+        '<div class="grid">' + tile("Total primit", bani(tot), "", nr(nDa) + " achiziții directe" + (nCan ? " și " + nr(nCan) + " contracte prin licitație" : "") + ", " + (ak.length ? (ak.length > 1 ? ak[0] + "-" + ak[ak.length - 1] : "în " + ak[0]) : "")) +
         tile("Instituții care au cumpărat", nr(ik.length), "", ik.length ? "cele mai multe de la " + esc(SX.inst[ik[0]][1]) : "") +
-        tile("Locul între furnizori", nr(loc), "", "din " + nr(Object.keys(tf).length) + ", după valoarea achizițiilor directe") +
+        tile("Locul între furnizori", nr(loc), "", "din " + nr(Object.keys(tf).length) + ", după suma primită") +
         tile("Valoarea medie a unei achiziții", bani(rows.length ? tot / rows.length : 0), "", "cea mai mare: " + bani(rows.reduce(function (m, x) { return Math.max(m, val(x)); }, 0))) + "</div>";
       var A = []; if (ak.length) for (var y = +ak[0]; y <= +ak[ak.length - 1]; y++) A.push(String(y));
       var topI = ik.slice(0, 3), culori = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--plan)"];
@@ -796,16 +819,17 @@
         '<section class="card"><h2>Ce a vândut</h2><p class="note">Pe categorii de produse și servicii.</p>' + hbl(ck.slice(0, 8).map(function (k) { return { l: CPV[k] || ("CPV " + k), v: gc[k].v }; }), bani, tot) + "</section></div>";
       if (ik.length > 1) h += '<section class="card section"><h2>Cui a vândut</h2>' + hbl(ik.map(function (k) { return { l: SX.inst[k][1], v: gi[k].v, href: sxHash({ i: String(SX.inst[k][0]), q: Fn[0] }) }; }), bani, tot) + "</section>";
       h += '<div id="sx-semn"></div>';
-      var ab = all.filter(function (x) { return x.niv === 2; });
+      var ab = all.filter(function (x) { return x.niv === 2 && x.ok; }), ne = all.filter(function (x) { return !x.ok; });
+      if (ne.length) h += '<p class="callout">' + ne.length + (ne.length === 1 ? " achiziție directă nu s-a încheiat" : " achiziții directe nu s-au încheiat") + " (" + esc(Array.from(new Set(ne.map(function (x) { return (x.stare || "").toLowerCase(); }))).join(", ")) + "), în valoare de " + lei(ne.reduce(function (a, x) { return a + (x.lei || 0); }, 0)) + ". Nu sunt bani primiți și nu intră în totaluri; apar în lista de mai jos, marcate.</p>";
       if (ab.length) h += '<p class="callout">' + ab.length + (ab.length === 1 ? " achiziție are" : " achiziții au") + " în SICAP o valoare de peste 10 ori pragul legal (în total " + lei(ab.reduce(function (a, x) { return a + (x.lei || 0); }, 0)) + "), aproape sigur o greșeală de introducere. Nu intră în totalurile de mai sus; apar în lista de mai jos, marcate.</p>";
-      h += '<p class="note">Contractele atribuite prin licitație nu au încă furnizorul câștigător în datele noastre; le adăugăm într-o etapă următoare.</p>';
+      if (!SX.castigatori) h += '<p class="note">Contractele atribuite prin licitație nu au încă furnizorul câștigător în datele noastre; apar după următoarea colectare.</p>';
       h += '<section class="card section"><h2>Toate achizițiile de la acest furnizor</h2><div id="sx-l"></div></section>';
       el.innerHTML = h;
       chart($("ch-fa"), { cats: A, stacked: true, label: "Valoarea pe ani",
         series: serii.map(function (s) { return { name: s.name, color: s.color, values: A.map(function (y) { var g = gA[y]; return g ? rot(s.k.reduce(function (a, k) { return a + (g.pe[k] || 0); }, 0), u) : 0; }) }; }),
         labelValue: function (i) { var g = gA[A[i]]; return g && g.v ? eti(g.v, u) : ""; },
         tooltip: function (i) { var g = gA[A[i]] || { v: 0, n: 0 }; return "<b>" + A[i] + "</b><br>" + bani(g.v) + "<br>" + nr(g.n) + " achiziții"; } });
-      chart($("ch-fn"), { cats: A, label: "Numărul de achiziții pe ani", series: [{ name: "Achiziții", color: "var(--s1)", values: A.map(function (y) { return (gA[y] || {}).n || 0; }) }],
+      chart($("ch-fn"), { cats: A, label: "Numărul de achiziții și contracte pe ani", series: [{ name: "Achiziții", color: "var(--s1)", values: A.map(function (y) { return (gA[y] || {}).n || 0; }) }],
         labelValue: function (i) { return (gA[A[i]] || {}).n || ""; }, tooltip: function (i) { return "<b>" + A[i] + "</b><br>" + nr((gA[A[i]] || {}).n || 0) + " achiziții"; } });
       sxSemnale($("sx-semn"), rows, "Achiziții repetate de la acest furnizor");
       var instF = {}; all.forEach(function (x) { instF[x.i] = 1; });
@@ -818,6 +842,113 @@
       legaSeg(el, deseneaza);
     }
     deseneaza();
+  }
+
+  // ---------- Litigii ----------
+  var LIT = null;
+  var ROLURI = [["a fost chemată în judecată", "Municipiul chemat în judecată", "var(--s2)"], ["a dat în judecată", "Municipiul a dat în judecată", "var(--s1)"],
+    ["a atacat hotărârea", "Municipiul a atacat o hotărâre", "var(--s3)"], ["altă calitate", "Altă calitate", "var(--plan)"]];
+  function litigii(el, r) {
+    var cap = head("Litigii", "Dosarele din instanțe în care e parte Municipiul Rădăuți: primăria, primarul, consiliul local sau poliția locală. Sursa: portalul instanțelor, portal.just.ro.");
+    if (!LIT) {
+      el.innerHTML = cap + '<p class="updated">Se încarcă dosarele...</p>';
+      var src = INTERN ? get("date-intern/litigii.json").catch(function () { return get(BASE + "date/litigii.json"); }) : get(BASE + "date/litigii.json");
+      src.then(function (d) { LIT = d; render(); })
+        .catch(function () { el.innerHTML = cap + '<section class="card section"><p>Dosarele apar după prima colectare din portalul instanțelor.</p></section>'; });
+      return;
+    }
+    var D = LIT.dosare || [], q = r.q || {};
+    var pe = {}, ob = {}, inst = {}, mat = {}, nCurs = 0, rol = {};
+    D.forEach(function (d) {
+      var a = d.an || "?"; pe[a] = pe[a] || {}; pe[a][d.rol] = (pe[a][d.rol] || 0) + 1;
+      var o = (d.obiect || "nemenționat").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 80); ob[o] = (ob[o] || 0) + 1;
+      mat[d.materie || "nemenționată"] = (mat[d.materie || "nemenționată"] || 0) + 1;
+      (d.etape || []).forEach(function (e) { inst[e.instanta] = (inst[e.instanta] || 0) + 1; });
+      if (d.stare === "în curs") nCurs++;
+      rol[d.rol] = (rol[d.rol] || 0) + 1;
+    });
+    var ani = Object.keys(pe).filter(function (a) { return a !== "?"; }).sort(), A = [];
+    if (ani.length) for (var y = +ani[0]; y <= +ani[ani.length - 1]; y++) A.push(String(y));
+    var top = function (o, n) { return Object.keys(o).sort(function (a, b) { return o[b] - o[a]; }).slice(0, n).map(function (k) { return { l: k, v: o[k] }; }); };
+    var termene = D.filter(function (d) { return d.termen; }).sort(function (a, b) { return a.termen.localeCompare(b.termen); });
+    var h = cap + '<div class="grid">' +
+      tile("Dosare în care e parte municipiul", nr(D.length), "", ani.length ? "înregistrate din " + ani[0] + " până în " + ani[ani.length - 1] : "") +
+      tile("În curs", nr(nCurs), "", termene.length ? "următorul termen: <strong>" + esc(zi(termene[0].termen)) + "</strong>" : "cu termen viitor sau fără soluție") +
+      tile("Municipiul chemat în judecată", nr(rol["a fost chemată în judecată"] || 0), "", "ca pârât, intimat sau debitor") +
+      tile("Municipiul a dat în judecată", nr(rol["a dat în judecată"] || 0), "", "ca reclamant, petent sau creditor") + "</div>";
+    h += '<section class="card section"><h2>Dosare noi, pe ani</h2><p class="note">După data înregistrării dosarului și rolul municipiului în prima etapă. Aceeași cauză la fond, în apel și în recurs se numără o singură dată. Apasă pe un an ca să vezi dosarele lui.</p>' +
+      legend(ROLURI.filter(function (x) { return rol[x[0]]; }).map(function (x) { return [x[1], x[2]]; })) + '<div class="chart" id="ch-lit"></div></section>';
+    h += '<div class="grid two"><section class="card"><h2>Ce se judecă</h2><p class="note">Obiectul dosarelor, așa cum e trecut la instanță. Apasă ca să cauți.</p>' +
+      hbl(top(ob, 12).map(function (x) { return { l: x.l, v: x.v, href: "#litigii?q=" + encodeURIComponent(x.l) }; }), nr, D.length) + "</section>" +
+      '<section class="card"><h2>La ce instanțe</h2><p class="note">Fiecare etapă a unui dosar (fond, apel, recurs) la instanța ei.</p>' + hbl(top(inst, 10), nr) + "</section></div>";
+    h += '<section class="card section"><h2>Pe materii</h2>' + hbl(top(mat, 10), nr, D.length) + "</section>";
+    if (termene.length) h += '<section class="card section"><h2>Următoarele termene</h2><div class="tw"><table><thead><tr><th>Termen</th><th>Dosar</th><th>Obiect</th></tr></thead><tbody>' +
+      termene.slice(0, 12).map(function (d) { return "<tr><td>" + esc(zi(d.termen)) + "</td><td>" + esc(d.numar) + "</td><td>" + esc(d.obiect || "") + "</td></tr>"; }).join("") + "</tbody></table></div></section>";
+    h += '<section class="card section"><h2>Toate dosarele</h2><p class="note">' + (INTERN ? "Pagina internă arată și numele persoanelor fizice și rezumatul soluțiilor. Nu se publică." : "Numele persoanelor fizice care sunt părți nu se publică.") +
+      ' Datele pot fi verificate pe <a href="https://portal.just.ro" rel="noopener">portal.just.ro</a>, după numărul dosarului.</p><div id="lst"></div></section>';
+    el.innerHTML = h;
+    chart($("ch-lit"), { cats: A, stacked: true, label: "Dosare noi pe ani",
+      series: ROLURI.filter(function (x) { return rol[x[0]]; }).map(function (x) { return { name: x[1], color: x[2], values: A.map(function (y) { return (pe[y] || {})[x[0]] || 0; }) }; }),
+      labelValue: function (i) { var p = pe[A[i]] || {}; var t = Object.keys(p).reduce(function (a, k) { return a + p[k]; }, 0); return t || ""; },
+      tooltip: function (i) { var p = pe[A[i]] || {}; return "<b>" + A[i] + "</b>" + ROLURI.filter(function (x) { return p[x[0]]; }).map(function (x) { return "<br>" + x[1] + ": " + p[x[0]]; }).join(""); },
+      onClick: function (i) { location.hash = "#litigii?an=" + A[i]; } });
+    lista($("lst"), D, {
+      placeholder: "Caută: număr de dosar, obiect, instanță, parte (ex. anulare act, pretenții, SRL)", unitate: ["dosar", "dosare"],
+      an: function (d) { return d.an; },
+      text: function (d) { return [d.numar, d.obiect, d.materie, d.solutie].concat((d.etape || []).map(function (e) { return e.instanta + " " + (e.parti || []).map(function (p) { return p.nume; }).join(" "); })).join(" "); },
+      extraFilter: { html: '<select aria-label="Starea"><option value="">Toate dosarele</option><option value="în curs">În curs</option><option value="fără termen viitor">Fără termen viitor</option></select>', test: function (d, e) { return d.stare === e; } },
+      item: function (d) {
+        var et = (d.etape || []).map(function (e) {
+          var mun = (e.parti || []).filter(function (p) { return p.municipiu; }).map(function (p) { return esc(p.nume) + " (" + esc((p.calitate || "").toLowerCase()) + ")"; });
+          var alte = (e.parti || []).filter(function (p) { return !p.municipiu; }).map(function (p) { return esc(p.nume) + (p.calitate ? " (" + esc(p.calitate.toLowerCase()) + ")" : ""); });
+          return '<div class="m"><span><strong>' + esc(e.stadiu || "Etapă") + "</strong> · " + esc(e.instanta) + (e.data ? " · din " + esc(zi(e.data)) : "") +
+            (e.termen ? " · următorul termen " + esc(zi(e.termen)) : e.solutie ? " · " + esc(e.solutie) + (e.data_solutie ? " (" + esc(zi(e.data_solutie)) + ")" : "") : "") + "</span></div>" +
+            '<div class="m"><span>' + mun.join("; ") + (alte.length ? " · cu: " + alte.slice(0, 6).join("; ") + (alte.length > 6 ? " și alții" : "") : "") + "</span></div>" +
+            (e.sumar ? '<div class="m"><span class="muted">' + esc(e.sumar.slice(0, 400)) + "</span></div>" : "");
+        }).join("");
+        return '<div class="doc"><div class="h"><span class="id">' + esc(d.numar) + " · " + esc(zi(d.data)) + '</span><span class="tag">' + esc(d.materie || "") + '</span><span class="tag"' +
+          (d.stare === "în curs" ? ' style="border-color:var(--warn)"' : "") + ">" + esc(d.stare) + "</span></div>" +
+          '<div class="t">' + esc(d.obiect || "(obiect nemenționat)") + " · <span class=\"muted\">municipiul " + esc(d.rol) + "</span></div>" + et + "</div>";
+      }
+    });
+    if (q.q || q.an) {   // filtrele din adresă (din grafice sau din „Ce se judecă”)
+      var box = $("lst"), inp = box.querySelector("input"), sel = box.querySelector("select");
+      if (q.q) { inp.value = q.q; inp.dispatchEvent(new Event("input")); }
+      if (q.an) { sel.value = q.an; sel.dispatchEvent(new Event("change")); }
+      box.scrollIntoView({ block: "start" });
+    }
+  }
+
+  // ---------- Voturile din procesele-verbale (intern, în verificare) ----------
+  function voturiIntern(el) {
+    get("date-intern/voturi.json").then(function (V) {
+      var pa = V.pe_ani || {}, ani = Object.keys(pa).sort().reverse();
+      var S = (V.sedinte || []).filter(function (x) { return x.voturi && x.voturi.length; });
+      var h = '<section class="card section"><h2>Voturi extrase din procesele-verbale (intern, în verificare)</h2><p class="note">Extrase automat din textul recunoscut (OCR). Formularea proceselor-verbale variază, deci cifrele trebuie verificate pe documente înainte de a fi publicate. Fiecare vot are fragmentul de text din care a fost extras.</p>' +
+        '<div class="tw"><table><thead><tr><th>An</th><th class="n">Ședințe</th><th class="n">Cu voturi găsite</th><th class="n">Voturi</th><th class="n">Unanime</th><th class="n">Cu „împotrivă”</th><th class="n">Cu abțineri</th><th class="n">Respinse</th></tr></thead><tbody>' +
+        ani.map(function (y) { var p = pa[y]; return "<tr><td>" + y + '</td><td class="n">' + p.sedinte + '</td><td class="n">' + p.cu_voturi + '</td><td class="n">' + p.voturi + '</td><td class="n">' + p.unanime + '</td><td class="n">' + p.cu_impotriva + '</td><td class="n">' + p.cu_abtineri + '</td><td class="n">' + p.respinse + "</td></tr>"; }).join("") +
+        '</tbody></table></div><div id="vt-l"></div></section>';
+      el.innerHTML = h;
+      lista($("vt-l"), S, {
+        placeholder: "Caută în titlurile proiectelor sau numele consilierilor", unitate: ["ședință", "ședințe"],
+        an: function (x) { return x.data.slice(0, 4); },
+        text: function (x) { return x.voturi.map(function (v) { return (v.titlu || "") + " " + v.nume_impotriva.join(" ") + " " + v.nume_abtineri.join(" "); }).join(" "); },
+        extraFilter: { html: '<select aria-label="Voturi"><option value="">Toate ședințele</option><option value="imp">Cu voturi împotrivă sau abțineri</option></select>', test: function (x) { return x.voturi.some(function (v) { return v.impotriva || v.abtineri; }); } },
+        item: function (x) {
+          var u = safeUrl(x.pdf);
+          return '<div class="doc"><div class="h"><span class="id">Ședința ' + esc(TIP[x.tip] || x.tip || "") + " din " + esc(zi(x.data)) + "</span><span class=\"tag\">" + x.voturi.length + " voturi" + (x.prezenti ? ", " + x.prezenti + " prezenți" : "") + "</span>" +
+            (u ? '<a href="' + esc(u) + '" rel="noopener">PDF</a>' : "") + "</div>" +
+            x.voturi.map(function (v) {
+              return '<div class="m" style="display:block;margin-top:6px"><strong>' + (v.punct ? "Punctul " + v.punct + ": " : "") + "</strong>" + esc((v.titlu || "proiect neidentificat").slice(0, 200)) +
+                (v.hcl ? ' <span class="tag">HCL ' + v.hcl.nr + "/" + v.hcl.an + "</span>" : "") + "<br>" +
+                (v.unanimitate ? "unanimitate" : "pentru " + (v.pentru == null ? "?" : v.pentru) + ", împotrivă " + v.impotriva + ", abțineri " + v.abtineri + (v.nu_voteaza ? ", nu votează " + v.nu_voteaza : "")) +
+                (v.rezultat ? " · " + esc(v.rezultat) : "") +
+                (v.nume_impotriva.length ? " · împotrivă: " + esc(v.nume_impotriva.join(", ")) : "") + (v.nume_abtineri.length ? " · abțineri: " + esc(v.nume_abtineri.join(", ")) : "") +
+                ' <details class="more-t"><summary>textul</summary><span class="muted">' + esc(v.fragment) + "</span></details></div>";
+            }).join("") + "</div>";
+        }
+      });
+    }).catch(function () { el.innerHTML = ""; });
   }
 
   function texte(el) {
@@ -842,6 +973,7 @@
     else if (id === "decizii") (r.sub === "sedinte" ? sedinte : r.sub === "proiecte" ? proiecte : hcl)(el, r);
     else if (id === "urbanism") registru(el, r, r.sub);
     else if (id === "achizitii") (r.sub === "sicap" ? sicap : contracte)(el, r);
+    else if (id === "litigii") litigii(el, r);
     else if (id === "texte") texte(el);
     else if (id === "arhiva") arhivaIntern(el);
     if (id === "acasa") arhivaCard();

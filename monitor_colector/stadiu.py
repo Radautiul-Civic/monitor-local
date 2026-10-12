@@ -73,8 +73,10 @@ def compute(ind):
     pr = ind.get("proiecte_pe_ani", {})
     add("Decizii locale", "Proiecte de hotărâre", "complet" if pr else "planificat",
         f"{sum(pr.values())} proiecte publicate pe site" if pr else "Colectare pornită; apar după următoarea rulare.")
-    add("Decizii locale", "Voturile consilierilor", "planificat",
-        "Extrase din procesele-verbale, după verificarea calității textului recunoscut (OCR).")
+    vt = ind.get("voturi") or {}
+    add("Decizii locale", "Voturile consilierilor", "partial" if vt.get("voturi") else "planificat",
+        (f"Extrase automat din {vt['cu_voturi']} procese-verbale ({vt['voturi']} voturi); se verifică pe documente "
+         "înainte de publicare." if vt.get("voturi") else "Cine a votat cum, extras din procesele-verbale."))
 
     # ---- Urbanism ----
     reg = ind.get("registre_urbanism", {})
@@ -109,7 +111,14 @@ def compute(ind):
             "Proceduri, anunțuri și contracte din sistemul național de achiziții, pentru toate instituțiile din Rădăuți.")
 
     # ---- Alte surse ----
-    add("Alte surse", "Litigii", "planificat", "Dosarele în care primăria e parte (portal.just.ro, ReJust).")
+    lt = ind.get("litigii") or {}
+    if lt.get("total"):
+        add("Alte surse", "Litigii", "complet",
+            f"{lt['total']} dosare în care e parte municipiul (din {lt['primul_an']}), {lt['in_curs']} în curs; "
+            "sursa: portal.just.ro.")
+    else:
+        add("Alte surse", "Litigii", "planificat", "Dosarele în care primăria e parte (portal.just.ro).")
+
     add("Alte surse", "Buget și bilanțuri", "partial",
         "Documentele sunt colectate; indicatorii de buget nu sunt încă afișați.")
     add("Alte surse", "Dispoziții ale primarului", "planificat", "Registrul dispozițiilor publicat pe site.")

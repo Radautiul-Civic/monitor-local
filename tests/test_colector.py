@@ -756,3 +756,187 @@ class TestRecuperare(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSicapCastigatori(unittest.TestCase):
+    JS = ('t.prototype.GetCANoticeContracts=function(n){return this.POST(this.apiPub+"/GetCANoticeContracts/",n)};'
+          'function t(t,i){n.call(this,t,i);this.api="api/C_CA_CANotice";this.apiPub="api-pub/C_PUBLIC_CANotice"}')
+
+    class Cl:
+        def __init__(self, js):
+            self.js, self.cereri, self.posts = js, 0, []
+
+        def text(self, path):
+            if path.endswith(".min.js"):
+                raise RuntimeError("404")
+            return self.js
+
+        def post(self, path, body):
+            self.posts.append((path, body))
+            if path != "/api-pub/C_PUBLIC_CANotice/GetCANoticeContracts/":
+                raise RuntimeError("404")
+            if body["caNoticeId"] == 501:
+                return {"total": 2, "items": [
+                    {"caNoticeContractId": 9001, "contractNo": "12/2024", "contractDate": "2024-03-05T00:00:00",
+                     "contractTitle": "Lot 1 asfaltare", "contractValue": 1000000.0,
+                     "winner": {"name": "DRUMURI SRL", "fiscalNumber": "RO 111"}},
+                    {"caNoticeContractId": 9002, "contractNo": "13/2024", "contractDate": "2024-03-06T00:00:00",
+                     "contractTitle": "Lot 2 trotuare", "contractValue": 500000.0,
+                     "winnerTitle": "TROTUAR SA", "winnerFiscalNumber": "222"}]}
+            return {"total": 0, "items": []}
+
+    def _store(self):
+        from monitor_colector import sicap
+        tmp = tempfile.mkdtemp()
+        store = Store(os.path.join(tmp, "t.db"))
+        sicap.init(store.db)
+        db = store.db
+        db.execute("INSERT INTO sicap_ca (id,text,cui,inclus,gasit_la) VALUES (11,'4244148 - MUNICIPIUL RADAUTI','4244148',1,'2024-01-01')")
+        for i, v in ((501, 1500000.0), (502, 80000.0)):
+            db.execute("INSERT INTO sicap_can VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (i, 11, f"CAN{i}", "Lucrari", "Licitatie deschisa",
+                       "Lucrari", "45233140-2 - Lucrari de drumuri (Rev.2)", v, v, v, "2024-03-01", "{}"))
+        db.execute("INSERT INTO sicap_da VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (1, 11, "DA1", "Proiectare", "71320000-7 - Proiectare",
+                   "2024-05-14", "2024-05-14", "PESEROAD", "36943241", 127000000.0, 127000000.0, "Conditii refuzate", "{}"))
+        db.execute("INSERT INTO sicap_da VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (2, 11, "DA2", "Birotica", "30192000-1 - Birotica",
+                   "2024-05-15", "2024-05-15", "BIRO SRL", "555", 5000.0, 5000.0, "Oferta acceptata", "{}"))
+        db.commit()
+        return store, tmp
+
+    def test_cale_din_modul_si_contracte(self):
+        from monitor_colector import sicap
+        self.assertEqual(sicap.cai_din_modul(self.JS), [("POST", "/api-pub/C_PUBLIC_CANotice/GetCANoticeContracts/")])
+        store, tmp = self._store()
+        cl = self.Cl(self.JS)
+        proba = []
+        st = sicap.castigatori(store, cl=cl, proba=proba)
+        self.assertEqual((st["verificate"], st["contracte"], st["erori"]), (2, 2, 0))
+        self.assertTrue(proba)
+        c = {r["id"]: dict(r) for r in store.db.execute("SELECT * FROM sicap_contract")}
+        self.assertEqual((c["9001"]["castigator"], c["9001"]["castigator_cui"], c["9001"]["valoare"]), ("DRUMURI SRL", "111", 1000000.0))
+        self.assertEqual((c["9002"]["castigator"], c["9002"]["castigator_cui"]), ("TROTUAR SA", "222"))
+        # a doua rulare nu mai cere anunțurile verificate
+        self.assertEqual(sicap.castigatori(store, cl=cl)["de_verificat"], 0)
+        rez, ex = sicap.export(store)
+        can = [r for r in ex["can"] if r[0] == 501]
+        self.assertEqual(len(can), 2)                               # un rând pe contract
+        self.assertEqual({ex["furn"][r[10]][0] for r in can}, {"111", "222"})
+        self.assertEqual([r[10] for r in ex["can"] if r[0] == 502], [-1])   # fără contracte: rândul anunțului
+        # achizițiile directe neîncheiate nu intră în totaluri, dar rămân în date, marcate
+        p = rez["autoritati"][0]
+        self.assertEqual((p["da"], p["da_val"], p["da_nerealizate"]), (1, 5000.0, 1))
+        d1 = [r for r in ex["da"] if r[0] == 1][0]
+        self.assertEqual((ex["stari"][d1[10]], d1[11]), ("Conditii refuzate", 0))
+        self.assertIn("neîncheiate", sicap.raport_de_verificat(ex))
+        store.close()
+        shutil.rmtree(tmp)
+
+    def test_realizata(self):
+        from monitor_colector import sicap
+        self.assertTrue(sicap.realizata("Oferta acceptata"))
+        self.assertTrue(sicap.realizata(None))
+        for s in ("Conditii refuzate", "Condiții refuzate", "Oferta respinsa", "Anulata", "Expirata"):
+            self.assertFalse(sicap.realizata(s), s)
+
+
+class TestLitigii(unittest.TestCase):
+    RASPUNS = '''<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+<soap:Body><CautareDosareResponse xmlns="portalquery.just.ro"><CautareDosareResult>
+<Dosar><parti><DosarParte><nume>MUNICIPIUL RĂDĂUŢI PRIN PRIMAR</nume><calitateParte>Pârât</calitateParte></DosarParte>
+<DosarParte><nume>POPESCU ION</nume><calitateParte>Reclamant</calitateParte></DosarParte></parti>
+<sedinte><DosarSedinta><complet>C1</complet><data>2024-03-01T00:00:00</data><ora>09:00</ora><solutie>Amână cauza</solutie>
+<solutieSumar /></DosarSedinta><DosarSedinta><complet>C1</complet><data>2024-05-10T00:00:00</data><ora>09:00</ora>
+<solutie>Admite</solutie><solutieSumar>Admite acţiunea formulată de reclamantul Popescu Ion.</solutieSumar>
+<dataPronuntare>2024-05-20T00:00:00</dataPronuntare></DosarSedinta></sedinte>
+<numar>1234/285/2024</numar><numarVechi /><data>2024-01-15T00:00:00</data><institutie>TribunalulSUCEAVA</institutie>
+<departament>Contencios</departament><categorieCaz>Contencios_administrativ_si_fiscal</categorieCaz>
+<stadiuProcesual>Fond</stadiuProcesual><obiect>anulare act administrativ</obiect><dataModificare>2024-05-20T00:00:00</dataModificare>
+<categorieCazNume>Contencios administrativ şi fiscal</categorieCazNume><stadiuProcesualNume>Fond</stadiuProcesualNume></Dosar>
+<Dosar><parti><DosarParte><nume>IONESCU MARIA</nume><calitateParte>Reclamant</calitateParte></DosarParte>
+<DosarParte><nume>COMUNA RĂDĂUŢI-PRUT</nume><calitateParte>Pârât</calitateParte></DosarParte></parti><sedinte />
+<numar>55/285/2024</numar><data>2024-02-01T00:00:00</data><institutie>JudecatoriaRADAUTI</institutie><obiect>x</obiect></Dosar>
+</CautareDosareResult></CautareDosareResponse></soap:Body></soap:Envelope>'''.encode("utf-8")
+
+    def test_parse_entitati_si_anonimizare(self):
+        from monitor_colector import litigii as LT
+        d = LT.parse(self.RASPUNS)
+        self.assertEqual(len(d), 2)
+        self.assertEqual(d[0]["numar"], "1234/285/2024")
+        self.assertEqual(len(d[0]["sedinte"]), 2)
+        self.assertEqual(LT.entitate("MUNICIPIUL RĂDĂUŢI PRIN PRIMAR"), "Municipiul")
+        self.assertEqual(LT.entitate("Primarul Municipiului Rădăuți"), "Primarul")
+        self.assertEqual(LT.entitate("CONSILIUL LOCAL AL MUNICIPIULUI RĂDĂUŢI"), "Consiliul Local")
+        self.assertEqual(LT.entitate("POLIŢIA LOCALĂ RĂDĂUŢI"), "Poliția Locală")
+        self.assertIsNone(LT.entitate("COMUNA RĂDĂUŢI-PRUT"))
+        self.assertIsNone(LT.entitate("POPESCU ION"))
+        self.assertEqual(LT.nume_public("POPESCU ION"), "persoană fizică")
+        self.assertEqual(LT.nume_public("DRUMURI S.R.L."), "DRUMURI S.R.L.")
+        self.assertEqual(LT.instanta("TribunalulSUCEAVA"), "Tribunalul Suceava")
+        self.assertEqual(LT.instanta("JudecatoriaRADAUTI"), "Judecătoria Rădăuți")
+        self.assertEqual(LT.instanta("CurteadeApelSUCEAVA"), "Curtea de Apel Suceava")
+
+    def test_colectare_cu_rezerva_si_export(self):
+        from monitor_colector import litigii as LT
+        resp = self.RASPUNS
+
+        class Cl:
+            def __init__(self):
+                self.cereri, self.apeluri = 0, []
+
+            def cautare(self, nume_parte=None, numar=None, institutie=None, d0=None, d1=None):
+                self.cereri += 1
+                self.apeluri.append((nume_parte, numar, institutie))
+                if institutie is None and nume_parte:
+                    raise ValueError("institutie is required")
+                if numar:
+                    return LT.parse(resp)[:1]
+                return LT.parse(resp) if (institutie == "TribunalulSUCEAVA" and d0.year == 2024) else []
+
+        tmp = tempfile.mkdtemp()
+        store = Store(os.path.join(tmp, "t.db"))
+        cl = Cl()
+        st = LT.colecteaza(store, cl=cl, azi=date(2024, 6, 1), termeni=("RADAUTI",))
+        self.assertIn("fara_instanta", st)
+        self.assertEqual(st["pastrate"], 1)                        # Rădăuți-Prut nu e municipiul
+        ex = LT.export(store, public=True, azi=date(2024, 6, 1))
+        d = ex["dosare"][0]
+        self.assertEqual((d["numar"], d["rol"], d["stare"], d["solutie"]), ("1234/285/2024", "a fost chemată în judecată", "fără termen viitor", "Admite"))
+        self.assertIsNone(d["sumar"])                               # rezumatul poate numi persoane: doar intern
+        nume = [p["nume"] for p in d["etape"][0]["parti"]]
+        self.assertIn("persoană fizică", nume)
+        self.assertNotIn("POPESCU ION", json.dumps(ex, ensure_ascii=False))
+        intern = LT.export(store, public=False, azi=date(2024, 6, 1))
+        self.assertIn("POPESCU ION", json.dumps(intern, ensure_ascii=False))
+        ind = LT.indicatori(ex)
+        self.assertEqual((ind["total"], ind["roluri"]["a fost chemată în judecată"]), (1, 1))
+        # înainte de termen: dosarul e în curs
+        self.assertEqual(LT.stare(LT.parse(resp)[0], date(2024, 4, 1))["stare"], "în curs")
+        store.close()
+        shutil.rmtree(tmp)
+
+
+class TestVoturi(unittest.TestCase):
+    PV = """PROCES-VERBAL al ședinței ordinare din 25 septembrie 2026
+Sunt prezenți 17 consilieri din totalul de 19 consilieri în funcție.
+Punctul 1 al ordinii de zi: Proiectul de hotărâre privind rectificarea bugetului local al Municipiului Rădăuți pe anul 2026.
+Domnul președinte supune la vot proiectul de hotărâre, care este adoptat cu 15 voturi „pentru”, 2 voturi „împotrivă” (dl. Popescu Ion, dna Ionescu Maria) și o abținere (dl. Vasilescu Petru).
+Punctul 2: Proiectul de hotărâre privind aprobarea concesionării unui teren situat pe strada Putnei.
+Se supune la vot. Proiectul este aprobat în unanimitate.
+Punctul 3: Proiectul de hotărâre privind modificarea organigramei aparatului de specialitate.
+Votul: pentru - 9, împotrivă - 8, abțineri - 0. Proiectul nu a fost adoptat, nu întrunește numărul necesar de voturi.
+Punctul 4: proiect de hotărâre pentru aprobarea taxelor speciale.
+Cu 16 voturi pentru și 1 consilier nu votează (dl Georgescu Dan), proiectul se aprobă.
+"""
+
+    def test_extrage(self):
+        from monitor_colector import voturi as V
+        pr, v = V.extrage(self.PV)
+        self.assertEqual(pr, 17)
+        self.assertEqual([(x["punct"], x["pentru"], x["impotriva"], x["abtineri"], x["nu_voteaza"], x["rezultat"]) for x in v],
+                         [(1, 15, 2, 1, 0, "adoptat"), (2, 17, 0, 0, 0, "adoptat"), (3, 9, 8, 0, 0, "respins"), (4, 16, 0, 0, 1, "adoptat")])
+        self.assertTrue(v[1]["unanimitate"])
+        self.assertEqual(v[0]["nume_impotriva"], ["Popescu Ion", "Ionescu Maria"])
+        self.assertEqual(v[0]["nume_abtineri"], ["Vasilescu Petru"])
+        h = V.leaga_hcl(v, [(2026, 161, "privind rectificarea bugetului local al Municipiului Rădăuți pe anul 2026"),
+                            (2026, 162, "privind aprobarea concesionării unui teren situat pe strada Putnei")])
+        self.assertEqual((h[0]["hcl"]["nr"], h[1]["hcl"]["nr"]), (161, 162))
+        self.assertNotIn("hcl", h[2])
