@@ -62,3 +62,7 @@ ARCHIVE_REGISTRE = {
     "cu": "/servicii-cetateni/certificate-de-urbanism/",
     "ac": "/servicii-cetateni/autorizatii-de-construire/",
 }
+
+# SICAP: instituțiile se găsesc automat după „Rădăuți” în nume; aici se adaugă CUI-uri ale
+# instituțiilor care nu au orașul în denumire (ex. o școală numită doar după patron).
+SICAP_CUI_EXTRA = ()

@@ -347,11 +347,11 @@
 
   var URB = null;
   function lei(v) { return v == null ? "-" : (v >= 1e6 ? dec((v / 1e6).toFixed(1)) + " mil." : nr(Math.round(v))) + " lei"; }
-  function hbars(obj, total) {
+  function hbars(obj, total, fmt) {
     var k = Object.keys(obj).sort(function (a, b) { return obj[b] - obj[a]; }), max = k.length ? obj[k[0]] : 1;
     return '<div class="hbars">' + k.map(function (c) {
-      return '<div class="hb"><span class="hb-l">' + esc(c) + '</span><span class="hb-t"><i style="width:' + Math.max(2, 100 * obj[c] / max) + '%"></i></span><span class="hb-v">' +
-        obj[c] + (total ? ' <small>' + Math.round(100 * obj[c] / total) + "%</small>" : "") + "</span></div>";
+      return '<div class="hb"><span class="hb-l" title="' + esc(c) + '">' + esc(c) + '</span><span class="hb-t"><i style="width:' + Math.max(2, 100 * obj[c] / max) + '%"></i></span><span class="hb-v">' +
+        (fmt ? fmt(obj[c]) : obj[c]) + (total ? ' <small>' + Math.round(100 * obj[c] / total) + "%</small>" : "") + "</span></div>";
     }).join("") + "</div>";
   }
 
@@ -443,7 +443,7 @@
   function contracte(el, r) {
     var c = IND.contracte_site || {}, pe = IND.contracte_pe_ani || {}, ani = Object.keys(pe).sort();
     simplu(el, r, {
-      key: "contracte", titlu: "Achiziții publice", text: "Contractele publicate de primărie și, în curând, procedurile din sistemul național de achiziții (SICAP).", h2: "Contracte publicate pe site",
+      key: "contracte", titlu: "Achiziții publice", text: "Contractele publicate de primărie pe site și achizițiile din sistemul național SICAP.", h2: "Contracte publicate pe site",
       top: '<div class="grid">' + tile("Zile de la ultimul contract publicat", c.zile_de_la_ultima == null ? "-" : nr(c.zile_de_la_ultima), zile(c.zile_de_la_ultima), "ultimul: " + zi(c.ultima_postare)) +
         tile("Contracte publicate", nr(ani.reduce(function (a, y) { return a + pe[y]; }, 0)), "", ani.length ? "din " + ani[0] + " până în " + ani[ani.length - 1] : "") + "</div>" +
         (ani.length > 1 ? '<section class="card section"><h2>Contracte publicate pe ani</h2><p class="note">După data postării pe site.</p><div class="chart" id="ch-c"></div></section>' : ""),
@@ -454,10 +454,90 @@
     });
   }
 
+  var CPV = { "03": "Produse agricole și forestiere", "09": "Combustibili, energie", "14": "Produse miniere", "15": "Alimente și băuturi",
+    "16": "Utilaje agricole", "18": "Îmbrăcăminte, echipament", "19": "Piele, textile, plastic", "22": "Tipărituri", "24": "Produse chimice",
+    "30": "Echipamente de birou și calculatoare", "31": "Echipamente electrice și iluminat", "32": "Echipamente de comunicații", "33": "Echipamente medicale",
+    "34": "Vehicule și transport", "35": "Securitate, pompieri, poliție", "37": "Articole sportive, jocuri, instrumente", "38": "Echipamente de laborator",
+    "39": "Mobilier, articole de uz casnic, curățenie", "41": "Apă", "42": "Utilaje industriale", "43": "Utilaje de construcții", "44": "Materiale de construcții",
+    "45": "Lucrări de construcții", "48": "Software", "50": "Reparații și întreținere", "51": "Instalare de echipamente", "55": "Hoteluri, restaurante, catering",
+    "60": "Transport", "63": "Servicii auxiliare de transport", "64": "Poștă și telecomunicații", "65": "Utilități publice", "66": "Servicii financiare și asigurări",
+    "70": "Servicii imobiliare", "71": "Proiectare, inginerie, consultanță tehnică", "72": "Servicii IT", "73": "Cercetare", "75": "Administrație publică",
+    "77": "Servicii agricole, silvice, spații verzi", "79": "Servicii juridice, marketing, consultanță, evenimente", "80": "Educație și formare",
+    "85": "Sănătate și asistență socială", "90": "Salubrizare, deșeuri, mediu", "92": "Cultură, sport, recreere", "98": "Alte servicii" };
+  var SICAP_URL = "https://www.e-licitatie.ro/pub/";
+  var SIC = null, SICD = {};
   function sicap(el, r) {
-    el.innerHTML = head("Achiziții publice", "Contractele publicate de primărie și, în curând, procedurile din sistemul național de achiziții (SICAP).", r) +
-      '<section class="card section"><h2>Date din SICAP</h2><p>În lucru. Vom aduce procedurile de achiziție, anunțurile și contractele atribuite de Municipiul Rădăuți (CUI 4244148), din Sistemul Electronic de Achiziții Publice.</p>' +
-      '<p class="note">Până atunci, contractele publicate pe site-ul primăriei sunt în fila „Contracte”.</p></section>';
+    var cap = head("Achiziții publice", "Ce cumpără primăria și instituțiile din Rădăuți, din Sistemul Electronic de Achiziții Publice (SICAP, e-licitatie.ro), din 2018.", r);
+    if (!SIC) {
+      el.innerHTML = cap + '<p class="updated">Se încarcă datele SICAP...</p>';
+      get(BASE + "date/sicap.json").then(function (d) { SIC = d; sicap(el, r); })
+        .catch(function () { el.innerHTML = cap + '<section class="card section"><h2>Date din SICAP</h2><p>Colectarea e pornită; datele apar după prima rulare completă.</p></section>'; });
+      return;
+    }
+    var A = SIC.autoritati || [];
+    if (!A.length) { el.innerHTML = cap + '<section class="card section"><p>Nicio instituție găsită încă.</p></section>'; return; }
+    var sel = (location.hash.split("/")[2]) || ((A.filter(function (a) { return a.cui === "4244148"; })[0] || A[0]).id);
+    var tot = function (a) { return a.da + a.cn + a.can; };
+    el.innerHTML = cap + '<div class="filters"><select id="inst" aria-label="Instituția">' + A.slice().sort(function (a, b) { return tot(b) - tot(a); }).map(function (a) {
+      return '<option value="' + a.id + '"' + (String(a.id) === String(sel) ? " selected" : "") + ">" + esc(a.nume) + " (" + nr(tot(a)) + ")</option>"; }).join("") +
+      '</select></div><div id="sic"><p class="updated">Se încarcă...</p></div>';
+    $("inst").addEventListener("change", function () { location.hash = "#achizitii/sicap/" + this.value; });
+    var arata = function (d) { SICD[sel] = d; sicapInst($("sic"), d); };
+    if (SICD[sel]) arata(SICD[sel]); else get(BASE + "date/sicap/" + sel + ".json").then(arata).catch(function () { $("sic").innerHTML = '<p class="empty">Datele instituției nu sunt disponibile.</p>'; });
+  }
+
+  function sicapInst(el, d) {
+    var ani = Object.keys(d.pe_ani || {}).sort(), an = ani[ani.length - 1], p = an ? d.pe_ani[an] : null;
+    var h = '<div class="grid">';
+    if (p) {
+      h += tile("Achiziții directe în " + an, lei(p.da_val), "", nr(p.da_n) + " cumpărări fără licitație");
+      h += tile("Contracte atribuite prin licitație în " + an, lei(p.can_val), "", nr(p.can_n) + " anunțuri de atribuire");
+      var t = p.da_val + p.can_val;
+      if (t) h += tile("Ponderea achizițiilor directe (" + an + ")", Math.round(100 * p.da_val / t) + "%", "", "din valoarea totală cumpărată prin SICAP");
+    }
+    h += tile("Licitații lansate", nr(d.cn), "", "anunțuri de participare din 2018") + "</div>";
+    h += '<section class="card section"><h2>Cât s-a cumpărat, pe ani</h2><p class="note">Valori în milioane de lei, din SICAP: achiziții directe (după data finalizării) și contracte atribuite prin licitație (după data anunțului de atribuire).</p>' +
+      legend([["Achiziții directe", "var(--s1)"], ["Contracte prin licitație", "var(--s2)"]]) + '<div class="chart" id="ch-sic"></div>' +
+      '<details class="tbl"><summary>Vezi tabelul</summary><div class="tw"><table><thead><tr><th>An</th><th class="n">Achiziții directe</th><th class="n">Valoare</th><th class="n">Licitații lansate</th><th class="n">Atribuiri</th><th class="n">Valoare atribuită</th></tr></thead><tbody>' +
+      ani.slice().reverse().map(function (y) { var v = d.pe_ani[y]; return "<tr><td>" + y + '</td><td class="n">' + v.da_n + '</td><td class="n">' + lei(v.da_val) + '</td><td class="n">' + v.cn_n + '</td><td class="n">' + v.can_n + '</td><td class="n">' + lei(v.can_val) + "</td></tr>"; }).join("") +
+      "</tbody></table></div></details></section>";
+    var tf = {}; (d.top_furnizori || []).slice(0, 10).forEach(function (f) { tf[f.nume + " (CUI " + f.cui + ")"] = Math.round(f.val); });
+    var cp = {}; Object.keys(d.cpv_valoare || {}).forEach(function (k) { cp[CPV[k.slice(0, 2)] || ("CPV " + k)] = Math.round(d.cpv_valoare[k]); });
+    h += '<div class="grid two"><section class="card"><h2>Furnizorii cu cele mai mari sume</h2><p class="note">Achiziții directe, toți anii, în lei.</p>' + hbars(tf, null, lei) + "</section>" +
+      '<section class="card"><h2>Pe ce s-a cheltuit</h2><p class="note">Achiziții directe pe categorii CPV, toți anii, în lei.</p>' + hbars(cp, null, lei) + "</section></div>";
+    var sd = d.semnale_divizare || [];
+    if (sd.length) {
+      var byId = {}; (d.lista_da || []).forEach(function (a) { byId[a.id] = a; });
+      h += '<section class="card section"><h2>De verificat: achiziții directe repetate la același furnizor</h2><p class="note">În același an, același furnizor și aceeași categorie de produse sau servicii, mai multe achiziții directe, fiecare sub pragul legal, dar împreună peste prag. ' +
+        "Nu e o constatare de încălcare a legii: divizarea se judecă după necesarul estimat al autorității. E un semnal care merită verificat.</p>" +
+        sd.slice(0, 15).map(function (x) {
+          return '<div class="doc"><div class="h"><span class="id">' + esc(x.an) + " · " + esc(x.furnizor) + " (CUI " + esc(x.furnizor_cui) + ")</span></div>" +
+            '<div class="t">' + x.nr + " achiziții directe, total <strong>" + lei(x.suma) + "</strong>, față de pragul de " + lei(x.prag) + " · " + esc((x.cpv || "").slice(0, 90)) + "</div>" +
+            '<div class="m">' + x.ids.slice(0, 8).map(function (id) { var a = byId[id] || {}; return '<a href="' + SICAP_URL + "direct-acquisition/view/" + id + '" rel="noopener">' + esc(a.cod || id) + "</a>"; }).join("") + "</div></div>";
+        }).join("") + "</section>";
+    }
+    h += '<section class="card section"><h2>Toate achizițiile</h2><p class="note">Fiecare rând duce la pagina din SICAP.</p><div id="lst"></div></section>';
+    el.innerHTML = h;
+    if (ani.length) chart($("ch-sic"), { cats: ani, stacked: true, label: "Valoarea achizițiilor pe ani",
+      series: [{ name: "Achiziții directe", color: "var(--s1)", values: ani.map(function (y) { return Math.round(d.pe_ani[y].da_val / 1e5) / 10; }) },
+               { name: "Contracte prin licitație", color: "var(--s2)", values: ani.map(function (y) { return Math.round(d.pe_ani[y].can_val / 1e5) / 10; }) }],
+      labelValue: function (i) { var v = d.pe_ani[ani[i]]; var t = (v.da_val + v.can_val) / 1e6; return t ? dec(t.toFixed(1)).replace(/,0$/, "") : ""; },
+      tooltip: function (i) { var v = d.pe_ani[ani[i]]; return "<b>" + ani[i] + "</b><br>Achiziții directe: " + lei(v.da_val) + " (" + v.da_n + ")<br>Prin licitație: " + lei(v.can_val) + " (" + v.can_n + ")"; } });
+    var L3 = [];
+    (d.lista_da || []).forEach(function (a) { L3.push({ t: "da", an: (a.data_finalizare || "").slice(0, 4), data: a.data_finalizare, titlu: a.nume, cine: a.furnizor ? a.furnizor + " (CUI " + a.furnizor_cui + ")" : "", val: a.valoare, cpv: a.cpv, url: SICAP_URL + "direct-acquisition/view/" + a.id, cod: a.cod }); });
+    (d.lista_cn || []).forEach(function (a) { L3.push({ t: "cn", an: (a.data || "").slice(0, 4), data: a.data, titlu: a.titlu, cine: [a.procedura, a.stare, a.contestatie ? "contestată" : ""].filter(Boolean).join(" · "), val: a.valoare_estimata, cpv: a.cpv, url: SICAP_URL + "notices/c-notice/v2/view/" + a.id, cod: a.nr }); });
+    (d.lista_can || []).forEach(function (a) { L3.push({ t: "can", an: (a.data || "").slice(0, 4), data: a.data, titlu: a.titlu, cine: a.procedura || "", val: a.valoare, cpv: a.cpv, url: SICAP_URL + "notices/ca-notices/view-c/" + a.id, cod: a.nr }); });
+    L3.sort(function (a, b) { return (b.data || "").localeCompare(a.data || ""); });
+    var TIPS = { da: "Achiziție directă", cn: "Licitație (anunț de participare)", can: "Atribuire" };
+    lista($("lst"), L3, {
+      placeholder: "Caută: obiect, furnizor, CUI, cod CPV (ex. asfalt, 45233, SRL)",
+      an: function (x) { return x.an; }, text: function (x) { return [x.titlu, x.cine, x.cpv, x.cod].join(" "); },
+      extraFilter: { html: '<select aria-label="Tip"><option value="">Toate tipurile</option><option value="da">Achiziții directe</option><option value="cn">Licitații</option><option value="can">Atribuiri</option></select>', test: function (x, e) { return x.t === e; } },
+      item: function (x) {
+        return '<div class="doc"><div class="h"><span class="id">' + esc(zi(x.data)) + (x.val ? " · " + lei(x.val) : "") + '</span><span class="tag">' + TIPS[x.t] + "</span></div>" +
+          '<div class="t">' + esc(x.titlu || "") + "</div>" + '<div class="m"><span>' + esc(x.cine) + (x.cpv ? " · " + esc(x.cpv.slice(0, 70)) : "") + '</span><a href="' + esc(x.url) + '" rel="noopener">în SICAP' + (x.cod ? " (" + esc(x.cod) + ")" : "") + "</a></div></div>";
+      }
+    });
   }
 
   function texte(el) {

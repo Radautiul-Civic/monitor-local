@@ -544,6 +544,65 @@ class TestWayback(unittest.TestCase):
         self.assertEqual(c.execute("SELECT COUNT(*) FROM fisiere WHERE wayback_url IS NULL").fetchone()[0], 0)
 
 
+class TestSicap(unittest.TestCase):
+    class Cl:
+        """SICAP simulat: 3 autorități, achiziții directe cu plafon pe intervale lungi."""
+        def __init__(self):
+            self.cereri = 0
+            self.posts = []
+
+        def get(self, path, params):
+            self.cereri += 1
+            if params["pageIndex"] > 0:
+                return {"items": [], "total": 3}
+            return {"total": 3, "items": [
+                {"id": 11, "text": "4244148 - MUNICIPIUL RADAUTI"},
+                {"id": 12, "text": "4244199 - CASA DE CULTURA RADAUTI"},
+                {"id": 13, "text": "3377777 - COMUNA RADAUTI-PRUT"}]}
+
+        def post(self, path, body):
+            self.cereri += 1
+            self.posts.append((path, body))
+            if "DirectAcquisition" not in path:
+                return {"total": 0, "items": []}
+            d0, d1 = body["finalizationDateStart"][:10], body["finalizationDateEnd"][:10]
+            if body["contractingAuthorityId"] != 11 or d0[:4] != "2023":
+                return {"total": 0, "items": []}
+            if (date.fromisoformat(d1) - date.fromisoformat(d0)).days > 200:   # prea lung: plafon
+                return {"total": 2000, "searchTooLong": True, "items": [{}] * 5}
+            if d0 > "2023-03-01" or d1 < "2023-03-01":
+                return {"total": 0, "items": []}
+            mk = lambda i, v: {"directAcquisitionId": i, "directAcquisitionName": f"Servicii {i}",
+                               "cpvCode": "79952000-2 - Servicii de organizare de evenimente",
+                               "finalizationDate": "2023-03-01T10:00:00+02:00", "publicationDate": "2023-03-01T09:00:00+02:00",
+                               "supplier": "RO 123456 EVENIMENTE SRL", "contractingAuthority": "4244148 MUNICIPIUL RADAUTI",
+                               "closingValue": v, "estimatedValueRon": v, "sysDirectAcquisitionState": {"text": "Oferta acceptata"}}
+            items = [mk(1, 200000.0), mk(2, 150000.0)]
+            return {"total": 2, "items": items[body["pageIndex"] * 100:]}
+
+    def test_colectare_ferestre_si_semnale(self):
+        from monitor_colector import sicap
+        tmp = tempfile.mkdtemp()
+        store = Store(os.path.join(tmp, "t.db"))
+        cl = self.Cl()
+        st = sicap.colecteaza(store, cl=cl, tot=True, azi=date(2024, 6, 30))
+        self.assertEqual(st["autoritati"]["incluse"], 2)           # Rădăuți-Prut exclusă
+        self.assertEqual(st["da"], 2)
+        self.assertNotIn("trunchiate", st)                         # perioada s-a împărțit sub plafon
+        rez, det = sicap.export(store)
+        p = [a for a in rez["autoritati"] if a["cui"] == "4244148"][0]
+        self.assertEqual(p["pe_ani"]["2023"]["da_val"], 350000.0)
+        d = det[p["id"]]
+        self.assertEqual(d["top_furnizori"][0]["cui"], "123456")
+        s = d["semnale_divizare"]
+        self.assertEqual((len(s), s[0]["nr"], s[0]["prag"]), (1, 2, 270120))
+        self.assertEqual(sicap.prag_achizitie_directa("2021-05-01", "79952000-2"), 135060)
+        self.assertEqual(sicap.cui_si_nume("RO 6865630 DELTA PLUS TRADING S.R.L."), ("6865630", "DELTA PLUS TRADING S.R.L."))
+        self.assertEqual(sicap.prag_achizitie_directa("2023-05-01", "45233140-2"), 900400)
+        store.close()
+        shutil.rmtree(tmp)
+
+
 class TestVerificari(unittest.TestCase):
     def test_false_positive_hidden_confirmed_kept(self):
         tmp = tempfile.mkdtemp()

@@ -73,7 +73,7 @@ a.tile:hover{border-color:var(--accent)}
 
 .grid.two{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
 .hbars{display:flex;flex-direction:column;gap:6px;margin-top:8px}
-.hb{display:grid;grid-template-columns:minmax(0,14rem) 1fr 4.5rem;gap:10px;align-items:center;font-size:.88rem}
+.hb{display:grid;grid-template-columns:minmax(0,14rem) 1fr minmax(4.5rem,auto);gap:10px;align-items:center;font-size:.88rem}
 .hb-l{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hb-t{height:12px;background:var(--surface-2);border-radius:4px;overflow:hidden}
 .hb-t i{display:block;height:100%;background:var(--s1);border-radius:0 4px 4px 0}
