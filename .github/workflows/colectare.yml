@@ -75,6 +75,12 @@ jobs:
         run: python -m monitor_colector urbanism
         continue-on-error: true
 
+      - name: Adresele din registrele de urbanism pe hartă (OpenStreetMap, cel mult 25 de minute pe zi)
+        if: always()
+        run: python -m monitor_colector geocodare --minute 25
+        continue-on-error: true
+        timeout-minutes: 35
+
       - name: Achiziții din SICAP și câștigătorii licitațiilor (zilnic ultimele 90 de zile; complet din 2018 la cerere)
         if: always()
         run: |
@@ -96,6 +102,12 @@ jobs:
           fi
         continue-on-error: true
         timeout-minutes: 90
+
+      - name: Execuția bugetară (transparenta.eu, date de la Ministerul Finanțelor)
+        if: always()
+        run: python -m monitor_colector buget
+        continue-on-error: true
+        timeout-minutes: 30
 
       - name: Documente Word din textele extrase (pentru verificare)
         if: always()
@@ -121,22 +133,5 @@ jobs:
           path: data
           key: date-${{ github.run_id }}
 
-      - name: Rapoarte ca artefact (pentru verificare)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rapoarte
-          path: |
-            data/indicatori.json
-            data/indicatori.md
-            data/urbanism-registre.txt
-            data_categorii.txt
-            data/raw/**
-            data/liste.json
-            data/sicap.json
-            data/sicap-de-verificat.txt
-            data/sicap-castigatori-proba.json
-            data/voturi-proba.txt
-            data/litigii.json
-          if-no-files-found: ignore
-          retention-days: 14
+      # Rapoartele de verificare nu mai sunt artefacte (la un repo public le poate descărca oricine are cont
+      # GitHub): se urcă în zona cu parolă, la /intern/date/rapoarte.zip.
