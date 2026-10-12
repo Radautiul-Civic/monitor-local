@@ -95,6 +95,71 @@ def collect_archive(store, client=None, years=None):
     return stats
 
 
+def _sid(url):
+    """ID negativ stabil pentru documentele din arhivă (care nu au ID WordPress)."""
+    import zlib
+    return -(zlib.crc32(url.encode("utf-8")) % 2_000_000_000) - 1
+
+
+def _pseudo_post(store, sid, source, link, title):
+    """Intrare în „posts” pentru un document din arhivă: leagă documentul de pagina-sursă."""
+    from .store import now
+    store.db.execute(
+        "INSERT INTO posts (wp_id, source, slug, link, title, date, modified, categories, content_html, "
+        "content_hash, first_seen, last_seen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(wp_id) DO UPDATE SET link=excluded.link, title=excluded.title, last_seen=excluded.last_seen",
+        (sid, source, None, link, title, None, None, "[]", "", "", now(), now()))
+
+
+def collect_archive_lists(store, client=None):
+    """Procesele-verbale 2015-2025 și registrele CU/AC 2015-2025 din arhiva site-ului vechi."""
+    client = client or WPClient(base_url=config.ARCHIVE_URL)
+    stats = {}
+    # procese-verbale
+    try:
+        page = client.get_html(config.ARCHIVE_PV_PAGE)
+        _save_raw(page, "arhiva-pv.html")
+        link = client.base + config.ARCHIVE_PV_PAGE
+        n = fara_data = 0
+        for it in parse.parse_archive_links(page, client.base):
+            pv = parse.parse_pv(it["text"])
+            if not pv["session_date"]:
+                fara_data += 1
+                continue
+            sid = _sid(it["url"])
+            _pseudo_post(store, sid, "pv", link, it["text"])
+            store.add_document(it["url"], sid, "arhiva", it["text"])
+            store.upsert_pv(sid, pv, None, it["text"])
+            n += 1
+        store.db.commit()
+        stats["pv"] = {"pv": n, "fara_data": fara_data}
+    except Exception as e:
+        log.warning("arhiva pv: %s", e)
+        stats["pv"] = f"eroare: {e}"
+    # registre de urbanism
+    for kind, path in config.ARCHIVE_REGISTRE.items():
+        try:
+            page = client.get_html(path)
+            _save_raw(page, f"arhiva-{kind}.html")
+            link = client.base + path
+            n = 0
+            for it in parse.parse_archive_links(page, client.base):
+                per = parse.parse_registry_period(it["text"])
+                if not per["start"] and not per["end"]:
+                    continue   # ex. „Documente necesare ...”
+                sid = _sid(it["url"])
+                _pseudo_post(store, sid, kind, link, it["text"])
+                store.add_document(it["url"], sid, "arhiva", it["text"])
+                store.upsert_registry(sid, kind, per, None, it["text"])
+                n += 1
+            store.db.commit()
+            stats[kind] = n
+        except Exception as e:
+            log.warning("arhiva %s: %s", kind, e)
+            stats[kind] = f"eroare: {e}"
+    return stats
+
+
 def discover(client=None):
     """Listează categoriile site-ului (pentru a adăuga surse noi în config)."""
     client = client or WPClient()

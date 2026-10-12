@@ -28,13 +28,20 @@ def export(store, today=None):
                     "postat": r["posted"], "pagina": links.get(r["wp_id"]), "pdf": r["pdf_url"],
                     "sursa": r["origin"], "scanat": None if tl is None else int(tl == 0)})
 
-    pv = []
+    # o intrare pe ședință (data, tipul): site-ul nou are prioritate; celelalte PDF-uri rămân ca „alte_pdf”
+    pv, idx = [], {}
     for r in db.execute("SELECT wp_id, kind, session_type, session_date, hour, posted, title FROM pv "
-                        "ORDER BY session_date DESC, wp_id DESC"):
+                        "ORDER BY session_date DESC, wp_id < 0, wp_id DESC"):
         url, tl = _pdf_of(db, r["wp_id"])
+        k = (r["session_date"], r["session_type"], r["kind"])
+        if k in idx and r["session_date"]:
+            if url and url != pv[idx[k]]["pdf"]:
+                pv[idx[k]].setdefault("alte_pdf", []).append(url)
+            continue
+        idx[k] = len(pv)
         pv.append({"data": r["session_date"], "tip": r["session_type"], "fel": r["kind"], "ora": r["hour"],
                    "titlu": r["title"], "postat": r["posted"], "pagina": links.get(r["wp_id"]), "pdf": url,
-                   "scanat": None if tl is None else int(tl == 0)})
+                   "sursa": "site" if r["wp_id"] > 0 else "arhiva", "scanat": None if tl is None else int(tl == 0)})
 
     reg = []
     for r in db.execute("SELECT wp_id, kind, period_start, period_end, posted, title FROM registries "

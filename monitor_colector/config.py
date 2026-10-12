@@ -55,3 +55,10 @@ VERIFICARI_HCL = {
     "2014/188": {"stare": "fals", "nota": "Doar numele fișierului are o greșeală de tastare (1881); documentul atașat e HCL 188/2014."},
     "2023/288": {"stare": "confirmat", "nota": "La HCL 288/2023 este atașat documentul hotărârii nr. 301/2023."},
 }
+
+# Alte liste din arhiva site-ului vechi (o singură pagină fiecare, PDF-uri grupate pe ani).
+ARCHIVE_PV_PAGE = "/consiliul-local/sedinte/procese-verbale-ale-sedintelor-de-cl/"
+ARCHIVE_REGISTRE = {
+    "cu": "/servicii-cetateni/certificate-de-urbanism/",
+    "ac": "/servicii-cetateni/autorizatii-de-construire/",
+}

@@ -1,4 +1,6 @@
+import hashlib
 import json
+import sqlite3
 import os
 import shutil
 import sys
@@ -365,6 +367,181 @@ class TestUrbanism(unittest.TestCase):
         self.assertEqual(u.strada_centralizator("SUCEAVA, municipiul RĂDĂUŢI,RĂDĂUŢICA LARASI, Nr. 7", {}), "Calarasi")
         self.assertEqual(u.strada_centralizator("RĂDĂUŢI,RĂDĂUŢIAN DRONIC MOTRESCU, Nr. 3",
                                                 {"andronicmotrescu": "Andronic Motrescu"}), "Andronic Motrescu")
+
+
+class TestArhivaListe(unittest.TestCase):
+    PV_HTML = ("<h3>Anul 2025</h3>"
+               '<a href="/wp-content/uploads/2025/11/pv-sedinta-extraordinara-din-10.10.2025.pdf">Şedinţa extraordinară din data de 10.10.2025</a>'
+               '<a href="/wp-content/uploads/2025/11/pv-sedinta-ordinara-din-25.09.2025.pdf">Şedinţa ordinară din data de 25.09.2025</a>'
+               "<h3>Anul 2017</h3>"
+               '<a href="/u/2017/a.pdf">Sedinta extraordinara de indata din data de 03.03.2017</a>'
+               '<a href="/u/2018/b.pdf">Proces-Verbal de publicare on-line 25.01.2018</a>'
+               "<h3>Anul 2015</h3>"
+               '<a href="/u/2015/SKM_1.pdf">Proces verbal de sedinta din data de 17.12.2015</a>'
+               '<a href="/u/2015/SKM_2.pdf">Proces verbal de sedinta din data de 17.12.2015</a>'
+               '<a href="/anunturi/x/">Anunț</a>')
+    AC_HTML = ('<a href="/u/2020/12/documente-necesare.pdf">Documente necesare pentru emiterea Certificatului</a>'
+               '<a href="/u/2025/10/AC-1.pdf">Autorizatii de construire / desfiintare din perioada 18.08.2025 – 10.10.2025</a>'
+               '<a href="/u/2012/06/certi-2.pdf">Autorizatii de Construire/Desfiintare in perioada 01.01.2015 -31.03.2015</a>')
+
+    def test_pv_si_registre(self):
+        from monitor_colector import config, liste
+        tmp = tempfile.mkdtemp()
+        store = Store(os.path.join(tmp, "t.db"))
+        pages = {config.ARCHIVE_PV_PAGE: self.PV_HTML, config.ARCHIVE_REGISTRE["ac"]: self.AC_HTML,
+                 config.ARCHIVE_REGISTRE["cu"]: ""}
+        arch = WPClient(base_url="https://arhiva.primariaradauti.ro", delay=0,
+                        session=fakes.FakeSession(html_pages=pages))
+        st = collect.collect_archive_lists(store, arch)
+        self.assertEqual(st["pv"]["pv"], 6)
+        self.assertEqual(st["ac"], 2)
+        tip = {r["session_date"]: (r["kind"], r["session_type"]) for r in store.db.execute("SELECT * FROM pv")}
+        self.assertEqual(tip["2017-03-03"], ("pv_sedinta", "extraordinara_de_indata"))
+        self.assertEqual(tip["2018-01-25"][0], "pv_afisare")
+        ind = indicators.compute(store, today=date(2026, 10, 12))
+        self.assertEqual(ind["sedinte_pe_tip"]["2015"], {"necunoscut": 1})   # 2 fișiere, o ședință
+        L = liste.export(store)
+        s15 = [x for x in L["pv"] if x["data"] == "2015-12-17"]
+        self.assertEqual(len(s15), 1)
+        self.assertEqual(len(s15[0]["alte_pdf"]), 1)
+        self.assertTrue(s15[0]["pagina"].endswith(config.ARCHIVE_PV_PAGE))
+        per = {r["title"][:20]: r["period_start"] for r in store.db.execute("SELECT * FROM registries")}
+        self.assertIn("2015-01-01", per.values())
+        store.close()
+        shutil.rmtree(tmp)
+
+
+class TestPastrare(unittest.TestCase):
+    class Resp:
+        def __init__(self, status=200, data=None, text="", body=b"", headers=None):
+            self.status_code, self._d, self.text, self._b = status, data, text, body
+            self.headers = headers or {}
+            self.ok = status < 400
+
+        def json(self):
+            return self._d
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError(self.status_code)
+
+        def iter_content(self, n):
+            yield self._b
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class Sesiune:
+        def __init__(self, media):
+            self.media, self.calls = media, []
+
+        def get(self, url, params=None, timeout=None, stream=False, allow_redirects=True):
+            R = TestPastrare.Resp
+            self.calls.append(url)
+            if url.endswith("/wp-json/wp/v2/media"):
+                return R(data=self.media if params["page"] == 1 else [], headers={"X-WP-TotalPages": "1"})
+            if url.endswith("/wp-json/wp/v2/posts"):
+                return R(data=[{"id": 1, "link": "https://a.ro/p/1/", "date": "2020-01-01",
+                                "title": {"rendered": "P"}, "content": {"rendered":
+                                '<a href="https://a.ro/wp-content/uploads/2019/x.pdf">x</a>'}}] if params["page"] == 1 else [],
+                         headers={"X-WP-TotalPages": "1"})
+            if "/wp-json/" in url:
+                return R(status=404)
+            if url.endswith("wp-sitemap.xml"):
+                return R(text="<loc>https://a.ro/wp-sitemap-posts-page-1.xml</loc>")
+            if url.endswith("page-1.xml"):
+                return R(text="<loc>https://a.ro/despre/</loc>")
+            return R(body=b"%PDF-1.4 continut")
+
+    class FTPFals:
+        def __init__(self):
+            self.urcate = {}
+
+        def urca(self, local, remote):
+            with open(local, "rb") as f:
+                self.urcate[remote] = f.read()
+
+        def inchide(self):
+            pass
+
+    def test_inventar_copie_disparitie(self):
+        from monitor_colector import pastrare as P
+        tmp = tempfile.mkdtemp()
+        old = P.DIR
+        P.DIR = tmp
+        try:
+            c = sqlite3.connect(os.path.join(tmp, "p.db"))
+            c.row_factory = sqlite3.Row
+            c.executescript(P.SCHEMA)
+            media = [{"id": 5, "date": "2019-05-01", "mime_type": "application/pdf", "filesize": 10,
+                      "source_url": "https://a.ro/wp-content/uploads/2019/hcl 5.pdf", "title": {"rendered": "HCL 5"}}]
+            s = self.Sesiune(media)
+            st = P.inventar(c, s=s, ritm=P.Ritm(0), sites={"arhiva": "https://a.ro"})
+            self.assertEqual(st["arhiva"]["media"], 1)
+            self.assertEqual(st["arhiva"]["linkuri"], 1)        # fișier legat din postare, în afara bibliotecii
+            self.assertEqual(st["arhiva"]["continut"]["posts"], 1)
+            urls = {r["url"]: r["sursa"] for r in c.execute("SELECT url, sursa FROM fisiere")}
+            self.assertEqual(urls["https://a.ro/despre/"], "pagina")
+            ftp = self.FTPFals()
+            cs = P.copiaza(c, s=s, ritm=P.Ritm(0), ftp=ftp)
+            self.assertEqual(cs["copiate"], len(urls))
+            self.assertIn("intern/arhiva-copie/arhiva/wp-content/uploads/2019/hcl 5.pdf", ftp.urcate)
+            self.assertIn("intern/arhiva-copie/arhiva/despre/index.html", ftp.urcate)
+            h = c.execute("SELECT sha256 FROM fisiere WHERE media_id=5").fetchone()[0]
+            self.assertEqual(h, hashlib.sha256(b"%PDF-1.4 continut").hexdigest())
+            # a doua zi fișierul lipsește din bibliotecă -> marcat dispărut (copia rămâne)
+            st2 = P.inventar(c, s=self.Sesiune(media + [dict(media[0], id=6, source_url="https://a.ro/wp-content/uploads/y.pdf")]),
+                             ritm=P.Ritm(0), sites={"arhiva": "https://a.ro"})
+            st3 = P.inventar(c, s=self.Sesiune([dict(media[0], id=6, source_url="https://a.ro/wp-content/uploads/y.pdf")]),
+                             ritm=P.Ritm(0), sites={"arhiva": "https://a.ro"})
+            self.assertEqual(st3["arhiva"]["disparute_acum"], "nu se evaluează (inventar incomplet)")
+            stare = P.manifest(c)
+            self.assertEqual(stare["site_uri"]["arhiva"]["copiate"], len(urls))
+            with open(os.path.join(tmp, "manifest.csv"), encoding="utf-8") as f:
+                self.assertIn("sha256", f.readline())
+            c.close()
+        finally:
+            P.DIR = old
+            shutil.rmtree(tmp)
+
+
+class TestWayback(unittest.TestCase):
+    def test_existent_si_trimis(self):
+        from monitor_colector import pastrare as P
+        R = TestPastrare.Resp
+
+        class S:
+            def __init__(self):
+                self.salvate = []
+
+            def get(self, url, params=None, timeout=None, allow_redirects=True):
+                if "wayback/available" in url:
+                    snap = {"closest": {"available": True, "url": "https://web.archive.org/web/2019/x"}} if params["url"].endswith("vechi.pdf") else {}
+                    return R(data={"archived_snapshots": snap})
+                self.salvate.append(url)
+                return R(status=302)
+
+            def post(self, *a, **k):
+                raise AssertionError("fără cont nu se folosește POST")
+
+        c = sqlite3.connect(":memory:")
+        c.row_factory = sqlite3.Row
+        c.executescript(P.SCHEMA)
+        for u in ("https://a.ro/vechi.pdf", "https://a.ro/nou.pdf"):
+            c.execute("INSERT INTO fisiere (url, site, sursa) VALUES (?, 'arhiva', 'media')", (u,))
+        old = P.Ritm.__init__
+        P.Ritm.__init__ = lambda self, delay=0: (setattr(self, "delay", 0), setattr(self, "t", 0.0))[0]
+        try:
+            s = S()
+            st = P.wayback(c, s=s)
+        finally:
+            P.Ritm.__init__ = old
+        self.assertEqual((st["deja_in_arhiva"], st["trimise"]), (1, 1))
+        self.assertEqual(s.salvate, ["https://web.archive.org/save/https://a.ro/nou.pdf"])
+        self.assertEqual(c.execute("SELECT COUNT(*) FROM fisiere WHERE wayback_url IS NULL").fetchone()[0], 0)
 
 
 class TestVerificari(unittest.TestCase):

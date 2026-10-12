@@ -163,14 +163,24 @@ def _map_header(row):
     return idx
 
 
+def _tip_din_antet(cells):
+    h = _n(" ".join(c or "" for c in cells))
+    if "scopul" in h or "nr. cu" in h or "data cu" in h or "poate fi" in h:
+        return "cu"
+    if "autoriza" in h or "obiectiv" in h:
+        return "ac"
+    return None
+
+
 def _parse_nou(tables):
-    acte, idx = [], None
+    acte, idx, tipdet = [], None, None
     for tb in tables:
         for row in tb:
             cells = [c if c is not None else "" for c in row]
             if (not any(_date(c) for c in cells) and any("solicitant" in _n(c) for c in cells)
                     and any(_n(c).startswith("data") for c in cells)):
                 idx = _map_header(cells)
+                tipdet = _tip_din_antet(cells)
                 continue
             if not idx or "data" not in idx:
                 continue
@@ -185,7 +195,7 @@ def _parse_nou(tables):
                         if v:
                             acte[-1][k] = _clean_join([acte[-1].get(k), v])
                 continue
-            a = {"nr": nr, "data": d}
+            a = {"nr": nr, "data": d, "tip_detectat": tipdet}
             for k in ("solicitant", "adresa", "scop", "utilizabil", "sup_construita", "sup_desfasurata",
                       "sup_utila", "sup_locuibila"):
                 a[k] = get(k)
@@ -303,7 +313,15 @@ def parse_pdf(path):
     acte, fmt = [], None
     with pdfplumber.open(path) as pdf:
         first = (pdf.pages[0].extract_text() or "") if pdf.pages else ""
-        fmt = "centralizator" if "centralizator" in _n(first) or "nr. aut" in _n(first) else "nou"
+        t = _n(first)
+        if "nr. aut" in t or ("centralizator" in t and "autoriza" in t):
+            fmt = "centralizator"
+        elif "centralizator" in t or "solicitant" not in t:
+            fmt = "necunoscut"   # alt format (ex. certificate „centralizator”): nu ghicim coloanele
+        else:
+            fmt = "nou"
+        if fmt == "necunoscut":
+            return fmt, []
         if fmt == "nou":
             acte = _parse_nou([tb for p in pdf.pages for tb in p.extract_tables()])
         else:
@@ -340,7 +358,8 @@ def colecteaza(store, fortat=False):
     """Citește registrele CU/AC descărcate (PDF cu text) și salvează actele, fără dubluri.
     Registrele se suprapun; la același act rămâne varianta din registrul cel mai nou."""
     db = store.db
-    stats = {"registre_citite": 0, "registre_sarite": 0, "scanate": 0, "acte": 0, "erori": 0, "formate": {}}
+    stats = {"registre_citite": 0, "registre_sarite": 0, "scanate": 0, "acte": 0, "erori": 0, "formate": {},
+             "pe_registru": []}
     rows = db.execute(
         "SELECT r.wp_id, r.kind, r.posted, d.url, d.local_path, d.sha256, d.text_layer FROM registries r "
         "JOIN documents d ON d.wp_id = r.wp_id WHERE d.local_path IS NOT NULL ORDER BY r.posted, r.wp_id").fetchall()
@@ -350,6 +369,7 @@ def colecteaza(store, fortat=False):
             continue
         if r["text_layer"] == 0:
             stats["scanate"] += 1   # registru scanat: îl lăsăm pentru o etapă ulterioară
+            stats["pe_registru"].append(f"{r['kind']} SCANAT: {r['url'].rsplit('/', 1)[-1]}")
             continue
         prev = db.execute("SELECT sha256, versiune FROM urbanism_registre WHERE url=?", (r["url"],)).fetchone()
         if prev and prev["sha256"] == r["sha256"] and prev["versiune"] == VERSIUNE and not fortat:
@@ -361,10 +381,17 @@ def colecteaza(store, fortat=False):
             log.warning("registru %s: %s", r["url"], e)
             stats["erori"] += 1
             continue
+        gresit = False
         for a in acte:
-            a["format"], a["_tip"], a["_wp"], a["_pdf"] = fmt, r["kind"], r["wp_id"], r["url"]
+            det = a.pop("tip_detectat", None)
+            tip = det or r["kind"]
+            gresit = gresit or tip != r["kind"]
+            a["format"], a["_tip"], a["_wp"], a["_pdf"] = fmt, tip, r["wp_id"], r["url"]
+        if gresit:   # ex. registru de certificate publicat la autorizații
+            stats.setdefault("registre_la_alta_categorie", []).append(r["url"])
         toate += acte
         stats["formate"][fmt] = stats["formate"].get(fmt, 0) + 1
+        stats["pe_registru"].append(f"{r['kind']} {fmt} {len(acte)} acte: {r['url'].rsplit('/', 1)[-1]}")
         stats["registre_citite"] += 1
         db.execute("INSERT OR REPLACE INTO urbanism_registre VALUES (?,?,?,?,?,?)",
                    (r["url"], r["sha256"], VERSIUNE, fmt, len(acte), time.strftime("%Y-%m-%dT%H:%M:%S")))

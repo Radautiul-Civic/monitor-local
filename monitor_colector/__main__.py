@@ -59,6 +59,8 @@ def main(argv=None):
             stats["api"] = collect.collect_api(store, sources=a.surse.split(",") if a.surse else None, full=a.tot)
         if a.comanda == "arhiva":
             stats["arhiva"] = collect.collect_archive(store, years=set(a.ani) or None)
+            if not a.ani:
+                stats["arhiva_liste"] = collect.collect_archive_lists(store)
         if a.comanda in ("descarca", "tot"):
             stats["descarca"] = documents.process_downloads(store, WPClient().s, limit=a.max)
         if a.comanda == "ocr" or (a.comanda == "tot" and documents.ocr_available()):
@@ -77,6 +79,9 @@ def main(argv=None):
         if a.comanda in ("urbanism", "tot"):
             from . import urbanism
             stats["urbanism"] = urbanism.colecteaza(store, fortat=a.tot)
+            os.makedirs(config.DATA_DIR, exist_ok=True)
+            with open(os.path.join(config.DATA_DIR, "urbanism-registre.txt"), "w", encoding="utf-8") as f:
+                f.write("\n".join(stats["urbanism"].pop("pe_registru", [])) + "\n")
         if a.comanda == "word":
             from . import word
             stats["word"] = word.export_all(store)

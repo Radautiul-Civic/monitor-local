@@ -72,12 +72,18 @@ def compute(store, today=None):
     out["hcl_anonimizate"] = db.execute("SELECT COUNT(*) FROM hcl WHERE redacted=1").fetchone()[0]
 
     # --- Ședințe și PV-uri ---
-    pv_lags, types = [], defaultdict(lambda: defaultdict(int))
-    for r in db.execute("SELECT session_type, session_date, posted FROM pv WHERE kind='pv_sedinta'"):
+    # o ședință = (data, tipul); aceeași ședință poate apărea pe site și în arhivă sau în mai multe PDF-uri
+    pv_lags, types, vazute = [], defaultdict(lambda: defaultdict(int)), set()
+    for r in db.execute("SELECT session_type, session_date, posted FROM pv WHERE kind='pv_sedinta' "
+                        "ORDER BY wp_id < 0, wp_id"):
         if r["session_date"] and r["posted"]:
             pv_lags.append((_d(r["posted"]) - _d(r["session_date"])).days)
         if r["session_date"]:
-            types[r["session_date"][:4]][r["session_type"] or "necunoscut"] += 1
+            k = (r["session_date"], r["session_type"] or "necunoscut")
+            if k in vazute:
+                continue
+            vazute.add(k)
+            types[r["session_date"][:4]][k[1]] += 1
     out["pv_intarziere_publicare"] = (
         {"pv": len(pv_lags), "medie_zile": round(sum(pv_lags) / len(pv_lags), 1),
          "mediana_zile": median(pv_lags), "max_zile": max(pv_lags)} if pv_lags else None)

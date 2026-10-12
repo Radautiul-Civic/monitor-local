@@ -65,9 +65,11 @@ def compute(ind):
     pv = ind.get("pv_intarziere_publicare")
     tipuri = ind.get("sedinte_pe_tip", {})
     if tipuri:
-        add("Decizii locale", "Procese-verbale de ședință", "partial",
-            f"Disponibile pe site pentru {_interval(sorted(int(y) for y in tipuri))}"
-            + (f" ({pv['pv']} procese-verbale)" if pv else "") + "; anii anteriori nu sunt publicați pe site.")
+        ani_pv = sorted(int(y) for y in tipuri)
+        n_sed = sum(sum(v.values()) for v in tipuri.values())
+        continuu = ani_pv == list(range(ani_pv[0], ani_pv[-1] + 1))
+        add("Decizii locale", "Procese-verbale de ședință", "complet" if continuu and ani_pv[0] <= 2016 else "partial",
+            f"{n_sed} ședințe, {_interval(ani_pv)}, de pe site și din arhiva online.")
     pr = ind.get("proiecte_pe_ani", {})
     add("Decizii locale", "Proiecte de hotărâre", "complet" if pr else "planificat",
         f"{sum(pr.values())} proiecte publicate pe site" if pr else "Colectare pornită; apar după următoarea rulare.")

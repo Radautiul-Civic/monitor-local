@@ -62,6 +62,26 @@ def intern_protejat(url=INTERN_URL):
         return False
 
 
+def cu_versiune(html_path):
+    """Copie a paginii în care linkurile spre assets/app.css și app.js au ?v=<amprentă>, ca
+    browserele și Cloudflare să nu folosească o versiune veche din cache."""
+    import hashlib
+    h = hashlib.sha256()
+    for n in ("app.css", "app.js"):
+        with open(os.path.join(ROOT, "site", "assets", n), "rb") as f:
+            h.update(f.read())
+    v = h.hexdigest()[:10]
+    with open(html_path, encoding="utf-8") as f:
+        html = f.read()
+    for n in ("app.css", "app.js"):
+        html = html.replace(f"assets/{n}\"", f"assets/{n}?v={v}\"")
+    out = os.path.join(ROOT, "data", "_publicare_" + os.path.basename(os.path.dirname(html_path)) + ".html")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(html)
+    return out
+
+
 def texte_de_urcat(base):
     texte = os.path.join(ROOT, "data", "texte")
     if not os.path.isdir(texte):
@@ -82,7 +102,7 @@ def texte_de_urcat(base):
                 files.append((p, "/".join(x for x in (base, "intern", rel.replace(os.sep, "/")) if x), n))
             new[key] = sig
     # pagina internă (aceeași aplicație ca site-ul public, cu linkuri la Word)
-    files.append((os.path.join(ROOT, "site_intern", "index.html"), "/".join(x for x in (base, "intern") if x), "index.html"))
+    files.append((cu_versiune(os.path.join(ROOT, "site_intern", "index.html")), "/".join(x for x in (base, "intern") if x), "index.html"))
     return files, new
 
 
@@ -97,7 +117,10 @@ def main():
     for dirpath, _, names in os.walk(site):
         rel = os.path.relpath(dirpath, site)
         for n in names:
-            files.append((os.path.join(dirpath, n), "" if rel == "." else rel, n))
+            local = os.path.join(dirpath, n)
+            if n.endswith(".html"):
+                local = cu_versiune(local)
+            files.append((local, "" if rel == "." else rel, n))
     for name in ("indicatori.json", "liste.json", "urbanism.json"):
         p = os.path.join(ROOT, "data", name)
         if os.path.exists(p):

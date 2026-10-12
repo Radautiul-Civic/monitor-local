@@ -25,7 +25,7 @@
     { id: "urbanism", nume: "Urbanism", sub: [["cu", "Certificate de urbanism"], ["ac", "Autorizații de construire"]] },
     { id: "achizitii", nume: "Achiziții publice", sub: [["contracte", "Contracte"], ["sicap", "SICAP"]] }
   ];
-  if (INTERN) SECTIUNI.push({ id: "texte", nume: "Toate textele" });
+  if (INTERN) { SECTIUNI.push({ id: "texte", nume: "Toate textele" }); SECTIUNI.push({ id: "arhiva", nume: "Arhiva de siguranță" }); }
 
   function route() {
     var h = (location.hash || "#acasa").slice(1).split("/");
@@ -156,6 +156,7 @@
     var o = [], p = safeUrl(x.pagina), f = safeUrl(x.pdf);
     if (p) o.push('<a href="' + esc(p) + '" rel="noopener">pagina</a>');
     if (f) o.push('<a href="' + esc(f) + '" rel="noopener">PDF</a>');
+    (x.alte_pdf || []).forEach(function (u, i) { if (safeUrl(u)) o.push('<a href="' + esc(u) + '" rel="noopener">PDF ' + (i + 2) + "</a>"); });
     if (INTERN && f && WORD[f]) o.push('<a href="texte/' + WORD[f].split("/").map(encodeURIComponent).join("/") + '">text (Word)</a>');
     if (x.scanat === 1) o.push('<span class="tag" title="Document scanat: textul nu poate fi căutat și nu e citit de cititoarele de ecran">scanat</span>');
     return o.join("");
@@ -192,6 +193,7 @@
       (c.zile_de_la_ultima != null ? tile("Zile de la ultimul contract publicat", nr(c.zile_de_la_ultima), zile(c.zile_de_la_ultima), "ultimul: " + zi(c.ultima_postare), "#achizitii/contracte") : "") +
       (scanPct != null ? tile("Documente publicate doar ca scanare", scanPct + "%", "", nr(d.scanate) + " din " + nr(d.descarcate) + ": textul nu poate fi căutat și nu e accesibil cititoarelor de ecran") : "") +
       "</div>";
+    h += '<div id="arhiva-card"></div>';
     // stadiul monitorului
     var st = IND.stadiu || [], grupe = {};
     st.forEach(function (x) { (grupe[x.sectiune] = grupe[x.sectiune] || []).push(x); });
@@ -203,6 +205,44 @@
       }).join("") + "</div>";
     });
     return h + "</section>";
+  }
+
+  function gb(o) { return o >= 1e9 ? dec((o / 1e9).toFixed(1)) + " GB" : o >= 1e6 ? Math.round(o / 1e6) + " MB" : Math.max(1, Math.round(o / 1e3)) + " KB"; }
+  function arhivaCard() {
+    var el = $("arhiva-card"); if (!el) return;
+    get(BASE + "date/arhiva-stare.json").then(function (d) {
+      var t = 0, c = 0, w = 0, x = 0, o = 0;
+      Object.keys(d.site_uri || {}).forEach(function (k) { var v = d.site_uri[k]; t += v.total; c += v.copiate; w += v.in_wayback; x += v.disparute; o += v.octeti_copiati; });
+      if (!t) return;
+      el.innerHTML = '<section class="card section"><h2>Arhiva de siguranță</h2><p class="note">Copiem toate fișierele și paginile publicate pe site-urile primăriei (inclusiv arhiva veche), ca documentele publice să nu se piardă dacă sunt șterse.</p>' +
+        '<div class="grid" style="margin:8px 0 0">' +
+        tile("Fișiere și pagini inventariate", nr(t), "", "pe primariaradauti.ro și arhiva.primariaradauti.ro") +
+        tile("Copiate de noi", Math.round(100 * c / t) + "%", "", nr(c) + " fișiere, " + gb(o) + ", cu amprentă SHA-256") +
+        tile("În Internet Archive", Math.round(100 * w / t) + "%", "", nr(w) + " adrese, verificabile public în Wayback Machine") +
+        (x ? tile("Dispărute de pe site-urile primăriei", nr(x), "", "păstrate în copia noastră și în Internet Archive") : "") +
+        '</div><p class="note">Lista completă, cu data și amprenta fiecărui fișier: <a href="' + BASE + 'date/arhiva-manifest.csv">manifest (CSV)</a>. Actualizat la ' + esc(zi(d.actualizat_la)) + ".</p></section>";
+    }).catch(function () {});
+  }
+
+  function arhivaIntern(el) {
+    el.innerHTML = head("Arhiva de siguranță (intern)", "Copiile noastre ale tuturor fișierelor și paginilor de pe site-urile primăriei. „copie” deschide fișierul salvat de noi, „original” adresa primăriei, „Wayback” copia publică din Internet Archive.") +
+      '<section class="card section"><div id="lst"><p class="updated">Se încarcă manifestul...</p></div></section>';
+    get(BASE + "date/arhiva-manifest.json").then(function (M) {
+      var tipuri = { media: "fișier", link: "fișier legat", pagina: "pagină" };
+      lista($("lst"), M, {
+        placeholder: "Caută în adresă sau titlu (ex. hcl, buget, 2016, autorizatii)",
+        an: function (x) { return (x.d || "").slice(0, 4); }, text: function (x) { return (x.n || "") + " " + x.u; },
+        extraFilter: { html: '<select aria-label="Filtru"><option value="">Toate</option><option value="arhiva">arhiva.primariaradauti.ro</option><option value="site">primariaradauti.ro</option><option value="disparut">Dispărute de pe site</option><option value="necopiat">Încă necopiate</option></select>',
+          test: function (x, e) { return e === "disparut" ? !!x.x : e === "necopiat" ? !x.c : x.s === e; } },
+        item: function (x) {
+          var f = safeUrl(x.u), w = safeUrl(x.w), nume = decodeURIComponent((x.u.split("/").filter(Boolean).pop() || x.u));
+          var cop = x.c ? x.c.replace(/^intern\//, "").split("/").map(encodeURIComponent).join("/") : null;
+          return '<div class="doc"><div class="h"><span class="id">' + esc(x.n || nume) + '</span><span class="tag">' + esc(tipuri[x.t] || x.t) + "</span>" + (x.x ? '<span class="tag" style="border-color:var(--bad)">dispărut de pe site</span>' : "") + "</div>" +
+            '<div class="m"><span>' + esc(x.d ? zi(x.d) : "") + (x.m ? " · " + gb(x.m) : "") + (x.h ? " · SHA-256 " + esc(x.h.slice(0, 12)) + "…" : "") + "</span>" +
+            (cop ? '<a href="' + cop + '">copie</a>' : '<span class="tag">necopiat încă</span>') + (f ? '<a href="' + esc(f) + '" rel="noopener">original</a>' : "") + (w ? '<a href="' + esc(w) + '" rel="noopener">Wayback</a>' : "") + "</div></div>";
+        }
+      });
+    }).catch(function () { $("lst").innerHTML = '<p class="empty">Manifestul nu e încă disponibil: apare după prima rulare „Arhivare”.</p>'; });
   }
 
   function hcl(el, r) {
@@ -264,11 +304,12 @@
     var an = ani[ani.length - 1], s = an ? sed[an] : {};
     var nS = Object.keys(s).reduce(function (a, k) { return a + s[k]; }, 0);
     var tipuri = [["ordinara", "Ordinare", "var(--s1)"], ["extraordinara", "Extraordinare", "var(--s2)"], ["extraordinara_de_indata", "De îndată", "var(--s3)"]];
+    if (ani.some(function (y) { return sed[y].necunoscut; })) tipuri.push(["necunoscut", "Tip nemenționat în titlu", "var(--plan)"]);
     var h = head("Decizii locale", "Hotărârile Consiliului Local, ședințele și proiectele de hotărâre.", r) + '<div class="grid">' +
       (an ? tile("Ședințe în " + an, nS, "", tipuri.map(function (t) { return (s[t[0]] || 0) + " " + t[1].toLowerCase(); }).join(", ")) : "") +
       (an && nS ? tile("Ședințe convocate în regim de urgență (" + an + ")", Math.round(100 * ((s.extraordinara || 0) + (s.extraordinara_de_indata || 0)) / nS) + "%", "", "extraordinare și de îndată, din totalul ședințelor") : "") +
       (pv ? tile("Durata medie de publicare a procesului-verbal", dec(pv.medie_zile), zile(pv.medie_zile), "de la ședință la postare; maxim <strong>" + pv.max_zile + " zile</strong>, din " + pv.pv + " procese-verbale") : "") + "</div>" +
-      '<section class="card section"><h2>Ședințe pe ani, după tip</h2><p class="note">Din procesele-verbale publicate pe site (disponibile începând cu ' + (ani[0] || "-") + ").</p>" +
+      '<section class="card section"><h2>Ședințe pe ani, după tip</h2><p class="note">Din procesele-verbale publicate de primărie, pe site și în arhivă (' + (ani[0] || "-") + "-" + (ani[ani.length - 1] || "-") + "). O ședință se numără o singură dată, chiar dacă procesul-verbal e împărțit în mai multe fișiere.</p>" +
       legend(tipuri.map(function (t) { return [t[1], t[2]]; })) + '<div class="chart" id="ch-sed"></div>' +
       '<details class="tbl"><summary>Vezi tabelul</summary><div class="tw"><table><thead><tr><th>An</th>' + tipuri.map(function (t) { return '<th class="n">' + t[1] + "</th>"; }).join("") + '<th class="n">Total</th></tr></thead><tbody>' +
       ani.slice().reverse().map(function (y) { var v = sed[y], t = 0; return "<tr><td>" + y + "</td>" + tipuri.map(function (k) { t += v[k[0]] || 0; return '<td class="n">' + (v[k[0]] || 0) + "</td>"; }).join("") + '<td class="n">' + t + "</td></tr>"; }).join("") +
@@ -344,6 +385,8 @@
     }
     h += tile("Zile fără registru publicat", z == null ? "-" : nr(z), z == null ? "" : zile(z), "ultimul registru acoperă până la " + zi(reg.ultima_perioada_pana_la)) + "</div>";
     if (U) {
+      h += '<section class="card section"><h2>' + esc(nume) + ' pe ani</h2><p class="note">Toți anii din registrele publicate (site și arhivă). Un an cu registre lipsă apare mai mic decât a fost în realitate.</p><div class="chart" id="ch-ua"></div>' +
+        (!cu && U.valoare_pe_ani ? '<h3 style="margin-top:16px">Valoarea lucrărilor autorizate, pe ani</h3><p class="note">Suma valorilor declarate în autorizații, în milioane de lei.</p><div class="chart" id="ch-uv"></div>' : "") + "</section>";
       h += '<section class="card section"><h2>' + esc(nume) + ' pe luni</h2><p class="note">După data emiterii, ultimele 18 luni până la ultimul registru publicat. Lunile fără registru publicat apar goale.</p><div class="chart" id="ch-u"></div></section>';
       var cat = U.categorii_pe_ani[an] || {};
       h += '<div class="grid two"><section class="card"><h2>Pentru ce (' + an + ')</h2><p class="note">Categorii după scopul declarat, grupate automat după cuvinte-cheie.</p>' + hbars(cat, U.pe_ani[an]) + "</section>" +
@@ -355,6 +398,15 @@
       '<section class="card section"><h2>Registrele originale</h2><div id="lst2"></div></section>';
     el.innerHTML = h;
     if (U) {
+      var A = [], a0 = +ani[0], a1 = +ani[ani.length - 1];
+      for (var y = a0; y <= a1; y++) A.push(String(y));
+      chart($("ch-ua"), { cats: A, label: nume + " pe ani", series: [{ name: nume, color: "var(--s1)", values: A.map(function (y) { return U.pe_ani[y] || 0; }) }],
+        labelValue: function (i) { return U.pe_ani[A[i]] || ""; },
+        tooltip: function (i) { return "<b>" + A[i] + "</b><br>" + (U.pe_ani[A[i]] || 0) + (cu ? " certificate" : " autorizații"); } });
+      if (!cu && U.valoare_pe_ani) chart($("ch-uv"), { cats: A, label: "Valoarea lucrărilor autorizate pe ani",
+        series: [{ name: "Valoare", color: "var(--s1)", values: A.map(function (y) { return Math.round((U.valoare_pe_ani[y] || 0) / 1e6 * 10) / 10; }) }],
+        labelValue: function (i) { var v = U.valoare_pe_ani[A[i]]; return v ? dec((v / 1e6).toFixed(1)).replace(/,0$/, "") : ""; },
+        tooltip: function (i) { return "<b>" + A[i] + "</b><br>" + lei(U.valoare_pe_ani[A[i]] || 0); }, unit: "mil. lei" });
       var L2 = luniContinue(U.pe_luni, 18);
       chart($("ch-u"), { cats: L2.map(function (m) { return LUNI[+m.slice(5) - 1].slice(0, 3) + (m.slice(5) === "01" || m === L2[0] ? " " + m.slice(2, 4) : ""); }), label: nume + " pe luni",
         series: [{ name: nume, color: "var(--s1)", values: L2.map(function (m) { return U.pe_luni[m] || 0; }) }],
@@ -431,6 +483,8 @@
     else if (id === "urbanism") registru(el, r, r.sub);
     else if (id === "achizitii") (r.sub === "sicap" ? sicap : contracte)(el, r);
     else if (id === "texte") texte(el);
+    else if (id === "arhiva") arhivaIntern(el);
+    if (id === "acasa") arhivaCard();
     $("actualizat").textContent = "Date actualizate la " + zi(IND.calculat_la) + ".";
     document.title = (id === "acasa" ? "" : r.s.nume + " - ") + "Monitor local" + (INTERN ? " (intern)" : "");
   }

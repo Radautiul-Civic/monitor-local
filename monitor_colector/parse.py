@@ -155,7 +155,7 @@ def parse_hcl_post(post_title, slug, documents):
 def parse_pv(title):
     """Tipul PV-ului, tipul ședinței, data și (pentru PV de afișare) intervalul de HCL."""
     t = norm(title)
-    kind = "pv_afisare" if "afisare" in t else "pv_sedinta"
+    kind = "pv_afisare" if ("afisare" in t or "publicare on" in t) else "pv_sedinta"
     if "de indata" in t:
         stype = "extraordinara_de_indata"
     elif "extraordinar" in t:
@@ -281,3 +281,19 @@ def parse_archive_list(page_html, base_url, year=None):
         by_number[ref["number"]] = item
         items.append(item)
     return items
+
+
+# ---------- liste din arhivă (procese-verbale, registre de urbanism) ----------
+
+def parse_archive_links(page_html, base_url):
+    """Toate linkurile PDF dintr-o pagină a arhivei, cu textul lor (o singură dată fiecare)."""
+    p = _LinkParser()
+    p.feed(page_html or "")
+    out, seen = [], set()
+    for href, text in p.links:
+        url = urljoin(base_url, href.strip())
+        if not unquote(url).lower().endswith(".pdf") or url in seen:
+            continue
+        seen.add(url)
+        out.append({"url": url, "text": clean_title(text)})
+    return out
