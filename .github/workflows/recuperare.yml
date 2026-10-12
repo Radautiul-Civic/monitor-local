@@ -138,6 +138,9 @@ jobs:
             openssl enc -d -aes-256-cbc -pbkdf2 -pass env:CHEIE -in "$f" | tar xzf - -C "$d" && dirs="$dirs $d/lot"
           done
           python -m monitor_colector importa --foldere $dirs
+      - name: Registre de urbanism (tabele din PDF)
+        run: python -m monitor_colector urbanism
+        continue-on-error: true
       - name: Documente Word
         run: python -m monitor_colector word
         continue-on-error: true
@@ -162,6 +165,7 @@ jobs:
         with:
           name: rapoarte
           path: |
+            data/urbanism.json
             data/indicatori.md
             data/indicatori.json
             data/raw/**
