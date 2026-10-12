@@ -1,0 +1,26 @@
+name: SICAP explorare
+
+# Pornire manuală. Citește API-ul public e-licitatie.ro (doar date publice) și
+# salvează răspunsurile brute ca artefact, pentru a construi colectorul SICAP.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  exploreaza:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Explorare API SICAP
+        run: python tools/sicap_explorare.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sicap-explorare
+          path: sicap-explorare/
+          retention-days: 14
