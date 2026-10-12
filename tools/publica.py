@@ -121,12 +121,7 @@ def main():
             if n.endswith(".html"):
                 local = cu_versiune(local)
             files.append((local, "" if rel == "." else rel, n))
-    sd = os.path.join(ROOT, "data", "sicap")
-    if os.path.isdir(sd):
-        for n in sorted(os.listdir(sd)):
-            if n.endswith(".json"):
-                files.append((os.path.join(sd, n), "date/sicap", n))
-    for name in ("indicatori.json", "liste.json", "urbanism.json", "sicap.json"):
+    for name in ("indicatori.json", "liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json"):
         p = os.path.join(ROOT, "data", name)
         if os.path.exists(p):
             files.append((p, "date", name))

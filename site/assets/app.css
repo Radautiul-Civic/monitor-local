@@ -147,4 +147,24 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 footer{color:var(--muted);font-size:.85rem;padding:32px 0 48px;border-top:1px solid var(--line);margin-top:32px}
 footer p{max-width:72ch}
 [hidden]{display:none!important}
+/* SICAP: explorator */
+.sx-bar{padding:12px 16px 10px}
+.sx-bar .filters{margin:0 0 8px}
+.sx-bar .filters select{flex:1 1 200px}
+.lbl-s{display:inline-flex;align-items:center;gap:6px;color:var(--ink-2);font-size:.9rem;white-space:nowrap}
+.lbl-s select{flex:none}
+.sx-act{display:flex;gap:8px 18px;flex-wrap:wrap;align-items:center;font-size:.88rem;color:var(--ink-2)}
+.chk{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none;align-self:stretch}
+.seg button{font:inherit;font-size:.92rem;border:0;background:var(--surface);color:var(--ink-2);padding:7px 14px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.hbars .hb{grid-template-columns:minmax(0,14rem) 1fr 9.5rem}
+a.hb-a{text-decoration:none;color:inherit;border-radius:6px;margin:0 -6px;padding:2px 6px}
+a.hb-a:hover{background:var(--surface-2)}
+a.hb-a:hover .hb-l{color:var(--accent);text-decoration:underline}
+.chart svg.clic g.col{cursor:pointer}
+.back{margin:12px 0 0;font-size:.92rem}
+.back a{text-decoration:none}
+@media (max-width:480px){.hbars .hb{grid-template-columns:minmax(0,1fr) auto}}
 @media print{header.top{position:static}nav.main,.subnav,.filters,.more{display:none}}

@@ -85,7 +85,10 @@ def main(argv=None):
                 f.write("\n".join(stats["urbanism"].pop("pe_registru", [])) + "\n")
         if a.comanda == "sicap":
             from . import sicap
-            stats["sicap"] = sicap.colecteaza(store, tot=a.tot, cui_extra=config.SICAP_CUI_EXTRA)
+            stats["sicap"] = sicap.colecteaza(store, tot=a.tot, cui_extra=config.SICAP_CUI_EXTRA,
+                                              termeni_extra=config.SICAP_TERMENI_EXTRA)
+            from . import curs
+            stats["curs_bnr_zile"] = curs.actualizeaza(store.db)
         if a.comanda == "word":
             from . import word
             stats["word"] = word.export_all(store)
@@ -102,15 +105,18 @@ def main(argv=None):
             with open(os.path.join(config.DATA_DIR, "urbanism.json"), "w", encoding="utf-8") as f:
                 json.dump(urbanism.export(store), f, ensure_ascii=False, separators=(",", ":"))
             from . import sicap
-            rez, det = sicap.export(store)
+            rez, expl = sicap.export(store)
             if rez["autoritati"]:
-                os.makedirs(os.path.join(config.DATA_DIR, "sicap"), exist_ok=True)
                 with open(os.path.join(config.DATA_DIR, "sicap.json"), "w", encoding="utf-8") as f:
                     json.dump(rez, f, ensure_ascii=False, separators=(",", ":"))
-                for ca_id, d in det.items():
-                    with open(os.path.join(config.DATA_DIR, "sicap", f"{ca_id}.json"), "w", encoding="utf-8") as f:
-                        json.dump(d, f, ensure_ascii=False, separators=(",", ":"))
-            stats["indicatori"] = "data/indicatori.json, data/liste.json, data/urbanism.json, data/sicap.json"
+                with open(os.path.join(config.DATA_DIR, "sicap-explorer.json"), "w", encoding="utf-8") as f:
+                    json.dump(expl, f, ensure_ascii=False, separators=(",", ":"))
+                # raport text cu valorile neobișnuite, pentru verificare (în artefactul „rapoarte”)
+                with open(os.path.join(config.DATA_DIR, "sicap-de-verificat.txt"), "w", encoding="utf-8") as f:
+                    f.write(sicap.raport_de_verificat(expl))
+            import shutil   # fișierele vechi pe instituții, înlocuite de exploratorul unic
+            shutil.rmtree(os.path.join(config.DATA_DIR, "sicap"), ignore_errors=True)
+            stats["indicatori"] = "data/indicatori.json, data/liste.json, data/urbanism.json, data/sicap*.json"
         store.log_run(t0, a.comanda, stats)
     finally:
         store.close()

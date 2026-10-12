@@ -555,6 +555,10 @@ class TestSicap(unittest.TestCase):
             self.cereri += 1
             if params["pageIndex"] > 0:
                 return {"items": [], "total": 3}
+            if params["filter"] in ("SERVICII COMUNALE", "2563140"):
+                return {"total": 2, "items": [
+                    {"id": 14, "text": "2563140 - SERVICII COMUNALE SA"},
+                    {"id": 15, "text": "9999999 - SERVICII COMUNALE SA ALTUNDEVA"}]}
             return {"total": 3, "items": [
                 {"id": 11, "text": "4244148 - MUNICIPIUL RADAUTI"},
                 {"id": 12, "text": "4244199 - CASA DE CULTURA RADAUTI"},
@@ -589,16 +593,80 @@ class TestSicap(unittest.TestCase):
         self.assertEqual(st["autoritati"]["incluse"], 2)           # Rădăuți-Prut exclusă
         self.assertEqual(st["da"], 2)
         self.assertNotIn("trunchiate", st)                         # perioada s-a împărțit sub plafon
-        rez, det = sicap.export(store)
+        rez, ex = sicap.export(store)
         p = [a for a in rez["autoritati"] if a["cui"] == "4244148"][0]
-        self.assertEqual(p["pe_ani"]["2023"]["da_val"], 350000.0)
-        d = det[p["id"]]
-        self.assertEqual(d["top_furnizori"][0]["cui"], "123456")
-        s = d["semnale_divizare"]
+        self.assertEqual((p["da"], p["da_val"]), (2, 350000.0))
+        self.assertEqual(len(ex["da"]), 2)
+        r = ex["da"][0]
+        self.assertEqual(ex["inst"][r[1]][2], "4244148")
+        self.assertEqual(ex["furn"][r[3]], ["123456", "EVENIMENTE SRL"])
+        self.assertEqual(ex["cpv"][r[4]], "79952000-2 - Servicii de organizare de evenimente")
+        self.assertIsNone(r[6])                                   # fără curs BNR și fără rezervă: fără euro
+        self.assertIn("Instituții incluse", sicap.raport_de_verificat(ex))
+        da = [dict(zip(("id", "furnizor_cui", "furnizor", "cpv", "data_finalizare", "valoare"), x))
+              for x in store.db.execute("SELECT id, furnizor_cui, furnizor, cpv, data_finalizare, valoare FROM sicap_da")]
+        s = sicap.semnale_divizare(da)
         self.assertEqual((len(s), s[0]["nr"], s[0]["prag"]), (1, 2, 270120))
         self.assertEqual(sicap.prag_achizitie_directa("2021-05-01", "79952000-2"), 135060)
         self.assertEqual(sicap.cui_si_nume("RO 6865630 DELTA PLUS TRADING S.R.L."), ("6865630", "DELTA PLUS TRADING S.R.L."))
         self.assertEqual(sicap.prag_achizitie_directa("2023-05-01", "45233140-2"), 900400)
+        store.close()
+        shutil.rmtree(tmp)
+
+    def test_cui_extra_si_istoric_pentru_institutie_noua(self):
+        from monitor_colector import sicap
+        tmp = tempfile.mkdtemp()
+        store = Store(os.path.join(tmp, "t.db"))
+        cl = self.Cl()
+        sicap.colecteaza(store, cl=cl, tot=True, azi=date(2024, 6, 30))
+        # zilnic, după ce se adaugă Servicii Comunale (CUI fără „Rădăuți” în nume)
+        cl.posts = []
+        st = sicap.colecteaza(store, cl=cl, azi=date(2024, 6, 30), cui_extra=("2563140",),
+                              termeni_extra=("SERVICII COMUNALE",))
+        self.assertEqual(st["autoritati"]["incluse"], 3)          # doar CUI-ul cerut, nu omonimul
+        self.assertEqual(st["istoric_nou"], 1)
+        ani_noua = {b["finalizationDateStart"][:4] for pth, b in cl.posts
+                    if "DirectAcquisition" in pth and b["contractingAuthorityId"] == 14}
+        ani_veche = {b["finalizationDateStart"][:4] for pth, b in cl.posts
+                     if "DirectAcquisition" in pth and b["contractingAuthorityId"] == 11}
+        self.assertIn("2018", ani_noua)                             # instituția nouă: tot istoricul
+        self.assertEqual(ani_veche, {"2024"})                       # celelalte: doar ultimele 90 de zile
+        st = sicap.colecteaza(store, cl=cl, azi=date(2024, 7, 1), cui_extra=("2563140",),
+                              termeni_extra=("SERVICII COMUNALE",))
+        self.assertEqual(st["istoric_nou"], 0)
+        store.close()
+        shutil.rmtree(tmp)
+
+    def test_niveluri_valoare(self):
+        from monitor_colector import sicap
+        self.assertEqual(sicap.nivel_valoare(250000, "2024-01-10", "79952000-2"), 0)
+        self.assertEqual(sicap.nivel_valoare(320000, "2024-01-10", "79952000-2"), 0)    # sub prag cu TVA
+        self.assertEqual(sicap.nivel_valoare(400000, "2024-01-10", "79952000-2"), 1)
+        self.assertEqual(sicap.nivel_valoare(127000000, "2024-01-10", "71320000-7"), 2)
+        self.assertEqual(sicap.nivel_valoare(5000000, "2024-01-10", "45233140-2"), 1)
+
+
+class TestCurs(unittest.TestCase):
+    XML = (b'<?xml version="1.0" encoding="utf-8"?><DataSet xmlns="http://www.bnr.ro/xsd"><Body>'
+           b'<Cube date="2024-01-03"><Rate currency="EUR">4.9725</Rate><Rate currency="HUF" multiplier="100">1.3000</Rate></Cube>'
+           b'<Cube date="2024-01-05"><Rate currency="EUR">4.9700</Rate></Cube></Body></DataSet>')
+
+    def test_parse_si_rata(self):
+        from monitor_colector import curs
+        z = curs.parse(self.XML)
+        self.assertEqual(z, [("2024-01-03", 4.9725), ("2024-01-05", 4.97)])
+        self.assertEqual(curs.parse(self.XML, "HUF"), [("2024-01-03", 0.013)])
+        tmp = tempfile.mkdtemp()
+        store = Store(os.path.join(tmp, "t.db"))
+        curs.init(store.db)
+        store.db.executemany("INSERT INTO curs_bnr VALUES (?,?)", z)
+        c = curs.Curs(store.db, {"2019": 4.75})
+        self.assertEqual(c.rata("2024-01-04"), 4.9725)             # zi fără curs: ultimul curs dinainte
+        self.assertEqual(c.rata("2024-01-07"), 4.97)
+        self.assertEqual(c.eur(4970, "2024-01-06T10:00:00"), 1000.0)
+        self.assertEqual(c.rata("2019-05-01"), 4.75)               # rezerva pe an
+        self.assertIsNone(c.rata("2018-05-01"))
+        self.assertEqual(c.medii_anuale(), {"2019": 4.75, "2024": 4.9712})
         store.close()
         shutil.rmtree(tmp)
 

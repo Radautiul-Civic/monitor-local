@@ -111,15 +111,23 @@ class Client:
 
 def init(db):
     db.executescript(SCHEMA)
+    col = [r[1] for r in db.execute("PRAGMA table_info(sicap_ca)")]
+    if "istoric" not in col:
+        # data la care s-a adus tot istoricul instituției (din 2018); instituțiile care au deja
+        # date le considerăm aduse, ca să nu reluăm colectarea completă
+        db.execute("ALTER TABLE sicap_ca ADD COLUMN istoric TEXT")
+        db.execute("UPDATE sicap_ca SET istoric=gasit_la WHERE id IN (SELECT ca_id FROM sicap_da "
+                   "UNION SELECT ca_id FROM sicap_cn UNION SELECT ca_id FROM sicap_can)")
+        db.commit()
 
 
 # ---------- autoritățile contractante din Rădăuți ----------
 
-def autoritati(store, cl, termeni=("RADAUTI", "RĂDĂUŢI", "RĂDĂUȚI"), cui_extra=()):
+def autoritati(store, cl, termeni=("RADAUTI", "RĂDĂUŢI", "RĂDĂUȚI"), cui_extra=(), termeni_extra=()):
     db = store.db
     init(db)
     gasite = {}
-    for t in list(termeni) + list(cui_extra):
+    for t in list(termeni) + list(termeni_extra) + list(cui_extra):
         page = 0
         while True:
             d = cl.get("/api-pub/ComboPub/searchContractingAuthorities/",
@@ -141,9 +149,12 @@ def autoritati(store, cl, termeni=("RADAUTI", "RĂDĂUŢI", "RĂDĂUȚI"), cui_e
         row = db.execute("SELECT inclus FROM sicap_ca WHERE id=?", (i,)).fetchone()
         if row is None:
             noi += 1
-            db.execute("INSERT INTO sicap_ca VALUES (?,?,?,?,?)", (i, text, cui, inclus, date.today().isoformat()))
+            db.execute("INSERT INTO sicap_ca (id, text, cui, inclus, gasit_la) VALUES (?,?,?,?,?)",
+                       (i, text, cui, inclus, date.today().isoformat()))
         else:
             db.execute("UPDATE sicap_ca SET text=?, cui=? WHERE id=?", (text, cui, i))
+            if inclus and not row["inclus"]:   # CUI adăugat ulterior în config.SICAP_CUI_EXTRA
+                db.execute("UPDATE sicap_ca SET inclus=1 WHERE id=?", (i,))
     db.commit()
     return {"gasite": len(gasite), "noi": noi,
             "incluse": db.execute("SELECT COUNT(*) FROM sicap_ca WHERE inclus=1").fetchone()[0]}
@@ -197,16 +208,20 @@ def _salveaza_can(db, ca_id, it):
         json.dumps(it, ensure_ascii=False)))
 
 
-def colecteaza(store, cl=None, tot=False, azi=None, cui_extra=()):
-    """tot=True: istoricul din 2018; altfel ultimele 90 de zile (incremental, zilnic)."""
+def colecteaza(store, cl=None, tot=False, azi=None, cui_extra=(), termeni_extra=()):
+    """tot=True: istoricul din 2018; altfel ultimele 90 de zile (incremental, zilnic).
+    O instituție nouă (sau adăugată ulterior) își primește tot istoricul la prima rulare."""
     cl = cl or Client()
     db = store.db
     init(db)
     azi = azi or date.today()
-    stats = {"autoritati": autoritati(store, cl, cui_extra=cui_extra), "da": 0, "cn": 0, "can": 0}
-    d0 = START if tot else azi - timedelta(days=90)
-    for ca in db.execute("SELECT id FROM sicap_ca WHERE inclus=1").fetchall():
+    stats = {"autoritati": autoritati(store, cl, cui_extra=cui_extra, termeni_extra=termeni_extra),
+             "da": 0, "cn": 0, "can": 0, "istoric_nou": 0}
+    for ca in db.execute("SELECT id, istoric FROM sicap_ca WHERE inclus=1").fetchall():
         ca_id = ca["id"]
+        complet = tot or not ca["istoric"]
+        stats["istoric_nou"] += int(complet and not tot)
+        d0 = START if complet else azi - timedelta(days=90)
         # an cu an: ferestre mici, ușor de reluat
         y = d0.year
         while y <= azi.year:
@@ -230,6 +245,9 @@ def colecteaza(store, cl=None, tot=False, azi=None, cui_extra=()):
                 stats["can"] += 1
             db.commit()
             y += 1
+        if complet:
+            db.execute("UPDATE sicap_ca SET istoric=? WHERE id=?", (azi.isoformat(), ca_id))
+            db.commit()
     stats["cereri"] = cl.cereri
     return stats
 
@@ -267,51 +285,128 @@ def semnale_divizare(acte):
     return sorted(out, key=lambda x: -x["suma"])
 
 
-def export(store):
-    """(rezumat, {ca_id: detalii}) pentru date/sicap.json și date/sicap/<id>.json."""
+def nivel_valoare(valoare, data_iso, cpv):
+    """0 = obișnuită; 1 = peste pragul legal al achiziției directe chiar și cu TVA (19-21%) inclus;
+    2 = peste de 10 ori pragul: aproape sigur o greșeală de introducere în SICAP (nu intră în totaluri)."""
+    if not valoare:
+        return 0
+    prag = prag_achizitie_directa(data_iso, cpv)
+    if valoare > 10 * prag:
+        return 2
+    return 1 if valoare > prag * 1.21 else 0
+
+
+def _cpv(s):
+    return re.sub(r"\s*\(Rev\.\d\)\s*$", "", (s or "").strip())
+
+
+def _rezerva_curs(db):
+    """Cursul EUR/RON pe ani, din SICAP (valoarea estimată în RON și în euro), pentru când BNR lipsește."""
+    pe_an = {}
+    for r in db.execute("SELECT data_finalizare, json FROM sicap_da"):
+        try:
+            j = json.loads(r["json"] or "{}")
+            ron, alt = j.get("estimatedValueRon"), j.get("estimatedValueOtherCurrency")
+            if ron and alt and ron > 100:
+                k = ron / alt
+                if 3.5 < k < 7:
+                    pe_an.setdefault((r["data_finalizare"] or "")[:4], []).append(k)
+        except (ValueError, TypeError, ZeroDivisionError):
+            continue
+    return {y: sorted(v)[len(v) // 2] for y, v in pe_an.items() if y}
+
+
+def export(store, azi=None):
+    """(rezumat, explorator) pentru date/sicap.json și date/sicap-explorer.json.
+
+    Exploratorul are toate achizițiile tuturor instituțiilor, în formă compactă (rânduri cu
+    indici în tabelele de instituții, furnizori și coduri CPV), ca pagina să poată filtra,
+    grupa și desena graficele direct în browser."""
+    from . import curs as curs_mod
     db = store.db
     init(db)
-    rezumat, detalii = {"autoritati": [], "generat_la": date.today().isoformat()}, {}
+    curs = curs_mod.Curs(db, _rezerva_curs(db))
+    azi = (azi or date.today()).isoformat()
+    inst, inst_ix = [], {}
     for ca in db.execute("SELECT * FROM sicap_ca WHERE inclus=1 ORDER BY text"):
-        da = [dict(r) for r in db.execute(
-            "SELECT id, cod, nume, cpv, data_finalizare, furnizor, furnizor_cui, valoare, valoare_estimata "
-            "FROM sicap_da WHERE ca_id=? ORDER BY data_finalizare DESC", (ca["id"],))]
-        cn = [dict(r) for r in db.execute(
-            "SELECT id, nr, titlu, procedura, tip_contract, cpv, valoare_estimata, data, stare, contestatie "
-            "FROM sicap_cn WHERE ca_id=? ORDER BY data DESC", (ca["id"],))]
-        can = [dict(r) for r in db.execute(
-            "SELECT id, nr, titlu, procedura, tip_contract, cpv, valoare, oferta_min, oferta_max, data "
-            "FROM sicap_can WHERE ca_id=? ORDER BY data DESC", (ca["id"],))]
-        pe_ani = {}
-        for a in da:
-            y = (a["data_finalizare"] or "")[:4]
-            p = pe_ani.setdefault(y, {"da_n": 0, "da_val": 0.0, "cn_n": 0, "cn_val": 0.0, "can_n": 0, "can_val": 0.0})
-            p["da_n"] += 1
-            p["da_val"] += a["valoare"] or 0
-        for x, k in ((cn, "cn"), (can, "can")):
-            for a in x:
-                y = (a["data"] or "")[:4]
-                p = pe_ani.setdefault(y, {"da_n": 0, "da_val": 0.0, "cn_n": 0, "cn_val": 0.0, "can_n": 0, "can_val": 0.0})
-                p[k + "_n"] += 1
-                p[k + "_val"] += (a.get("valoare") if k == "can" else a.get("valoare_estimata")) or 0
-        furn = {}
-        for a in da:
-            if a["furnizor_cui"]:
-                f = furn.setdefault(a["furnizor_cui"], {"nume": a["furnizor"], "cui": a["furnizor_cui"], "n": 0, "val": 0.0})
-                f["n"] += 1
-                f["val"] += a["valoare"] or 0
-        cpv = {}
-        for a in da:
-            c = (a["cpv"] or "")
-            k = c[:2] + "000000" if c else "necunoscut"
-            cpv[k] = cpv.get(k, 0) + (a["valoare"] or 0)
         cui, nume = cui_si_nume(ca["text"])
-        rez = {"id": ca["id"], "nume": nume or ca["text"], "cui": ca["cui"] or cui, "da": len(da), "cn": len(cn),
-               "can": len(can), "pe_ani": {y: {k: round(v, 2) if isinstance(v, float) else v for k, v in p.items()}
-                                           for y, p in sorted(pe_ani.items()) if y},
-               "top_furnizori": sorted(furn.values(), key=lambda f: -f["val"])[:15],
-               "cpv_valoare": dict(sorted(cpv.items(), key=lambda x: -x[1])[:12]),
-               "semnale_divizare": semnale_divizare(da)[:50]}
-        rezumat["autoritati"].append({k: rez[k] for k in ("id", "nume", "cui", "da", "cn", "can", "pe_ani")})
-        detalii[ca["id"]] = dict(rez, lista_da=da, lista_cn=cn, lista_can=can)
-    return rezumat, detalii
+        inst_ix[ca["id"]] = len(inst)
+        inst.append([ca["id"], nume or ca["text"], ca["cui"] or cui])
+    furn, furn_ix, cpvs, cpv_ix = [], {}, [], {}
+
+    def fx(cui, nume):
+        k = cui or ("?" + (nume or ""))
+        if k not in furn_ix:
+            furn_ix[k] = len(furn)
+            furn.append([cui or "", nume or ""])
+        elif nume and not furn[furn_ix[k]][1]:
+            furn[furn_ix[k]][1] = nume
+        return furn_ix[k]
+
+    def cx(c):
+        c = _cpv(c)
+        if c not in cpv_ix:
+            cpv_ix[c] = len(cpvs)
+            cpvs.append(c)
+        return cpv_ix[c]
+
+    da, cn, can = [], [], []
+    rez = {ca: {"da": 0, "cn": 0, "can": 0, "da_val": 0.0, "can_val": 0.0} for ca in inst_ix}
+    ids = ",".join(str(int(x)) for x in inst_ix) or "NULL"
+    # cele mai noi întâi: numele furnizorului rămâne cel mai recent
+    for r in db.execute(f"SELECT * FROM sicap_da WHERE ca_id IN ({ids}) ORDER BY data_finalizare DESC, id DESC"):
+        d = r["data_finalizare"] or (r["data_publicare"] or "")
+        niv = nivel_valoare(r["valoare"], d, r["cpv"])
+        da.append([r["id"], inst_ix[r["ca_id"]], d, fx(r["furnizor_cui"], r["furnizor"]), cx(r["cpv"]),
+                   r["valoare"], curs.eur(r["valoare"], d), r["nume"] or "", r["cod"] or "", niv])
+        rez[r["ca_id"]]["da"] += 1
+        if niv < 2:
+            rez[r["ca_id"]]["da_val"] += r["valoare"] or 0
+    if inst_ix:
+        for r in db.execute(f"SELECT * FROM sicap_can WHERE ca_id IN ({ids}) ORDER BY data DESC, id DESC"):
+            can.append([r["id"], inst_ix[r["ca_id"]], r["data"] or "", cx(r["cpv"]), r["valoare"],
+                        curs.eur(r["valoare"], r["data"]), r["titlu"] or "", r["nr"] or "", r["procedura"] or "",
+                        r["tip_contract"] or ""])
+            rez[r["ca_id"]]["can"] += 1
+            rez[r["ca_id"]]["can_val"] += r["valoare"] or 0
+        for r in db.execute(f"SELECT * FROM sicap_cn WHERE ca_id IN ({ids}) ORDER BY data DESC, id DESC"):
+            cn.append([r["id"], inst_ix[r["ca_id"]], r["data"] or "", cx(r["cpv"]), r["valoare_estimata"],
+                       curs.eur(r["valoare_estimata"], r["data"]), r["titlu"] or "", r["nr"] or "",
+                       r["procedura"] or "", r["stare"] or "", int(r["contestatie"] or 0)])
+            rez[r["ca_id"]]["cn"] += 1
+    excluse = [{"id": r["id"], "text": r["text"]} for r in db.execute(
+        "SELECT id, text FROM sicap_ca WHERE inclus=0 ORDER BY text")]
+    rezumat = {"generat_la": azi, "autoritati": [
+        dict(id=i[0], nume=i[1], cui=i[2], **{k: round(v, 2) if isinstance(v, float) else v for k, v in rez[i[0]].items()})
+        for i in inst], "excluse": excluse,
+        "valori_de_verificat": sum(1 for x in da if x[9]), "curs": curs.sursa}
+    explorator = {"generat_la": azi, "curs": {"sursa": curs.sursa, "medii": curs.medii_anuale()},
+                  "inst": inst, "furn": furn, "cpv": cpvs, "da": da, "can": can, "cn": cn,
+                  "coloane": {"da": ["id", "inst", "data", "furnizor", "cpv", "lei", "euro", "obiect", "cod", "nivel"],
+                              "can": ["id", "inst", "data", "cpv", "lei", "euro", "obiect", "nr", "procedura", "tip"],
+                              "cn": ["id", "inst", "data", "cpv", "lei_estimat", "euro", "obiect", "nr", "procedura",
+                                     "stare", "contestatie"]}}
+    return rezumat, explorator
+
+
+def raport_de_verificat(expl):
+    """Text simplu: autoritățile incluse, valorile neobișnuite și cei mai mari furnizori, cu linkuri SICAP."""
+    inst, furn = expl["inst"], expl["furn"]
+    out = [f"SICAP - de verificat ({expl['generat_la']}), curs: {expl['curs']['sursa']}", "",
+           "Instituții incluse:"]
+    out += [f"  {i[2]} {i[1]} (id {i[0]})" for i in inst]
+    for niv, titlu in ((2, "Valori de peste 10 ori pragul legal (excluse din totaluri)"),
+                       (1, "Achiziții directe peste pragul legal, chiar cu TVA inclus")):
+        lst = sorted((x for x in expl["da"] if x[9] == niv), key=lambda x: -(x[5] or 0))
+        out += ["", f"{titlu}: {len(lst)}"]
+        for x in lst[:200]:
+            out.append(f"  {x[2]} | {x[5]:,.2f} lei | {furn[x[3]][1]} (CUI {furn[x[3]][0]}) | {inst[x[1]][1]} | "
+                       f"{x[7][:80]} | {BASE}/pub/direct-acquisition/view/{x[0]}")
+    tot = {}
+    for x in expl["da"]:
+        if x[9] < 2:
+            tot[x[3]] = tot.get(x[3], 0) + (x[5] or 0)
+    out += ["", "Cei mai mari furnizori (achiziții directe, fără valorile de peste 10 ori pragul):"]
+    for f, v in sorted(tot.items(), key=lambda t: -t[1])[:30]:
+        out.append(f"  {v:,.2f} lei | {furn[f][1]} (CUI {furn[f][0]})")
+    return "\n".join(out) + "\n"

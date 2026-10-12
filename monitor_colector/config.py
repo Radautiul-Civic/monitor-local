@@ -65,4 +65,8 @@ ARCHIVE_REGISTRE = {
 
 # SICAP: instituțiile se găsesc automat după „Rădăuți” în nume; aici se adaugă CUI-uri ale
 # instituțiilor care nu au orașul în denumire (ex. o școală numită doar după patron).
-SICAP_CUI_EXTRA = ()
+SICAP_CUI_EXTRA = (
+    "2563140",   # SERVICII COMUNALE S.A. (societatea municipiului; în SICAP numele nu conține „Rădăuți”)
+)
+# termeni de căutare suplimentari în lista autorităților SICAP, pentru CUI-urile de mai sus
+SICAP_TERMENI_EXTRA = ("SERVICII COMUNALE",)

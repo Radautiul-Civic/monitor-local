@@ -143,6 +143,15 @@ def compute(store, today=None):
     from . import urbanism
     out["urbanism"] = urbanism.indicatori(store)
 
+    try:   # SICAP: câte instituții și achiziții avem (tabelele există doar după prima colectare)
+        db = store.db
+        out["sicap"] = {
+            "institutii": db.execute("SELECT COUNT(*) FROM sicap_ca WHERE inclus=1").fetchone()[0],
+            "achizitii_directe": db.execute("SELECT COUNT(*) FROM sicap_da").fetchone()[0],
+            "atribuiri": db.execute("SELECT COUNT(*) FROM sicap_can").fetchone()[0],
+            "ultima": db.execute("SELECT MAX(data_finalizare) FROM sicap_da").fetchone()[0]}
+    except Exception:
+        out["sicap"] = None
     from . import stadiu
     out["stadiu"] = stadiu.compute(out)
     return out

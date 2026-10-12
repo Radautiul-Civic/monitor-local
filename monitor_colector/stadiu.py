@@ -96,8 +96,17 @@ def compute(ind):
     add("Achiziții publice", "Contracte publicate pe site", "complet" if (c.get("zile_de_la_ultima") or 999) <= 90 else "partial",
         f"Ultimul contract postat: {_zi(c.get('ultima_postare'))}"
         + (f" ({c['zile_de_la_ultima']} zile)." if c.get("zile_de_la_ultima") is not None else "."))
-    add("Achiziții publice", "Achiziții din SICAP", "planificat",
-        "Proceduri, anunțuri și contracte din sistemul național de achiziții (CUI 4244148).")
+    sc = ind.get("sicap") or {}
+    if sc.get("achizitii_directe"):
+        add("Achiziții publice", "Achiziții din SICAP", "complet",
+            f"{sc['institutii']} instituții din Rădăuți, {sc['achizitii_directe']:,} achiziții directe și "
+            f"{sc['atribuiri']:,} contracte atribuite prin licitație, din 2018; ultima achiziție: {_zi(sc['ultima'])}."
+            .replace(",", "."))
+        add("Achiziții publice", "Câștigătorii licitațiilor", "planificat",
+            "Furnizorul câștigător al fiecărui contract atribuit prin licitație (din anunțurile de atribuire).")
+    else:
+        add("Achiziții publice", "Achiziții din SICAP", "planificat",
+            "Proceduri, anunțuri și contracte din sistemul național de achiziții, pentru toate instituțiile din Rădăuți.")
 
     # ---- Alte surse ----
     add("Alte surse", "Litigii", "planificat", "Dosarele în care primăria e parte (portal.just.ro, ReJust).")
