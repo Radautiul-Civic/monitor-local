@@ -70,6 +70,11 @@ jobs:
         env:
           MC_OCR_LANG: ron
 
+      - name: Registre de urbanism (tabele din PDF)
+        if: always()
+        run: python -m monitor_colector urbanism
+        continue-on-error: true
+
       - name: Documente Word din textele extrase (pentru verificare)
         if: always()
         run: python -m monitor_colector word
