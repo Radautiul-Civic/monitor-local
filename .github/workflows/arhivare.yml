@@ -71,12 +71,4 @@ jobs:
           path: data-arhiva
           key: pastrare-${{ github.run_id }}
 
-      - name: Raport
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: arhivare
-          path: |
-            data-arhiva/stare.json
-            data-arhiva/manifest.csv
-          retention-days: 14
+      # Raportul (starea și manifestul) se urcă în zona cu parolă, la /intern/date/arhiva-*.
