@@ -167,6 +167,7 @@ jobs:
           path: |
             data/urbanism.json
             data/indicatori.md
+            data/urbanism-registre.txt
             data/indicatori.json
             data/raw/**
           if-no-files-found: ignore
