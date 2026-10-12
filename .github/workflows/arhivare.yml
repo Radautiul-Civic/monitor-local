@@ -1,0 +1,82 @@
+name: Arhivare (copii de siguranță)
+
+# Copii ale tuturor fișierelor și paginilor de pe site-urile primăriei (arhiva veche și
+# site-ul nou): pe hostingul asociației (folder protejat) și în Internet Archive.
+# Rulează de două ori pe zi până se copiază tot; apoi preia doar ce e nou.
+
+on:
+  schedule:
+    - cron: "40 1,13 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: arhivare
+  cancel-in-progress: false
+
+jobs:
+  arhiveaza:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Restaurare stare (inventarul și amprentele, fără fișiere)
+        uses: actions/cache/restore@v4
+        with:
+          path: data-arhiva
+          key: pastrare-${{ github.run_id }}
+          restore-keys: pastrare-
+
+      - name: Inventar (biblioteca media, pagini, conținut)
+        run: python -m monitor_colector.pastrare inventar
+        continue-on-error: true
+
+      - name: Copiere pe hosting (folder protejat), cu amprentă SHA-256
+        run: python -m monitor_colector.pastrare copiaza --minute 200
+        continue-on-error: true
+        timeout-minutes: 215
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+
+      - name: Trimitere în Internet Archive (Wayback Machine)
+        run: python -m monitor_colector.pastrare wayback --minute 90
+        continue-on-error: true
+        timeout-minutes: 100
+        env:
+          IA_ACCESS: ${{ secrets.IA_ACCESS }}
+          IA_SECRET: ${{ secrets.IA_SECRET }}
+
+      - name: Manifest (adrese, date, amprente)
+        if: always()
+        run: python -m monitor_colector.pastrare manifest
+
+      - name: Publicare manifest și stare
+        if: always()
+        run: python -m monitor_colector.pastrare publica
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+
+      - name: Salvare stare
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data-arhiva
+          key: pastrare-${{ github.run_id }}
+
+      - name: Raport
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arhivare
+          path: |
+            data-arhiva/stare.json
+            data-arhiva/manifest.csv
+          retention-days: 14
