@@ -167,7 +167,15 @@
 
   // ---------- pagini ----------
   function acasa() {
-    var h = head("Ce publică Primăria Municipiului Rădăuți",
+    var I = BASE + "assets/img/";
+    var hero = '<figure class="hero"><picture>' +
+      '<source media="(max-width:640px)" type="image/webp" srcset="' + I + 'banner-mobil.webp">' +
+      '<source media="(max-width:640px)" srcset="' + I + 'banner-mobil.jpg">' +
+      '<source type="image/webp" srcset="' + I + 'banner-1200.webp 1200w, ' + I + 'banner-1983.webp 1983w" sizes="(max-width:1080px) 100vw, 1048px">' +
+      '<img src="' + I + 'banner-1200.jpg" srcset="' + I + 'banner-1200.jpg 1200w, ' + I + 'banner-1983.jpg 1983w" sizes="(max-width:1080px) 100vw, 1048px" width="1983" height="793" ' +
+      'alt="Monitor local, un proiect Rădăuțiul Civic: informații publice, pentru o comunitate mai transparentă și mai implicată. Hotărâri, ședințe, urbanism, achiziții publice." fetchpriority="high">' +
+      "</picture></figure>";
+    var h = hero + head("Ce publică Primăria Municipiului Rădăuți",
       "Monitorul verifică zilnic actele publicate de primărie și consiliul local, din surse publice: hotărâri, ședințe, urbanism, achiziții. Fiecare cifră duce la documentul-sursă.");
     var pe = IND.hcl_pe_ani || {}, ani = Object.keys(pe).sort();
     var total = ani.reduce(function (a, y) { return a + pe[y].gasite; }, 0);
@@ -296,16 +304,87 @@
     });
   }
 
+  var URB = null;
+  function lei(v) { return v == null ? "-" : (v >= 1e6 ? dec((v / 1e6).toFixed(1)) + " mil." : nr(Math.round(v))) + " lei"; }
+  function hbars(obj, total) {
+    var k = Object.keys(obj).sort(function (a, b) { return obj[b] - obj[a]; }), max = k.length ? obj[k[0]] : 1;
+    return '<div class="hbars">' + k.map(function (c) {
+      return '<div class="hb"><span class="hb-l">' + esc(c) + '</span><span class="hb-t"><i style="width:' + Math.max(2, 100 * obj[c] / max) + '%"></i></span><span class="hb-v">' +
+        obj[c] + (total ? ' <small>' + Math.round(100 * obj[c] / total) + "%</small>" : "") + "</span></div>";
+    }).join("") + "</div>";
+  }
+
+  function lung(t) {   // texte foarte lungi: primele ~240 de caractere, restul la cerere
+    if (t.length <= 280) return esc(t);
+    var cut = t.lastIndexOf(" ", 240);
+    return esc(t.slice(0, cut > 0 ? cut : 240)) + '… <details class="more-t"><summary>mai mult</summary>' + esc(t.slice(cut > 0 ? cut : 240)) + "</details>";
+  }
+  function luniContinue(pe, n) {   // ultimele n luni consecutive până la ultima lună cu date
+    var k = Object.keys(pe).sort(); if (!k.length) return [];
+    var y = +k[k.length - 1].slice(0, 4), m = +k[k.length - 1].slice(5), out = [];
+    for (var i = 0; i < n; i++) { out.unshift(y + "-" + (m < 10 ? "0" : "") + m); m--; if (!m) { m = 12; y--; } }
+    return out;
+  }
+
   function registru(el, r, kind) {
-    var reg = (IND.registre_urbanism || {})[kind] || {}, nume = kind === "cu" ? "Certificate de urbanism" : "Autorizații de construire";
-    var z = reg.zile_neacoperite;
-    simplu(el, r, {
-      key: "registre", filter: function (x) { return x.tip === kind; },
-      titlu: "Urbanism", text: "Registrele certificatelor de urbanism și ale autorizațiilor de construire, publicate de primărie pe perioade.", h2: "Registre: " + nume.toLowerCase(),
-      top: '<div class="grid">' + tile("Ultimul registru acoperă până la", zi(reg.ultima_perioada_pana_la), "", "") +
-        tile("Zile fără registru publicat", z == null ? "-" : nr(z), z == null ? "" : zile(z), "de la sfârșitul ultimei perioade până azi") + "</div>",
-      note: "Fiecare registru listează actele emise într-o perioadă. Detaliile din registre (solicitanți, adrese) nu se republică aici; deschide documentul la sursă.",
-      opt: { an: function (x) { return (x.pana_la || "").slice(0, 4); }, text: function (x) { return x.titlu; }, item: function (x) { return doc(zi(x.de_la) + " - " + zi(x.pana_la), x.titlu, x.postat ? "postat " + zi(x.postat) : "", x); } }
+    if (!URB) {
+      el.innerHTML = head("Urbanism", "", r) + '<p class="updated">Se încarcă registrele...</p>';
+      get(BASE + "date/urbanism.json").then(function (d) { URB = d; registru(el, r, kind); })
+        .catch(function () { URB = { cu: [], ac: [] }; registru(el, r, kind); });
+      return;
+    }
+    var reg = (IND.registre_urbanism || {})[kind] || {}, U = ((IND.urbanism || {})[kind]) || null, acte = URB[kind] || [];
+    var cu = kind === "cu", nume = cu ? "Certificate de urbanism" : "Autorizații de construire și desființare";
+    var z = reg.zile_neacoperite, ani = U ? Object.keys(U.pe_ani).sort() : [], an = ani[ani.length - 1];
+    var h = head("Urbanism", "Ce se construiește în Rădăuți: certificatele de urbanism și autorizațiile de construire emise de primărie, extrase din registrele publicate.", r) + '<div class="grid">';
+    if (U && an) {
+      h += tile(nume + " în " + an, nr(U.pe_ani[an]), "", "până la " + zi(reg.ultima_perioada_pana_la));
+      if (!cu && U.valoare_pe_ani && U.valoare_pe_ani[an]) h += tile("Valoarea lucrărilor autorizate în " + an, lei(U.valoare_pe_ani[an]), "", "suma valorilor declarate în autorizații");
+      if (cu) h += tile("Solicitate de firme și instituții", Math.round(100 * U.persoane_juridice / Math.max(U.total, 1)) + "%", "", nr(U.persoane_juridice) + " din " + nr(U.total) + " certificate");
+    }
+    h += tile("Zile fără registru publicat", z == null ? "-" : nr(z), z == null ? "" : zile(z), "ultimul registru acoperă până la " + zi(reg.ultima_perioada_pana_la)) + "</div>";
+    if (U) {
+      h += '<section class="card section"><h2>' + esc(nume) + ' pe luni</h2><p class="note">După data emiterii, ultimele 18 luni până la ultimul registru publicat. Lunile fără registru publicat apar goale.</p><div class="chart" id="ch-u"></div></section>';
+      var cat = U.categorii_pe_ani[an] || {};
+      h += '<div class="grid two"><section class="card"><h2>Pentru ce (' + an + ')</h2><p class="note">Categorii după scopul declarat, grupate automat după cuvinte-cheie.</p>' + hbars(cat, U.pe_ani[an]) + "</section>" +
+        '<section class="card"><h2>Străzile cu cele mai multe ' + (cu ? "certificate" : "autorizații") + '</h2><p class="note">Toți anii din registre.</p>' +
+        hbars(U.top_strazi.slice(0, 10).reduce(function (o, x) { o[x[0]] = x[1]; return o; }, {})) + "</section></div>";
+      if (!cu && U.fara_natura_constructiei) h += '<p class="callout">În ' + nr(U.fara_natura_constructiei) + " autorizații din registrele în format vechi, coloana „Natura construcției” este necompletată de primărie: din registru nu se poate afla ce se construiește.</p>";
+    }
+    h += '<section class="card section"><h2>Toate ' + (cu ? "certificatele" : "autorizațiile") + '</h2><p class="note">Exact cum apar în registrele primăriei. Fiecare rând trimite la registrul-sursă.</p><div id="lst"></div></section>' +
+      '<section class="card section"><h2>Registrele originale</h2><div id="lst2"></div></section>';
+    el.innerHTML = h;
+    if (U) {
+      var L2 = luniContinue(U.pe_luni, 18);
+      chart($("ch-u"), { cats: L2.map(function (m) { return LUNI[+m.slice(5) - 1].slice(0, 3) + (m.slice(5) === "01" || m === L2[0] ? " " + m.slice(2, 4) : ""); }), label: nume + " pe luni",
+        series: [{ name: nume, color: "var(--s1)", values: L2.map(function (m) { return U.pe_luni[m] || 0; }) }],
+        tooltip: function (i) { var m = L2[i]; return "<b>" + LUNI[+m.slice(5) - 1] + " " + m.slice(0, 4) + "</b><br>" + (U.pe_luni[m] || 0) + (cu ? " certificate" : " autorizații"); } });
+    }
+    var cats = {}; acte.forEach(function (a) { cats[a.categorie || "Altele"] = 1; });
+    lista($("lst"), acte, {
+      placeholder: cu ? "Caută: stradă, solicitant, scop (ex. Putnei, locuință, SRL)" : "Caută: stradă, solicitant, lucrare, constructor",
+      an: function (a) { return (a.data || "").slice(0, 4); },
+      text: function (a) { return [a.nr, a.solicitant, a.adresa, a.strada, a.scop, a.proiectant, a.executant, a.cf_cadastral].join(" "); },
+      extraFilter: { html: '<select aria-label="Categoria"><option value="">Toate categoriile</option>' + Object.keys(cats).sort().map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + "</option>"; }).join("") + "</select>", test: function (a, e) { return (a.categorie || "Altele") === e; } },
+      item: function (a) {
+        var m = [];
+        if (a.strada || a.adresa) m.push(esc(a.strada || a.adresa));
+        if (a.valoare) m.push(lei(a.valoare));
+        if (a.sup_construita) m.push("Sc " + esc(a.sup_construita) + " mp");
+        if (a.sup_desfasurata) m.push("Sd " + esc(a.sup_desfasurata) + " mp");
+        if (a.cf_cadastral) m.push("CF " + esc(a.cf_cadastral));
+        if (a.proiectant) m.push("proiectant: " + esc(a.proiectant));
+        if (a.executant) m.push("constructor: " + esc(a.executant));
+        var f = safeUrl(a.registru_pdf);
+        return '<div class="doc"><div class="h"><span class="id">' + (cu ? "CU " : "AC ") + esc(a.nr || "fără nr.") + " · " + esc(zi(a.data)) + '</span><span class="tag">' + esc(a.categorie || "Altele") + "</span></div>" +
+          '<div class="t"><strong>' + esc(a.solicitant || "") + "</strong>" + (a.scop ? " - " + lung(a.scop) : (cu ? "" : ' - <span class="muted">natura construcției necompletată în registru</span>')) + "</div>" +
+          (a.utilizabil ? '<div class="t warn-t">' + esc(a.utilizabil) + "</div>" : "") +
+          '<div class="m"><span>' + m.join(" · ") + "</span>" + (f ? '<a href="' + esc(f) + '" rel="noopener">registrul (PDF)</a>' : "") + "</div></div>";
+      }
+    });
+    lista($("lst2"), (L.registre || []).filter(function (x) { return x.tip === kind; }), {
+      an: function (x) { return (x.pana_la || "").slice(0, 4); }, text: function (x) { return x.titlu; },
+      item: function (x) { return doc(zi(x.de_la) + " - " + zi(x.pana_la), x.titlu, x.postat ? "postat " + zi(x.postat) : "", x); }
     });
   }
 

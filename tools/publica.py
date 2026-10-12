@@ -98,7 +98,7 @@ def main():
         rel = os.path.relpath(dirpath, site)
         for n in names:
             files.append((os.path.join(dirpath, n), "" if rel == "." else rel, n))
-    for name in ("indicatori.json", "liste.json"):
+    for name in ("indicatori.json", "liste.json", "urbanism.json"):
         p = os.path.join(ROOT, "data", name)
         if os.path.exists(p):
             files.append((p, "date", name))

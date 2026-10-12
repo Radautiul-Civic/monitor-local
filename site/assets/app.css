@@ -37,6 +37,15 @@ nav.main a[aria-current="page"]{background:var(--ink);color:var(--surface)}
 .intern-flag{background:#7a1f1f;color:#fff;font-size:.85rem;padding:6px 0}
 .intern-flag .wrap{display:flex;gap:8px;align-items:center}
 
+/* banner (pagina Acasă) */
+.hero{margin:20px 0 0;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);background:#eef3f8}
+.hero img{display:block;width:100%;height:auto}
+.hero+.page-head{padding-top:20px}
+.brand{flex-direction:row;align-items:center;gap:10px}
+.brand img{width:36px;height:37px;border-radius:8px;background:#fff;padding:2px;flex:none}
+.brand .bt{display:flex;flex-direction:column;line-height:1.15;color:var(--ink);font-size:inherit}
+.brand .bt span{font-size:.8rem;color:var(--muted)}
+
 /* titluri de secțiune */
 .page-head{padding:28px 0 8px}
 .page-head h1{font-size:1.75rem;line-height:1.2;margin:0 0 6px;letter-spacing:-.015em}
@@ -61,6 +70,21 @@ a.tile:hover{border-color:var(--accent)}
 .tile .val small{font-size:.95rem;font-weight:500;color:var(--muted);margin-left:4px;letter-spacing:0}
 .tile .sub{font-size:.85rem;color:var(--muted)}
 .tile .sub strong{color:var(--ink-2);font-weight:600}
+
+.grid.two{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.hbars{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.hb{display:grid;grid-template-columns:minmax(0,14rem) 1fr 4.5rem;gap:10px;align-items:center;font-size:.88rem}
+.hb-l{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb-t{height:12px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.hb-t i{display:block;height:100%;background:var(--s1);border-radius:0 4px 4px 0}
+.hb-v{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink)}
+.hb-v small{color:var(--muted)}
+.muted{color:var(--muted)}
+details.more-t{display:inline}
+details.more-t summary{display:inline;cursor:pointer;color:var(--accent);font-size:.88rem}
+details.more-t[open] summary{display:none}
+.warn-t{color:var(--ink-2);border-left:3px solid var(--warn);padding-left:8px;font-size:.9rem}
+@media (max-width:480px){.hb{grid-template-columns:minmax(0,1fr) 3.8rem}.hb-t{grid-column:1/-1;order:3}}
 
 /* stadiu */
 .status-group{margin-top:8px}

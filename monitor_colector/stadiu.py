@@ -80,8 +80,10 @@ def compute(ind):
         r = reg.get(k) or {}
         if r.get("ultima_perioada_pana_la"):
             z = r.get("zile_neacoperite") or 0
+            u = (ind.get("urbanism") or {}).get(k) or {}
             add("Urbanism", nume, "complet" if z <= 90 else "partial",
-                f"Registre publicate până la {_zi(r['ultima_perioada_pana_la'])}; {z} zile fără registru publicat.")
+                (f"{u['total']} acte extrase din registre. " if u.get("total") else "")
+                + f"Registre publicate până la {_zi(r['ultima_perioada_pana_la'])}; {z} zile fără registru publicat.")
         else:
             add("Urbanism", nume, "lipsa", "Niciun registru găsit.")
     add("Urbanism", "Planuri urbanistice (PUG, PUZ)", "planificat",

@@ -334,6 +334,39 @@ class TestArhiva2013(unittest.TestCase):
         self.assertTrue(all(i["year"] == 2013 for i in items))
 
 
+class TestUrbanism(unittest.TestCase):
+    def test_tabel_nou(self):
+        from monitor_colector import urbanism as u
+        antet = ["Nr.\nCU", "Data CU", "Solicitant", "Adresa imobil", "Numar\nCadastral", "Carte\nFunciara",
+                 "Scopul solicitarii CU", "CU poate fi / nu poate fi utilizat"]
+        r1 = ["1", "05.01.2026", "POPESCU\nION", "jud. SUCEAVA, mun.\nRĂDĂUŢI, str.\nSTEFAN CEL MARE, nr. 17",
+              "CF: 30471-C1-\nU42\n1730/XVII", "CF: 30471-C1-\nU42\n1730/XVII",
+              "D e b r a n s a r e d e l a s i s t e m", "Debransare de la sistem"]
+        r2 = ["106", "16.03.2026", "CENTRUL DE PROCEDURI PENTRU SOLICITANTI", "str. PUTNEI, nr. 1", "CF: 1", "CF: 1",
+              "Schimbare destinație Nu poate fi folosit întrucât e casă", "idem"]
+        r3 = ["7", "05.01.2026", "SC BEST STYLE SRL", "str. CALEA BUCOVINEI, nr. 3", "", "", "Construire spatiu comercial, bransamente", ""]
+        acte = u._parse_nou([[antet, r1, r2], [r3]])
+        self.assertEqual(len(acte), 3)
+        a1, a2, a3 = acte
+        self.assertEqual(a1["scop"], "Debransare de la sistem")
+        self.assertEqual(a1["cf_cadastral"], "30471-C1-U42, 1730/XVII")
+        self.assertEqual(u.strada(a1["adresa"]), "Stefan cel Mare")
+        self.assertEqual(a2["solicitant"], "CENTRUL DE PROCEDURI PENTRU SOLICITANTI")   # nu e luat drept antet
+        self.assertTrue(a2["utilizabil"].startswith("Nu poate fi folosit"))
+        self.assertEqual(u.categorie(a3["scop"]), "Comercial și servicii")
+        self.assertTrue(u.persoana_juridica(a3["solicitant"]))
+        self.assertFalse(u.persoana_juridica("POPESCU ION"))
+
+    def test_valori_si_strazi(self):
+        from monitor_colector import urbanism as u
+        self.assertEqual(u.valoare("368.959,14"), 368959.14)
+        self.assertEqual(u.valoare("1286299,69 lei fara TVA"), 1286299.69)
+        self.assertEqual(u.valoare("3740"), 3740.0)
+        self.assertEqual(u.strada_centralizator("SUCEAVA, municipiul RĂDĂUŢI,RĂDĂUŢICA LARASI, Nr. 7", {}), "Calarasi")
+        self.assertEqual(u.strada_centralizator("RĂDĂUŢI,RĂDĂUŢIAN DRONIC MOTRESCU, Nr. 3",
+                                                {"andronicmotrescu": "Andronic Motrescu"}), "Andronic Motrescu")
+
+
 class TestVerificari(unittest.TestCase):
     def test_false_positive_hidden_confirmed_kept(self):
         tmp = tempfile.mkdtemp()

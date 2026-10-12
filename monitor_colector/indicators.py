@@ -134,6 +134,9 @@ def compute(store, today=None):
         out[key] = {r[0]: r[1] for r in db.execute(
             "SELECT substr(date,1,4) AS y, COUNT(*) FROM posts WHERE source=? GROUP BY y ORDER BY y", (src,))}
 
+    from . import urbanism
+    out["urbanism"] = urbanism.indicatori(store)
+
     from . import stadiu
     out["stadiu"] = stadiu.compute(out)
     return out
@@ -176,6 +179,8 @@ def to_markdown(ind):
     L += [f"- {k}: {v['total']} total, {v['descarcate']} descărcate, {v['cu_text']} cu text, "
           f"{v['scanate']} scanate, {v['ocr_facut']} OCR" for k, v in ind.get("documente_pe_surse", {}).items()]
     L.append(f"- diagnostic: {ind.get('hcl_diagnostic_nume_fisier', 0)} HCL cu nume de fișier necitit de parser")
+    for tip, v in (ind.get("urbanism") or {}).items():
+        L.append(f"- urbanism {tip.upper()}: {v['total']} acte extrase din registre; pe ani: {v['pe_ani']}")
     L += ["", "## Stadiul monitorului"]
     for it in ind.get("stadiu", []):
         L.append(f"- [{it['stare']}] {it['sectiune']} / {it['element']}: {it['detaliu']}")

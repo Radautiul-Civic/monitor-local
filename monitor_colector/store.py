@@ -46,6 +46,13 @@ CREATE TABLE IF NOT EXISTS registries (
     wp_id INTEGER PRIMARY KEY, kind TEXT, period_start TEXT, period_end TEXT,
     posted TEXT, title TEXT
 );
+CREATE TABLE IF NOT EXISTS urbanism_acte (
+    tip TEXT, cheie TEXT, data TEXT, nr TEXT, registru_wp_id INTEGER, registru_pdf TEXT,
+    format TEXT, date_json TEXT, PRIMARY KEY (tip, cheie)
+);
+CREATE TABLE IF NOT EXISTS urbanism_registre (
+    url TEXT PRIMARY KEY, sha256 TEXT, versiune INTEGER, format TEXT, acte INTEGER, parsat_la TEXT
+);
 CREATE TABLE IF NOT EXISTS runs (
     started TEXT, finished TEXT, command TEXT, stats TEXT
 );
