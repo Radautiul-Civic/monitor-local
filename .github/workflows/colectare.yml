@@ -122,5 +122,7 @@ jobs:
             data_categorii.txt
             data/raw/**
             data/liste.json
+            data/sicap.json
+            data/sicap-de-verificat.txt
           if-no-files-found: ignore
           retention-days: 14
