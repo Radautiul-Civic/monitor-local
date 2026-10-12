@@ -75,6 +75,17 @@ jobs:
         run: python -m monitor_colector urbanism
         continue-on-error: true
 
+      - name: Achiziții din SICAP (zilnic ultimele 90 de zile; complet din 2018 la cerere)
+        if: always()
+        run: |
+          if [ "${{ github.event.inputs.colectare_completa }}" = "true" ]; then
+            python -m monitor_colector sicap --tot
+          else
+            python -m monitor_colector sicap
+          fi
+        continue-on-error: true
+        timeout-minutes: 150
+
       - name: Documente Word din textele extrase (pentru verificare)
         if: always()
         run: python -m monitor_colector word
