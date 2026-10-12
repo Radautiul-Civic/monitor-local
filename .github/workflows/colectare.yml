@@ -107,6 +107,7 @@ jobs:
           path: |
             data/indicatori.json
             data/indicatori.md
+            data/urbanism-registre.txt
             data_categorii.txt
             data/raw/**
             data/liste.json
