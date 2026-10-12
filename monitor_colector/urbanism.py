@@ -420,13 +420,18 @@ CAMPURI_PUBLICE = ["nr", "data", "solicitant", "adresa", "adresa_beneficiar", "s
 
 def export(store):
     """data/urbanism.json: toate actele, așa cum sunt publicate în registrele primăriei."""
+    from . import geocod
     out = {"cu": [], "ac": []}
     links = {r["wp_id"]: r["link"] for r in store.db.execute("SELECT wp_id, link FROM posts")}
+    coord = geocod.coordonate(store.db)
     for r in store.db.execute("SELECT tip, registru_wp_id, registru_pdf, date_json FROM urbanism_acte "
                               "ORDER BY data DESC, CAST(nr AS INTEGER) DESC"):
         a = json.loads(r["date_json"])
         x = {k: a[k] for k in CAMPURI_PUBLICE if a.get(k) not in (None, "", "/")}
         x["registru_pdf"], x["registru_pagina"] = r["registru_pdf"], links.get(r["registru_wp_id"])
+        g = geocod.pentru(coord, a.get("strada"), a.get("adresa"))
+        if g:   # poziția pe hartă (căutată automat după adresă, în OpenStreetMap)
+            x["lat"], x["lon"], x["precizie"] = g
         out.setdefault(r["tip"], []).append(x)
     return out
 

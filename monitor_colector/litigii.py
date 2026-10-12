@@ -272,7 +272,14 @@ def stare(d, azi=None):
     trec = [s for s in sed if s["data"][:10] < azi]
     ult = trec[-1] if trec else None
     sol = next((s for s in reversed(trec) if s.get("solutie") and not AMANARI.search(s.get("solutie") or "")), None)
-    return {"stare": "în curs" if viit or (ult and not sol) else ("fără termen viitor" if sed else "fără ședințe"),
+    # fără termen viitor și fără soluție: în curs doar dacă ultima ședință e din ultimul an
+    # (dosarele vechi fără soluție afișată pe portal sunt, de regulă, închise de mult)
+    recent = bool(ult) and ult["data"][:10] >= (date.fromisoformat(azi) - timedelta(days=365)).isoformat()
+    if not sed:   # dosar nou, încă fără termen fixat
+        recent = (d.get("data") or "")[:10] >= (date.fromisoformat(azi) - timedelta(days=365)).isoformat()
+        return {"stare": "în curs" if recent else "fără ședințe", "termen": None, "ultima": None,
+                "solutie": None, "sumar": None, "data_solutie": None}
+    return {"stare": "în curs" if viit or (ult and not sol and recent) else "fără termen viitor",
             "termen": viit[0]["data"][:10] if viit else None,
             "ultima": ult["data"][:10] if ult else None,
             "solutie": (sol or {}).get("solutie"), "sumar": (sol or {}).get("solutieSumar"),
@@ -308,6 +315,69 @@ def _rol(calitate):
     return "altă calitate"
 
 
+INITIATOR = re.compile(r"RECLAMANT|PETENT|CREDITOR|CONTESTATOR|PETITIONAR|APELANT|RECURENT|REVIZUENT|PARTE CIVILA|PERSOANA VATAMATA")
+RESPONDENT = re.compile(r"PARAT|INTIMAT|DEBITOR|CHEMAT|INCULPAT|PARTE RESPONSABILA")
+
+
+def verdict(stadiu, solutie, sumar):
+    """„admite” / „respinge” / „partial” / None, pentru cererea care se judecă în etapa respectivă
+    (acțiunea la fond, apelul în apel, recursul în recurs)."""
+    t = _n((sumar or "") + " " + (solutie or ""))
+    cale = r"(APELUL|APELURILE|RECURSUL|RECURSURILE)" if _n(stadiu) in ("APEL", "RECURS") else \
+        r"(ACTIUNEA|CEREREA|CERERILE|PLANGEREA|CONTESTATIA|CEREREA DE CHEMARE IN JUDECATA)"
+    if re.search(r"\bADMITE IN PARTE " + cale, t) or re.search(r"\bADMITE IN PARTE\b", _n(solutie)):
+        return "partial"
+    if re.search(r"\bRESPINGE " + cale, t) or re.search(r"\bANULEAZA " + cale, t):
+        return "respinge"
+    if re.search(r"\bADMITE " + cale, t):
+        return "admite"
+    s0 = _n(solutie)
+    if s0.startswith("ADMITE") and "EXCEPTIA" not in s0:
+        return "admite"
+    if s0.startswith("RESPINGE") or s0.startswith("ANULEAZA"):
+        return "respinge"
+    return None
+
+
+def rezultat_etapa(etapa, sumar):
+    """Rezultatul pentru municipiu într-o etapă: câștigat / pierdut / parțial / None (neclar)."""
+    v = verdict(etapa.get("stadiu"), etapa.get("solutie"), sumar)
+    if not v:
+        return None
+    if v == "partial":
+        return "parțial"
+    cal = " ".join(_n(e.get("calitate")) for e in etapa.get("entitati") or [])
+    if INITIATOR.search(cal):
+        return "câștigat" if v == "admite" else "pierdut"
+    if RESPONDENT.search(cal):
+        return "pierdut" if v == "admite" else "câștigat"
+    return None
+
+
+GRUPE_OBIECT = [
+    ("Contravenții", r"CONTRAVEN|PROCES VERBAL"),
+    ("Anulare act administrativ", r"ANULARE ACT|ACT ADMINISTRATIV|SUSPENDARE EXECUTARE ACT|HOTARAR"),
+    ("Insolvență", r"INSOLVEN|FALIMENT"),
+    ("Executare silită", r"EXECUTAR"),
+    ("Pretenții și despăgubiri", r"PRETENT|DESPAGUB|RASPUNDERE|DAUNE"),
+    ("Proprietate și fond funciar", r"FOND FUNCIAR|UZUCAPIUNE|REVENDICARE|GRANITUIRE|PARTAJ|CONSTATARE|PROPRIETATE|INTABULARE|CARTE FUNCIARA"),
+    ("Funcționari publici și muncă", r"FUNCTIONAR|MUNCA|SALARI|DREPTURI BANESTI|CONTESTATIE DECIZIE DE CONCEDIERE"),
+    ("Taxe și impozite", r"TAXE|IMPOZIT|TIMBRU|FISCAL|CONTESTATIE ACT ADMINISTRATIV FISCAL"),
+    ("Contracte și achiziții", r"ACHIZIT|CONTRACT|ATRIBUIRE"),
+    ("Urbanism și construcții", r"AUTORIZA|CONSTRUCT|DEMOLAR|DESFIINTAR|URBANISM"),
+    ("Obligația de a face", r"OBLIGATIA DE A FACE|OBLIGATIE DE A FACE"),
+    ("Informații de interes public", r"544|INFORMATI"),
+]
+
+
+def grup_obiect(obiect):
+    o = _n(obiect)
+    for nume, rx in GRUPE_OBIECT:
+        if re.search(rx, o):
+            return nume
+    return "Altele"
+
+
 def export(store, public=True, azi=None):
     """Dosarele, grupate pe număr (aceeași cauză la fond, apel, recurs). public=True ascunde
     numele persoanelor fizice."""
@@ -319,6 +389,7 @@ def export(store, public=True, azi=None):
         d = json.loads(r["json"])
         ent = json.loads(r["entitati"])
         s = stare(d, azi)
+        sumar = s.get("sumar")
         if public:   # rezumatul soluției poate numi persoane fizice („obligă pârâtul X...”): doar intern
             s["sumar"] = None
         parti = []
@@ -329,18 +400,36 @@ def export(store, public=True, azi=None):
         etapa = {"instanta": instanta(r["institutie"]), "cod_instanta": r["institutie"], "stadiu": r["stadiu"],
                  "data": r["data"], "materie": r["materie"], "obiect": r["obiect"], "parti": parti,
                  "entitati": [{"entitate": e["entitate"], "calitate": e["calitate"]} for e in ent], **s}
+        etapa["rezultat"] = rezultat_etapa(etapa, sumar) if s["stare"] != "în curs" else None
         pe_nr.setdefault(r["numar"], []).append(etapa)
     dosare = []
     for nr, et in pe_nr.items():
         et.sort(key=lambda e: (e["data"] or "", {"Fond": 0, "Apel": 1, "Recurs": 2}.get(e["stadiu"] or "", 3)))
         prima, ultima = et[0], et[-1]
         rol = _rol((prima["entitati"] or [{}])[0].get("calitate"))
+        in_curs = any(e["stare"] == "în curs" for e in et)
+        # rezultatul: ultima etapă cu o soluție interpretabilă; dacă o etapă ulterioară e în curs, e provizoriu
+        decise = [e for e in et if e.get("rezultat")]
+        rez = decise[-1]["rezultat"] if decise else None
+        provizoriu = bool(decise) and in_curs
+        adverse, vazute = [], set()
+        for e in et:
+            for p in e["parti"]:
+                if not p["municipiu"] and (p["nume"], p["calitate"]) not in vazute:
+                    vazute.add((p["nume"], p["calitate"]))
+                    adverse.append({"nume": p["nume"], "calitate": p["calitate"]})
+        stadii = [e["stadiu"] for e in et if e["stadiu"]]
         dosare.append({"numar": nr, "data": prima["data"], "an": (prima["data"] or "")[:4], "obiect": prima["obiect"] or ultima["obiect"],
+                       "grup": grup_obiect(prima["obiect"] or ultima["obiect"]),
                        "materie": prima["materie"], "entitati": sorted({e["entitate"] for x in et for e in x["entitati"]}),
-                       "rol": rol, "stare": "în curs" if any(e["stare"] == "în curs" for e in et) else ultima["stare"],
+                       "rol": rol, "stare": "în curs" if in_curs else ultima["stare"],
                        "termen": min((e["termen"] for e in et if e["termen"]), default=None),
                        "solutie": ultima["solutie"], "sumar": ultima["sumar"], "data_solutie": ultima["data_solutie"],
-                       "etape": et})
+                       "rezultat": ("în curs" if in_curs and not rez else rez) or "neclar", "provizoriu": provizoriu,
+                       "rezultat_la": f"{decise[-1]['stadiu'] or ''} · {decise[-1]['instanta']}".strip(" ·") if decise else None,
+                       "stadiu_max": stadii[-1] if stadii else None, "instante": sorted({e["instanta"] for e in et}),
+                       "cod_portal": (nr.split("/")[1] if nr and nr.count("/") >= 2 else None),
+                       "adverse": adverse, "etape": et})
     dosare.sort(key=lambda x: x["data"] or "", reverse=True)
     return {"generat_la": azi.isoformat(), "dosare": dosare}
 
@@ -362,7 +451,10 @@ def indicatori(ex):
         for e in d["etape"]:
             instante[e["instanta"]] = instante.get(e["instanta"], 0) + 1
     top = lambda o, n: dict(sorted(o.items(), key=lambda x: -x[1])[:n])
-    return {"total": len(D), "in_curs": sum(1 for d in D if d["stare"] == "în curs"),
+    rez = {}
+    for d in D:
+        rez[d["rezultat"]] = rez.get(d["rezultat"], 0) + 1
+    return {"total": len(D), "in_curs": sum(1 for d in D if d["stare"] == "în curs"), "rezultate": rez,
             "pe_ani": dict(sorted(pe_ani.items())), "obiecte": top(obiecte, 15), "materii": top(materii, 10),
             "roluri": roluri, "instante": top(instante, 10),
             "termene_viitoare": sorted(({"numar": d["numar"], "termen": d["termen"], "obiect": d["obiect"]}

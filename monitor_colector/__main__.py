@@ -7,6 +7,8 @@
   ocr [--max N] [--minute M]  OCR pe PDF-urile scanate (tesseract, limba română)
   urbanism             tabelele din registrele CU/AC -> baza de date
   sicap [--tot]        achizițiile din SICAP ale instituțiilor din Rădăuți (--tot = din 2018) și câștigătorii licitațiilor
+  geocodare [--minute M]  coordonatele adreselor din registrele de urbanism (OpenStreetMap), pentru hartă
+  buget                execuția bugetară a municipiului și a instituțiilor din oraș (transparenta.eu)
   litigii [--tot]      dosarele în care e parte municipiul, din portalquery.just.ro (--tot = din 2010)
   word                 textele extrase ca documente Word -> data/texte/<sursa>/*.docx
   indicatori           indicatorii și listele -> data/indicatori.json, .md, data/liste.json
@@ -29,7 +31,7 @@ from .wp import WPClient
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="monitor_colector", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("comanda", choices=["categorii", "colecteaza", "arhiva", "descarca", "ocr", "word", "urbanism", "sicap", "litigii", "indicatori", "tot", "coada", "ocr-lot", "importa"])
+    ap.add_argument("comanda", choices=["categorii", "colecteaza", "arhiva", "descarca", "ocr", "word", "urbanism", "geocodare", "sicap", "litigii", "buget", "indicatori", "tot", "coada", "ocr-lot", "importa"])
     ap.add_argument("ani", nargs="*", type=int)
     ap.add_argument("--tot", action="store_true", help="colectare completă, nu incrementală")
     ap.add_argument("--max", type=int, default=None, help="limită de documente")
@@ -96,6 +98,12 @@ def main(argv=None):
                 os.makedirs(config.DATA_DIR, exist_ok=True)
                 with open(os.path.join(config.DATA_DIR, "sicap-castigatori-proba.json"), "w", encoding="utf-8") as f:
                     json.dump(proba, f, ensure_ascii=False, indent=1)
+        if a.comanda == "geocodare":
+            from . import geocod
+            stats["geocodare"] = geocod.geocodeaza(store, minute=a.minute or 20)
+        if a.comanda == "buget":
+            from . import buget
+            stats["buget"] = buget.colecteaza(store)
         if a.comanda == "litigii":
             from . import litigii
             stats["litigii"] = litigii.colecteaza(store, tot=a.tot)
@@ -134,6 +142,11 @@ def main(argv=None):
                 with open(os.path.join(config.DATA_DIR, "intern-date", "litigii.json"), "w", encoding="utf-8") as f:
                     json.dump(litigii.export(store, public=False), f, ensure_ascii=False, separators=(",", ":"))
             stats["voturi"] = voturi.scrie(store, config.DATA_DIR)
+            from . import buget
+            bx = buget.export(store)
+            if bx["entitati"]:
+                with open(os.path.join(config.DATA_DIR, "buget.json"), "w", encoding="utf-8") as f:
+                    json.dump(bx, f, ensure_ascii=False, separators=(",", ":"))
             import shutil   # fișierele vechi pe instituții, înlocuite de exploratorul unic
             shutil.rmtree(os.path.join(config.DATA_DIR, "sicap"), ignore_errors=True)
             stats["indicatori"] = "data/indicatori.json, data/liste.json, data/urbanism.json, data/sicap*.json"

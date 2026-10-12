@@ -99,9 +99,9 @@ def _nume_dupa(orig, start, sfarsit):
     return out[:10]
 
 
-def extrage(text):
-    """Voturile dintr-un proces-verbal: (prezenți, [vot]). Fiecare vot are numărătoarea, punctul,
-    titlul proiectului (când apare înainte), numele celor împotrivă / abținuți și fragmentul-sursă."""
+def _extrage_general(text):
+    """Formulări diverse („cu 15 voturi pentru”, „pentru - 9”, „în unanimitate”): pentru procesele-verbale
+    care nu folosesc formula Rădăuțiului (vezi extrage_radauti)."""
     if not text:
         return None, []
     orig = text
@@ -159,6 +159,112 @@ def extrage(text):
     return pr, voturi
 
 
+# ---------- formula proceselor-verbale de la Rădăuți ----------
+# „Din totalul de 15 consilieri prezenţi, 13 au participat la vot (nu au participat domnul Jecalo și
+#  domnul Țarevici), 13 au votat pentru, 0 împotrivă, O abţineri, proiectul de hotărâre fiind aprobat.”
+N0 = r"(\d{1,2}|o|zero)"   # OCR citește des „0” ca „O”
+ANCORA = re.compile(r"din\s+totalul\s+de\s+(\d{1,2})\s+consilieri(?:\s+locali)?\s+prezen\w*")
+R_PART = re.compile(r"(\d{1,2})\s+(?:consilieri\s+)?au\s+participat\s+la\s+vot(?:\s*\(([^)]{3,300})\))?")
+R_PENTRU = re.compile(r"(\d{1,2})\s+(?:consilieri\s+)?au\s+votat\s*'?\s*pentru")
+R_IMP = re.compile(N0 + r"\W{0,4}(?:voturi\s+)?'?\s*(?:impotriva|contra)(?:\s*\(([^)]{3,300})\))?")
+R_ABT = re.compile(N0 + r"\W{0,4}'?\s*abtiner\w*(?:\s*\(([^)]{3,300})\))?")
+R_FIIND = re.compile(r"(proiectul\s+de\s+hotarare|ordinea\s+de\s+zi|procesul[\s-]+verbal|amendamentul|propunerea)?[^.]{0,40}?"
+                     r"\bfiind\s+(aprobat\w*|adoptat\w*|respins\w*|neaprobat\w*|neadoptat\w*)")
+R_TRECE = re.compile(r"se\s+trece\s+la\s+punctul\s+(\d{1,2})[^\n]{0,80}?(proiect\w*\s+de\s+hotarare[^\n]*)")
+R_PREZ = re.compile(r"din\s+cei\s+(\d{1,2})\s+consilieri(?:\s+locali)?\s+in\s+functie\s+sunt\s+prezen\w*(?:\s+la\s+sedinta)?\s+(\d{1,2})")
+R_ABSENT = re.compile(r"absenteaza[^.]{0,80}?(?:respectiv|:)\s*:?\s*([^.]{3,400})\.")
+R_CONFLICT = re.compile(r"\b(?:dl|dna|domnul|doamna)\.?\s+(\w[\w\- ]{2,40}?)\s+intervine\s+si\s+precizeaza\s+ca\s+nu\s+participa"
+                        r"[^.]{0,60}?punctul\s+(\d{1,2})")
+
+
+def _n0(x):
+    return 0 if x in ("o", "zero") else int(x)
+
+
+def _nume_lista(orig):
+    """„domnul Lorin Iosif, domnul Mutrescu Dan, doamna Ihnatiuc Maria” -> nume, din textul original."""
+    out = []
+    for m in re.finditer(r"(?i:domnul|doamna|dl\.?|dna\.?|d-l|d-na)\s+([A-ZĂÂÎȘŞȚŢ][a-zăâîșşțţA-ZĂÂÎȘŞȚŢ\-]+(?:\s+[A-ZĂÂÎȘŞȚŢ][a-zăâîșşțţA-ZĂÂÎȘŞȚŢ\-]+){0,2})", orig):
+        n = m.group(1).strip()
+        if n not in out and n.split()[0].lower() not in ("primar", "viceprimar", "secretar"):
+            out.append(n)
+    return out
+
+
+def prezenta(text):
+    """Prezența la ședință: {in_functie, prezenti, absenti: [nume], nu_participa: {punct: [nume]}}."""
+    s = normalizeaza(text or "")
+    out = {"in_functie": None, "prezenti": None, "absenti": [], "nu_participa": {}}
+    m = R_PREZ.search(s)
+    if m:
+        out["in_functie"], out["prezenti"] = int(m.group(1)), int(m.group(2))
+    m = R_ABSENT.search(s)
+    if m:
+        out["absenti"] = _nume_lista(text[m.start(1):m.end(1)])
+    for m in R_CONFLICT.finditer(s):
+        nume = re.sub(r"\s+", " ", text[m.start(1):m.end(1)]).strip()
+        out["nu_participa"].setdefault(int(m.group(2)), []).append(nume)
+    return out
+
+
+def extrage_radauti(text):
+    s, orig = normalizeaza(text), text
+    ancore = list(ANCORA.finditer(s))
+    voturi, prev = [], 0
+    for k, a in enumerate(ancore):
+        urm = ancore[k + 1].start() if k + 1 < len(ancore) else len(s)
+        fer = s[a.start(): min(urm, a.start() + 600)]
+        cap = re.search(r"\bfiind\s+\w+|se\s+trece\s+la\s+punctul", fer)   # votul se termină aici
+        if cap:
+            fer = fer[: cap.end() if cap.group(0).startswith("fiind") else cap.start()]
+        mp, mpe, mi, ma = R_PART.search(fer), R_PENTRU.search(fer), R_IMP.search(fer), R_ABT.search(fer)
+        mf = R_FIIND.search(fer)
+        obiect = (mf.group(1) or "") if mf else ""
+        # votul pe ordinea de zi sau pe procesul-verbal anterior nu e un vot pe o hotărâre
+        procedural = bool(re.search(r"ordinea\s+de\s+zi|procesul[\s-]+verbal", obiect)) or \
+            bool(re.search(r"supune\s+la\s+vot\s+(ordinea\s+de\s+zi|procesul)", s[max(prev, a.start() - 300):a.start()]))
+        inapoi = s[prev:a.start()]
+        mt = list(R_TRECE.finditer(inapoi))
+        titlu, punct = None, None
+        if mt:
+            punct = int(mt[-1].group(1))
+            st0 = prev + mt[-1].start(2)
+            titlu = re.sub(r"\s+", " ", orig[st0: prev + mt[-1].end(2)]).strip().rstrip(".")
+        nep = _nume_lista(orig[a.start() + mp.start(2): a.start() + mp.end(2)]) if mp and mp.group(2) else []
+        v = {"punct": punct, "titlu": titlu, "prezenti": int(a.group(1)),
+             "participanti": int(mp.group(1)) if mp else None,
+             "pentru": int(mpe.group(1)) if mpe else None,
+             "impotriva": _n0(mi.group(1)) if mi else 0, "abtineri": _n0(ma.group(1)) if ma else 0,
+             "nu_voteaza": (int(a.group(1)) - int(mp.group(1))) if mp else 0, "nume_nu_voteaza": nep,
+             "nume_impotriva": _nume_lista(orig[a.start() + mi.start(2): a.start() + mi.end(2)]) if mi and mi.group(2) else [],
+             "nume_abtineri": _nume_lista(orig[a.start() + ma.start(2): a.start() + ma.end(2)]) if ma and ma.group(2) else [],
+             "rezultat": ("respins" if re.match(r"(respins|neaprob|neadopt)", mf.group(2)) else "adoptat") if mf else None,
+             "procedural": procedural,
+             "fragment": re.sub(r"\s+", " ", orig[a.start(): a.start() + len(fer)][:400]).strip()}
+        # verificare aritmetică: pentru + împotrivă + abțineri = câți au participat la vot
+        v["consistent"] = bool(v["participanti"] and v["pentru"] is not None and
+                               v["pentru"] + v["impotriva"] + v["abtineri"] == v["participanti"])
+        v["unanimitate"] = bool(v["pentru"] is not None and v["participanti"] and v["pentru"] == v["participanti"]
+                                and not v["impotriva"] and not v["abtineri"])
+        if v["rezultat"] is None and v["pentru"] is not None and v["participanti"]:
+            v["rezultat"] = "adoptat" if v["pentru"] > v["prezenti"] / 2 else None
+        voturi.append(v)
+        prev = a.start() + len(fer)
+    return voturi
+
+
+def extrage(text):
+    """Voturile dintr-un proces-verbal: (prezenți, [vot]). Întâi formula de la Rădăuți („Din totalul de...
+    au votat pentru...”); dacă nu apare, formulările generale. Voturile pe ordinea de zi nu se întorc."""
+    if not text:
+        return None, []
+    v = [x for x in extrage_radauti(text) if not x["procedural"]]
+    if v:
+        p = prezenta(text)["prezenti"] or max((x["prezenti"] for x in v), default=None)
+        return p, v
+    return _extrage_general(text)
+
+
 # ---------- legarea de hotărâri ----------
 
 def _cuv(t):
@@ -201,7 +307,29 @@ def _text(db, wp_id):
     return "\n".join(parts)
 
 
-def export(store):
+CHEI_MOSTRA = re.compile(r"vot|pentru|impotriv|abtin|unanim|prezen|adopt|aprob|respins|consilier")
+
+
+def mostra(text, maxim=3500):
+    """Rândurile despre vot (cu câte un rând înainte și după), pentru reglarea extragerii pe texte reale."""
+    linii = [l.rstrip() for l in (text or "").splitlines()]
+    norm = [normalizeaza(l) for l in linii]
+    alese = set()
+    for i, l in enumerate(norm):
+        if CHEI_MOSTRA.search(l):
+            alese.update((i - 1, i, i + 1))
+    out, n = [], 0
+    for i in sorted(x for x in alese if 0 <= x < len(linii)):
+        if not linii[i].strip():
+            continue
+        out.append(linii[i])
+        n += len(linii[i]) + 1
+        if n > maxim:
+            break
+    return (text or "")[:600].strip() + "\n[...]\n" + "\n".join(out)
+
+
+def export(store, mostre=8):
     db = store.db
     sedinte = {}
     for r in db.execute("SELECT wp_id, session_type, session_date, title FROM pv WHERE kind='pv_sedinta' "
@@ -216,9 +344,15 @@ def export(store):
         hcl = [(x["year"], x["number"], x["title"]) for x in db.execute(
             "SELECT year, number, title FROM hcl WHERE adoption_date=?", (r["session_date"],))]
         pdf = db.execute("SELECT url FROM documents WHERE wp_id=? ORDER BY rowid LIMIT 1", (r["wp_id"],)).fetchone()
+        prz = prezenta(text)
+        for v in vot:   # cei care au anunțat că nu participă la vot (conflict de interese)
+            if v.get("punct") in prz["nu_participa"] and not v.get("nume_nu_voteaza"):
+                v["nume_nu_voteaza"] = prz["nu_participa"][v["punct"]]
         sedinte[k] = {"data": r["session_date"], "tip": r["session_type"], "titlu": r["title"],
-                      "pdf": pdf["url"] if pdf else None, "prezenti": pr, "hcl_in_sedinta": len(hcl),
-                      "voturi": leaga_hcl(vot, hcl)}
+                      "pdf": pdf["url"] if pdf else None, "prezenti": pr, "in_functie": prz["in_functie"],
+                      "absenti": prz["absenti"], "hcl_in_sedinta": len(hcl), "voturi": leaga_hcl(vot, hcl)}
+        if len(sedinte) <= mostre:
+            sedinte[k]["mostra"] = mostra(text)
     S = sorted(sedinte.values(), key=lambda x: x["data"], reverse=True)
     pe_ani = {}
     for x in S:
@@ -242,17 +376,21 @@ def raport(ex, n=6):
         out.append(f"{y}: {p['sedinte']} ședințe, {p['cu_voturi']} cu voturi găsite, {p['voturi']} voturi, "
                    f"{p['unanime']} unanime, {p['cu_impotriva']} cu voturi împotrivă, {p['cu_abtineri']} cu abțineri")
     for x in ex["sedinte"][:n]:
-        out += ["", "=" * 80, f"{x['data']} {x['tip']} | prezenți: {x['prezenti']} | HCL în ședință: {x['hcl_in_sedinta']} | "
+        out += ["", "=" * 80, f"{x['data']} {x['tip']} | prezenți: {x['prezenti']} din {x.get('in_functie')} | absenți: "
+                f"{', '.join(x.get('absenti') or []) or '-'} | HCL în ședință: {x['hcl_in_sedinta']} | "
                 f"voturi găsite: {len(x['voturi'])} | {x['pdf']}"]
         for v in x["voturi"]:
             out.append(f"- punct {v['punct']} | pentru {v['pentru']}, împotrivă {v['impotriva']}, abțineri {v['abtineri']}, "
                        f"nu votează {v['nu_voteaza']}{' | unanimitate' if v['unanimitate'] else ''} | {v['rezultat']} | "
+                       f"{'verificat aritmetic' if v.get('consistent') else 'neverificat'} | "
                        f"HCL {v.get('hcl', {}).get('nr', '-')}")
             if v["titlu"]:
                 out.append(f"    proiect: {v['titlu'][:160]}")
             if v["nume_impotriva"] or v["nume_abtineri"]:
                 out.append(f"    împotrivă: {', '.join(v['nume_impotriva'])} | abțineri: {', '.join(v['nume_abtineri'])}")
             out.append(f"    text: {v['fragment'][:300]}")
+        if x.get("mostra"):
+            out += ["", "--- text recunoscut (rândurile despre vot) ---", x["mostra"]]
     return "\n".join(out) + "\n"
 
 
@@ -260,8 +398,10 @@ def scrie(store, data_dir):
     ex = export(store)
     d = os.path.join(data_dir, "intern-date")
     os.makedirs(d, exist_ok=True)
-    with open(os.path.join(d, "voturi.json"), "w", encoding="utf-8") as f:
-        json.dump(ex, f, ensure_ascii=False, separators=(",", ":"))
     with open(os.path.join(data_dir, "voturi-proba.txt"), "w", encoding="utf-8") as f:
         f.write(raport(ex))
+    for x in ex["sedinte"]:
+        x.pop("mostra", None)
+    with open(os.path.join(d, "voturi.json"), "w", encoding="utf-8") as f:
+        json.dump(ex, f, ensure_ascii=False, separators=(",", ":"))
     return {"sedinte": len(ex["sedinte"]), "voturi": sum(len(x["voturi"]) for x in ex["sedinte"])}

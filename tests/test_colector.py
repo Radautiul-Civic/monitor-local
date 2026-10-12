@@ -11,7 +11,8 @@ from datetime import date
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from monitor_colector import collect, documents, indicators, parse  # noqa: E402
+from monitor_colector import collect, config, documents, indicators, parse  # noqa: E402
+config.DATA_DIR = tempfile.mkdtemp()   # testele nu scriu în data/ (rapoartele reale)
 from monitor_colector.store import Store  # noqa: E402
 from monitor_colector.wp import WPClient  # noqa: E402
 import fakes  # noqa: E402
@@ -651,6 +652,11 @@ class TestCurs(unittest.TestCase):
            b'<Cube date="2024-01-03"><Rate currency="EUR">4.9725</Rate><Rate currency="HUF" multiplier="100">1.3000</Rate></Cube>'
            b'<Cube date="2024-01-05"><Rate currency="EUR">4.9700</Rate></Cube></Body></DataSet>')
 
+    def test_bce(self):
+        from monitor_colector import curs
+        t = "KEY,FREQ,CURRENCY,TIME_PERIOD,OBS_VALUE\nEXR.D.RON.EUR.SP00.A,D,RON,2024-01-03,4.9721\nEXR.D.RON.EUR.SP00.A,D,RON,2024-01-04,\n"
+        self.assertEqual(curs.parse_bce(t), [("2024-01-03", 4.9721)])
+
     def test_parse_si_rata(self):
         from monitor_colector import curs
         z = curs.parse(self.XML)
@@ -659,7 +665,7 @@ class TestCurs(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         store = Store(os.path.join(tmp, "t.db"))
         curs.init(store.db)
-        store.db.executemany("INSERT INTO curs_bnr VALUES (?,?)", z)
+        store.db.executemany("INSERT INTO curs_bnr (data, eur) VALUES (?,?)", z)
         c = curs.Curs(store.db, {"2019": 4.75})
         self.assertEqual(c.rata("2024-01-04"), 4.9725)             # zi fără curs: ultimul curs dinainte
         self.assertEqual(c.rata("2024-01-07"), 4.97)
@@ -830,11 +836,32 @@ class TestSicapCastigatori(unittest.TestCase):
         store.close()
         shutil.rmtree(tmp)
 
+    def test_acord_cadru_nu_intra_in_totaluri(self):
+        from monitor_colector import sicap
+        store, tmp = self._store()
+        mk = lambda i, t, v, tip: {"caNoticeContractId": i, "contractTitle": t, "contractValue": v, "contractType": tip,
+                                   "contractDate": "2024-04-01T00:00:00", "winnerCaption": "MEDICAL SRL",
+                                   "winner": {"name": "MEDICAL SRL", "fiscalNumber": "RO 333"}}
+        sicap.salveaza_contracte(store.db, 501, [mk(1, "Acord cadru", 1000000.0, 2), mk(2, "Contract subsecvent", 50000.0, 3),
+                                                 mk(3, "Contract subsecvent", 70000.0, 3)])
+        store.db.commit()
+        rez, ex = sicap.export(store)
+        self.assertEqual(rez["autoritati"][0]["can_val"], 120000.0 + 80000.0)   # subsecventele + anunțul fără contracte
+        self.assertEqual(sorted(r[12] for r in ex["can"] if r[0] == 501), [2, 3, 3])
+        self.assertIn("Acorduri-cadru", sicap.raport_de_verificat(ex))
+        store.db.execute("INSERT INTO sicap_ca (id,text,cui,inclus,gasit_la) VALUES (99,'4244814 - ARHIEPISCOPIA SUCEVEI ŞI RĂDĂUŢILOR','4244814',1,'2024-01-01')")
+        store.db.commit()
+        sicap.init(store.db)
+        self.assertEqual(store.db.execute("SELECT inclus FROM sicap_ca WHERE id=99").fetchone()[0], 0)
+        store.close()
+        shutil.rmtree(tmp)
+
     def test_realizata(self):
         from monitor_colector import sicap
         self.assertTrue(sicap.realizata("Oferta acceptata"))
         self.assertTrue(sicap.realizata(None))
-        for s in ("Conditii refuzate", "Condiții refuzate", "Oferta respinsa", "Anulata", "Expirata"):
+        for s in ("Conditii refuzate", "Condiții refuzate", "Oferta respinsa", "Oferta refuzata", "Anulata", "Expirata",
+                  "Oferta neacceptata in termen", "Conditii neacceptate la termen"):
             self.assertFalse(sicap.realizata(s), s)
 
 
@@ -940,3 +967,153 @@ Cu 16 voturi pentru și 1 consilier nu votează (dl Georgescu Dan), proiectul se
                             (2026, 162, "privind aprobarea concesionării unui teren situat pe strada Putnei")])
         self.assertEqual((h[0]["hcl"]["nr"], h[1]["hcl"]["nr"]), (161, 162))
         self.assertNotIn("hcl", h[2])
+
+
+class TestGeocod(unittest.TestCase):
+    def test_numar_si_geocodare(self):
+        from monitor_colector import geocod as G, urbanism
+        self.assertEqual(G.numar("jud. SUCEAVA, mun. RĂDĂUŢI, str. STEFAN CEL MARE, nr. 130 B, cp. 725400"), "130B")
+        self.assertIsNone(G.numar("RĂDĂUŢI, MIHAI VITEAZU, Nr.FN, Cod"))
+        self.assertFalse(G.in_radauti("jud. SUCEAVA, com. FRĂTĂUŢII NOI, str. PRINCIPALA"))
+
+        class Cl:
+            cereri = 0
+
+            def cauta(self, strada, nr=None):
+                self.cereri += 1
+                if strada == "Putnei" and nr == "10":
+                    return (47.85, 25.91)
+                return (47.84, 25.92) if nr is None and strada == "Horea" else None
+
+        tmp = tempfile.mkdtemp()
+        store = Store(os.path.join(tmp, "t.db"))
+        urbanism.init(store.db) if hasattr(urbanism, "init") else None
+        for i, (st, adr) in enumerate((("Putnei", "mun. RĂDĂUŢI, str. PUTNEI, nr. 10"), ("Horea", "mun. RĂDĂUŢI, str. HOREA, nr. 5"),
+                                       ("Bogdan Voda", "com. FRĂTĂUŢII NOI, str. BOGDAN VODA"))):
+            store.db.execute("INSERT INTO urbanism_acte VALUES (?,?,?,?,?,?,?,?)", ("ac", f"k{i}", "2026-01-0%d" % (i + 1), str(i), None,
+                             "x.pdf", "nou", json.dumps({"nr": str(i), "data": "2026-01-01", "strada": st, "adresa": adr})))
+        store.db.commit()
+        cl = Cl()
+        st = G.geocodeaza(store, cl=cl)
+        self.assertEqual((st["gasite"], st["pe_strada"]), (1, 1))
+        n = cl.cereri
+        G.geocodeaza(store, cl=cl)
+        self.assertEqual(cl.cereri, n)                              # nimic nu se caută de două ori
+        ex = urbanism.export(store)
+        poz = {a["strada"]: (a.get("lat"), a.get("precizie")) for a in ex["ac"]}
+        self.assertEqual(poz["Putnei"], (47.85, "adresă"))
+        self.assertEqual(poz["Horea"], (47.84, "stradă"))
+        self.assertEqual(poz["Bogdan Voda"], (None, None))          # în afara Rădăuțiului
+        store.close()
+        shutil.rmtree(tmp)
+
+
+class TestBuget(unittest.TestCase):
+    class Cl:
+        cereri = 0
+
+        def q(self, query, v):
+            self.cereri += 1
+            if "children" in query:
+                if v["cui"] == "4244148":
+                    return {"entity": {"cui": "4244148", "name": "MUNICIPIUL RADAUTI", "default_report_type": "PRINCIPAL_AGGREGATED",
+                                       "is_uat": True, "uat": {"population": 24292}, "children": [{"cui": "4244113", "name": "COLEGIUL TEHNIC"}]}}
+                return {"entity": {"cui": v["cui"], "name": "COLEGIUL TEHNIC RADAUTI", "default_report_type": "SECONDARY_AGGREGATED", "uat": {}}}
+            if "entities(" in query:
+                return {"entities": {"nodes": [{"cui": "3503651", "name": "COMUNA RADAUTI-PRUT", "is_uat": True},
+                                               {"cui": "999", "name": "SCOALA X RADAUTI", "is_uat": False}]}}
+            if "incomeTrend" in query:
+                if v["cui"] == "999":
+                    return {"entity": {"incomeTrend": {"data": []}, "expensesTrend": {"data": []}}}
+                return {"entity": {"incomeTrend": {"data": [{"x": "2024", "y": 100.0}, {"x": "2025", "y": 120.0}]},
+                                   "expensesTrend": {"data": [{"x": "2024", "y": 90.0}, {"x": "2025", "y": 130.0}]}}}
+            if "executionLineItems" in query:
+                n = lambda cat, fc, fn, ec, fel, s: {"account_category": cat, "expense_type": fel, "functionalClassification": {"functional_code": fc, "functional_name": fn},
+                                                     "economicClassification": {"economic_code": ec, "economic_name": "x"}, "ytd_amount": s}
+                return {"entity": {"ch": {"nodes": [n("ch", "65.02.03", "Invatamant prescolar", "10.01.01", "functionare", 50.0),
+                                                    n("ch", "84.02.03.03", "Strazi", "71.01.01", "dezvoltare", 40.0)]},
+                                   "vn": {"nodes": [n("vn", "11.02.02", "Sume defalcate din TVA", "", None, 70.0)]}}}
+            return {}
+
+    def test_colectare_si_export(self):
+        from monitor_colector import buget as B
+        tmp = tempfile.mkdtemp()
+        store = Store(os.path.join(tmp, "t.db"))
+        st = B.colecteaza(store, cl=self.Cl(), azi=date(2025, 10, 1))
+        self.assertEqual((st["entitati"], st["cu_date"]), (3, 2))       # Rădăuți-Prut exclus; școala fără date
+        ex = B.export(store)
+        m = ex["entitati"][0]
+        self.assertEqual((m["cui"], m["ani"]["2025"]["cheltuieli"], m["populatie"]), ("4244148", 130.0, 24292))
+        d = ex["detalii"]["4244148"]["2025"]
+        self.assertEqual(d["ch"], {"Învățământ": 50.0, "Transporturi (străzi, drumuri, transport public)": 40.0})
+        self.assertEqual(d["vn"], {"Sume defalcate din TVA": 70.0})
+        self.assertEqual(d["fel"]["Investiții (dezvoltare)"], 40.0)
+        self.assertEqual(d["economic"]["Cheltuieli de personal"], 50.0)
+        self.assertNotIn("4244113", ex["detalii"])                       # doar municipiul are rânduri detaliate
+        store.close()
+        shutil.rmtree(tmp)
+
+
+class TestVoturiRadauti(unittest.TestCase):
+    # fragment din procesul-verbal al ședinței extraordinare din 10.10.2025 (document public, text OCR)
+    PV = """Secretarul general al municipiului, face prezenţa consilierilor şi constată că din cei 19 consilieri locali în funcţie sunt prezenți la şedinţă 15 consilieri locali din care 14 consilieri prezenți în sala de şedinţe.
+Absentează nemotivat la şedinţă 4 consilieri locali, respectiv: domnul Lorin Iosif, domnul Mutrescu Dan, doamna Ihnatiuc Maria şi domnul Marcu George-Dan.
+Întrucât nu sunt discuţii, se supune la vot ordinea de zi. Din totalul de 15 consilieri prezenţi, 15 au participat la vot, 15 au votat pentru, 0 împotrivă, 0 abţineri, ordinea de zi fiind aprobată.
+Dl Jecalo intervine şi precizează că nu participă la discuţii și la vot la proiectul de la punctul 1.
+Se trece la punctul 1 de pe ordinea de zi si anume proiectul de hotărâre nr. 99579/09.10.2025 privind rectificarea bugetului de venituri şi cheltuieli al Municipiului Rădăuți pentru anul 2025.
+Întrucât nu mai sunt discuţii, preşedintele de şedinţă supune la vot proiectul de hotărâre în forma inițiată, Din totalul de 15 consilieri prezenți, 13 au participat la vot (nu au participat domnul Jecalo și domnul Țarevici), 13 au votat pentru, 0 împotrivă, O abţineri, proiectul de hotărâre fiind aprobat.
+Se trece la punctul 2 de pe ordinea de zi si anume proiectul de hotărâre nr. 99576/09.10.2025 privind exploatarea cantităţii de 26,86 mc volum brut masă lemnoasă, în regie proprie.
+Din totalul de 15 consilieri prezenţi, 15 au participat la vot, 12 au votat pentru, 2 împotrivă, 1 *
+abţineri, proiectul de hotărâre fiind aprobat.
+"""
+
+    def test_formula_radauti(self):
+        from monitor_colector import voturi as V
+        p = V.prezenta(self.PV)
+        self.assertEqual((p["in_functie"], p["prezenti"]), (19, 15))
+        self.assertEqual(p["absenti"], ["Lorin Iosif", "Mutrescu Dan", "Ihnatiuc Maria", "Marcu George-Dan"])
+        self.assertEqual(p["nu_participa"], {1: ["Jecalo"]})
+        pr, v = V.extrage(self.PV)
+        self.assertEqual((pr, len(v)), (15, 2))                       # votul pe ordinea de zi nu se numără
+        a, b = v
+        self.assertEqual((a["punct"], a["participanti"], a["pentru"], a["impotriva"], a["abtineri"], a["nu_voteaza"]), (1, 13, 13, 0, 0, 2))
+        self.assertEqual(a["nume_nu_voteaza"], ["Jecalo", "Țarevici"])
+        self.assertTrue(a["unanimitate"] and a["consistent"])
+        self.assertIn("rectificarea bugetului", a["titlu"])
+        self.assertEqual((b["punct"], b["pentru"], b["impotriva"], b["abtineri"], b["rezultat"], b["unanimitate"], b["consistent"]),
+                         (2, 12, 2, 1, "adoptat", False, True))
+
+
+class TestPublicare(unittest.TestCase):
+    def test_zona_publica_doar_hotarari_si_sicap(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
+        import publica
+        tmp = tempfile.mkdtemp()
+        d = os.path.join(tmp, "data")
+        os.makedirs(os.path.join(d, "intern-date"))
+        json.dump({"calculat_la": "x", "hcl_pe_ani": {}, "litigii": {"total": 3}, "registre_urbanism": {},
+                   "hcl_probleme": [{"verificare": "confirmat"}, {"verificare": "neverificat"}]}, open(os.path.join(d, "indicatori.json"), "w"))
+        json.dump({"generat_la": "x", "hcl": [1], "pv": [2], "contracte": [3]}, open(os.path.join(d, "liste.json"), "w"))
+        for n in ("sicap-explorer.json", "buget.json", "sicap.json"):
+            open(os.path.join(d, n), "w").write("{}")
+        json.dump({"ac": [{"nr": "1", "lat": 47.8, "lon": 25.9, "precizie": "adresă"}], "cu": []}, open(os.path.join(d, "urbanism.json"), "w"))
+        open(os.path.join(d, "intern-date", "litigii.json"), "w").write("{}")
+        open(os.path.join(d, "voturi-proba.txt"), "w").write("x")
+        old = publica.ROOT
+        publica.ROOT = tmp
+        try:
+            pub, intern = publica.public_date(), publica.intern_date()
+        finally:
+            publica.ROOT = old
+        self.assertEqual(sorted(pub), ["indicatori.json", "liste.json", "sicap-explorer.json", "urbanism.json"])
+        self.assertEqual(json.load(open(pub["urbanism.json"]))["ac"], [{"nr": "1"}])   # fără coordonate: harta e internă
+        ind = json.load(open(pub["indicatori.json"]))
+        self.assertNotIn("litigii", ind)
+        self.assertIn("registre_urbanism", ind)
+        self.assertEqual(len(ind["hcl_probleme"]), 1)
+        self.assertEqual(sorted(json.load(open(pub["liste.json"]))), ["generat_la", "hcl", "registre"])
+        self.assertTrue({"urbanism.json", "buget.json", "litigii.json", "rapoarte.zip"} <= set(intern))
+        for n in ("litigii.json", "buget.json"):
+            self.assertIn(n, publica.SCOASE_DIN_PUBLIC)
+        self.assertNotIn("urbanism.json", publica.SCOASE_DIN_PUBLIC)
+        shutil.rmtree(tmp)

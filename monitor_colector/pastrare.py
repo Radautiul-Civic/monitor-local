@@ -233,6 +233,18 @@ class FTP:
         f.prot_p()
         self.f, self.cwd = f, None
 
+    def sterge(self, remote):
+        """Șterge un fișier de pe hosting, dacă există (ex. date mutate din zona publică în cea internă)."""
+        try:
+            if self.f is None:
+                self.conecteaza()
+            self.f.cwd("/")
+            self.cwd = None
+            self.f.delete(remote)
+            return True
+        except ftplib.all_errors:
+            return False
+
     def urca(self, local, remote):
         d, name = remote.rsplit("/", 1)
         for incercare in range(2):
@@ -410,15 +422,17 @@ def manifest(c):
 
 
 def publica_manifest():
-    """Urcă manifestul și starea pe site (public) și conținutul site-urilor în copie (intern)."""
+    """Urcă manifestul, starea și conținutul copiilor DOAR în zona internă (cu parolă)."""
     ftp = FTP()
     try:
+        protejat = intern_protejat()
         for name in ("manifest.csv", "manifest.json", "stare.json"):
+            ftp.sterge(f"date/arhiva-{name}")   # versiunile vechi, publice
             p = os.path.join(DIR, name)
-            if os.path.exists(p):
-                ftp.urca(p, f"date/arhiva-{name}")
+            if os.path.exists(p) and protejat:
+                ftp.urca(p, f"intern/date/arhiva-{name}")
         cont = os.path.join(DIR, "continut")
-        if os.path.isdir(cont) and intern_protejat():
+        if os.path.isdir(cont) and protejat:
             for n in os.listdir(cont):
                 ftp.urca(os.path.join(cont, n), f"{DEST}/continut/{n}")
     finally:

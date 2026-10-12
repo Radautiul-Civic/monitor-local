@@ -106,6 +106,87 @@ def texte_de_urcat(base):
     return files, new
 
 
+# ce fișiere de date sunt publice și ce doar interne
+PUBLIC_INDICATORI = ("calculat_la", "hcl_pe_ani", "hcl_intarziere_publicare", "hcl_cele_mai_intarziate", "hcl_probleme", "sicap",
+                     "registre_urbanism", "urbanism")
+SCOASE_DIN_PUBLIC = ("litigii.json", "buget.json", "sicap.json", "arhiva-stare.json",
+                     "arhiva-manifest.json", "arhiva-manifest.csv", "sicap-de-verificat.txt")
+
+
+def public_date():
+    """date/ public: hotărârile, registrele de urbanism (fără coordonatele pentru hartă) și exploratorul SICAP."""
+    out = {}
+    d = os.path.join(ROOT, "data")
+    os.makedirs(os.path.join(d, "_public"), exist_ok=True)
+    try:
+        with open(os.path.join(d, "indicatori.json"), encoding="utf-8") as f:
+            ind = json.load(f)
+        pub = {k: ind[k] for k in PUBLIC_INDICATORI if k in ind}
+        # problemele de publicare: doar cele verificate manual
+        pub["hcl_probleme"] = [p for p in pub.get("hcl_probleme") or [] if p.get("verificare") == "confirmat"]
+        p = os.path.join(d, "_public", "indicatori.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(pub, f, ensure_ascii=False, separators=(",", ":"))
+        out["indicatori.json"] = p
+    except (OSError, ValueError) as e:
+        print(f"atenție: indicatori: {e}", file=sys.stderr)
+    try:
+        with open(os.path.join(d, "liste.json"), encoding="utf-8") as f:
+            L = json.load(f)
+        p = os.path.join(d, "_public", "liste.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"generat_la": L.get("generat_la"), "hcl": L.get("hcl", []), "registre": L.get("registre", [])},
+                      f, ensure_ascii=False, separators=(",", ":"))
+        out["liste.json"] = p
+    except (OSError, ValueError) as e:
+        print(f"atenție: liste: {e}", file=sys.stderr)
+    try:   # registrele de urbanism, așa cum le publică primăria; poziția pe hartă rămâne internă
+        with open(os.path.join(d, "urbanism.json"), encoding="utf-8") as f:
+            U = json.load(f)
+        for k in ("cu", "ac"):
+            for a in U.get(k) or []:
+                for c in ("lat", "lon", "precizie"):
+                    a.pop(c, None)
+        p = os.path.join(d, "_public", "urbanism.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(U, f, ensure_ascii=False, separators=(",", ":"))
+        out["urbanism.json"] = p
+    except (OSError, ValueError) as e:
+        print(f"atenție: urbanism: {e}", file=sys.stderr)
+    if os.path.exists(os.path.join(d, "sicap-explorer.json")):
+        out["sicap-explorer.json"] = os.path.join(d, "sicap-explorer.json")
+    return out
+
+
+def intern_date():
+    """intern/date/: toate datele, în forma completă."""
+    d = os.path.join(ROOT, "data")
+    out = {}
+    for name in ("indicatori.json", "liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json", "buget.json"):
+        if os.path.exists(os.path.join(d, name)):
+            out[name] = os.path.join(d, name)
+    di = os.path.join(d, "intern-date")   # litigii cu numele părților, voturi
+    if os.path.isdir(di):
+        for n in sorted(os.listdir(di)):
+            if n.endswith(".json"):
+                out[n] = os.path.join(di, n)
+    # rapoartele de verificare (înainte erau artefacte GitHub, vizibile oricui are cont): acum doar intern
+    import zipfile
+    rap = [os.path.join(d, n) for n in RAPOARTE if os.path.exists(os.path.join(d, n))]
+    if rap:
+        z = os.path.join(d, "_intern", "rapoarte.zip")
+        os.makedirs(os.path.dirname(z), exist_ok=True)
+        with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as f:
+            for p in rap:
+                f.write(p, os.path.basename(p))
+        out["rapoarte.zip"] = z
+    return out   # arhiva de siguranță se urcă în intern/date/ de fluxul „Arhivare”
+
+
+RAPOARTE = ("indicatori.md", "urbanism-registre.txt", "sicap-de-verificat.txt", "sicap-castigatori-proba.json",
+            "voturi-proba.txt", "geocodare.txt")
+
+
 def main():
     host, user, pwd = (os.environ.get(k) for k in ("FTP_HOST", "FTP_USER", "FTP_PASSWORD"))
     if not (host and user and pwd):
@@ -121,32 +202,34 @@ def main():
             if n.endswith(".html"):
                 local = cu_versiune(local)
             files.append((local, "" if rel == "." else rel, n))
-    for name in ("indicatori.json", "liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json", "litigii.json"):
-        p = os.path.join(ROOT, "data", name)
-        if os.path.exists(p):
-            files.append((p, "date", name))
-        else:
-            print(f"atenție: data/{name} nu există", file=sys.stderr)
+    # zona publică: doar hotărârile consiliului local și achizițiile din SICAP
+    for name, local in public_date().items():
+        files.append((local, "date", name))
 
     manifest = None
     if intern_protejat():
         tf, manifest = texte_de_urcat(base)
         print(f"intern: {len(tf)} fișiere noi sau modificate")
         files += tf
-        # date doar pentru pagina internă (ex. numele părților din litigii, voturile neverificate)
-        di = os.path.join(ROOT, "data", "intern-date")
-        if os.path.isdir(di):
-            for n in sorted(os.listdir(di)):
-                if n.endswith(".json"):
-                    files.append((os.path.join(di, n), "/".join(x for x in (base, "intern", "date-intern") if x), n))
+        # zona internă: toate datele (urbanism, litigii cu nume, buget, voturi, contracte...)
+        for name, local in intern_date().items():
+            files.append((local, "intern/date", name))
     else:
-        print("intern: folderul nu cere parolă (sau nu există); textele NU se urcă", file=sys.stderr)
+        print("intern: folderul nu cere parolă (sau nu există); textele și datele interne NU se urcă", file=sys.stderr)
 
     ftp = ftplib.FTP_TLS()
     ftp.connect(host, int(os.environ.get("FTP_PORT", "21")), timeout=60)
     ftp.login(user, pwd)
     ftp.prot_p()
     try:
+        for name in SCOASE_DIN_PUBLIC:   # fișiere publicate înainte în zona publică, acum doar interne
+            try:
+                ftp.cwd("/")
+                ftp.delete("/".join(x for x in (base, "date", name) if x))
+                print(f"șters din zona publică: date/{name}")
+            except ftplib.all_errors:
+                pass
+        _cwd[0] = None
         for local, rel, name in files:
             upload(ftp, local, "/".join(p for p in (base, rel) if p), name)
     finally:

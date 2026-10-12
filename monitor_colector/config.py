@@ -68,5 +68,9 @@ ARCHIVE_REGISTRE = {
 SICAP_CUI_EXTRA = (
     "2563140",   # SERVICII COMUNALE S.A. (societatea municipiului; în SICAP numele nu conține „Rădăuți”)
 )
-# termeni de căutare suplimentari în lista autorităților SICAP, pentru CUI-urile de mai sus
-SICAP_TERMENI_EXTRA = ("SERVICII COMUNALE",)
+# Termeni de căutare suplimentari în lista autorităților SICAP: pentru CUI-urile de mai sus și pentru
+# instituții din oraș care s-ar putea să nu aibă „Rădăuți” în nume (nume unice, ca să nu aducă jumătate de țară).
+# Cele găsite, dar neincluse, apar pe pagina internă; de acolo li se adaugă CUI-ul în SICAP_CUI_EXTRA.
+SICAP_TERMENI_EXTRA = ("SERVICII COMUNALE", "HURMUZACHI", "MOTRESCU", "FLONDOR", "IONET", "POLITIA LOCALA RADAUTI",
+                       "POLITIEI LOCALE RADAUTI", "CASA MUNICIPALA DE CULTURA", "MUZEUL DE ETNOGRAFIE RADAUTI",
+                       "ZOOLOGIC RADAUTI", "GALERIILE DE ARTA RADAUTI")

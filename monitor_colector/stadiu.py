@@ -49,17 +49,17 @@ def compute(ind):
     def add(sectiune, element, stare, detaliu):
         S.append({"sectiune": sectiune, "element": element, "stare": stare, "detaliu": detaliu})
 
-    # ---- Decizii locale ----
+    # ---- Consiliul Local ----
     if pe_ani:
-        add("Decizii locale", "Hotărâri de Consiliu Local", "complet" if not (partiale or lipsa_ani) else "partial",
+        add("Consiliul Local", "Hotărâri de Consiliu Local", "complet" if not (partiale or lipsa_ani) else "partial",
             f"{total_hcl:,} hotărâri din {ani[0]}-{ani[-1]}".replace(",", ".")
             + (f"; complete: {_interval(complete)}" if complete else ""))
     for a in lipsa_ani:
-        add("Decizii locale", f"Hotărâri {a}", "lipsa",
+        add("Consiliul Local", f"Hotărâri {a}", "lipsa",
             "Anul nu are pagină în arhiva online a primăriei. Căutăm altă sursă publică.")
     if partiale:
         det = "; ".join(f"{a}: {pe_ani[str(a)]['gasite']} din {pe_ani[str(a)]['ultimul_nr']}" for a in partiale)
-        add("Decizii locale", f"Hotărâri {_interval(partiale)}", "partial",
+        add("Consiliul Local", f"Hotărâri {_interval(partiale)}", "partial",
             f"În lista publicată apar mai puține hotărâri decât ultimul număr ({det}). "
             "Verificăm în alte surse înainte de orice concluzie.")
     pv = ind.get("pv_intarziere_publicare")
@@ -68,13 +68,13 @@ def compute(ind):
         ani_pv = sorted(int(y) for y in tipuri)
         n_sed = sum(sum(v.values()) for v in tipuri.values())
         continuu = ani_pv == list(range(ani_pv[0], ani_pv[-1] + 1))
-        add("Decizii locale", "Procese-verbale de ședință", "complet" if continuu and ani_pv[0] <= 2016 else "partial",
+        add("Consiliul Local", "Procese-verbale de ședință", "complet" if continuu and ani_pv[0] <= 2016 else "partial",
             f"{n_sed} ședințe, {_interval(ani_pv)}, de pe site și din arhiva online.")
     pr = ind.get("proiecte_pe_ani", {})
-    add("Decizii locale", "Proiecte de hotărâre", "complet" if pr else "planificat",
+    add("Consiliul Local", "Proiecte de hotărâre", "complet" if pr else "planificat",
         f"{sum(pr.values())} proiecte publicate pe site" if pr else "Colectare pornită; apar după următoarea rulare.")
     vt = ind.get("voturi") or {}
-    add("Decizii locale", "Voturile consilierilor", "partial" if vt.get("voturi") else "planificat",
+    add("Consiliul Local", "Voturile consilierilor", "partial" if vt.get("voturi") else "planificat",
         (f"Extrase automat din {vt['cu_voturi']} procese-verbale ({vt['voturi']} voturi); se verifică pe documente "
          "înainte de publicare." if vt.get("voturi") else "Cine a votat cum, extras din procesele-verbale."))
 
@@ -113,13 +113,13 @@ def compute(ind):
     # ---- Alte surse ----
     lt = ind.get("litigii") or {}
     if lt.get("total"):
-        add("Alte surse", "Litigii", "complet",
+        add("Primărie", "Litigii", "complet",
             f"{lt['total']} dosare în care e parte municipiul (din {lt['primul_an']}), {lt['in_curs']} în curs; "
             "sursa: portal.just.ro.")
     else:
-        add("Alte surse", "Litigii", "planificat", "Dosarele în care primăria e parte (portal.just.ro).")
+        add("Primărie", "Litigii", "planificat", "Dosarele în care primăria e parte (portal.just.ro).")
 
-    add("Alte surse", "Buget și bilanțuri", "partial",
+    add("Primărie", "Buget și bilanțuri", "partial",
         "Documentele sunt colectate; indicatorii de buget nu sunt încă afișați.")
     add("Alte surse", "Dispoziții ale primarului", "planificat", "Registrul dispozițiilor publicat pe site.")
     return S

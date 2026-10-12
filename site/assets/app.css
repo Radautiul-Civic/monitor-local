@@ -167,4 +167,25 @@ a.hb-a:hover .hb-l{color:var(--accent);text-decoration:underline}
 .back{margin:12px 0 0;font-size:.92rem}
 .back a{text-decoration:none}
 @media (max-width:480px){.hbars .hb{grid-template-columns:minmax(0,1fr) auto}}
+/* subnavigația de al doilea nivel (Urbanism: certificate, autorizații, hartă) */
+.subnav.sub2{margin-top:8px}
+.subnav.sub2 a{font-size:.85rem;padding:4px 12px;background:transparent}
+.subnav.sub2 a[aria-current="page"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+/* hartă */
+.map{height:540px;border-radius:var(--radius);border:1px solid var(--line);overflow:hidden;background:var(--surface-2);z-index:0}
+.leaflet-popup-content{font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+@media (max-width:640px){.map{height:420px}}
+/* litigii: rezultat */
+.rz{display:inline-block;padding:0 9px;border-radius:99px;font-size:.78rem;font-weight:600;border:1px solid currentColor;white-space:nowrap}
+.rz.c{color:var(--good);background:color-mix(in srgb,var(--good) 12%,transparent)}
+.rz.p{color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}
+.rz.par{color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.rz.ic{color:var(--accent)}
+.rz.n{color:var(--muted)}
+.doc.lit{border-left:0}
+ol.etape{margin:6px 0 4px;padding-left:18px;font-size:.88rem;color:var(--ink-2)}
+ol.etape li{margin:2px 0}
+button.lnk{font:inherit;font-size:.85rem;border:0;background:none;color:var(--accent);padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.h-row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.lnks{display:inline-flex;gap:6px 14px;flex-wrap:wrap;align-items:center}
 @media print{header.top{position:static}nav.main,.subnav,.filters,.more{display:none}}

@@ -39,13 +39,35 @@ CREATE TABLE IF NOT EXISTS sicap_can (id INTEGER PRIMARY KEY, ca_id INTEGER, nr 
     tip_contract TEXT, cpv TEXT, valoare REAL, oferta_min REAL, oferta_max REAL, data TEXT, json TEXT);
 -- contractele din fiecare anunț de atribuire, cu câștigătorul (unul sau mai mulți, în asociere)
 CREATE TABLE IF NOT EXISTS sicap_contract (id TEXT PRIMARY KEY, can_id INTEGER, nr TEXT, data TEXT, titlu TEXT,
-    valoare REAL, castigator TEXT, castigator_cui TEXT, json TEXT);
+    valoare REAL, castigator TEXT, castigator_cui TEXT, json TEXT, tip INTEGER);
 CREATE TABLE IF NOT EXISTS sicap_can_verificat (can_id INTEGER PRIMARY KEY, la TEXT, contracte INTEGER, eroare TEXT);
 CREATE TABLE IF NOT EXISTS sicap_meta (k TEXT PRIMARY KEY, v TEXT);
 """
 
-# autorități din alte localități care conțin „Rădăuți” în nume
-EXCLUSE = re.compile(r"radauti[\s\-]*prut", re.I)
+# autorități din alte localități care conțin „Rădăuți” în nume (Rădăuți-Prut, județul Botoșani;
+# Arhiepiscopia Sucevei și Rădăuților, cu sediul la Suceava)
+EXCLUSE = re.compile(r"radauti[\s\-]*prut|sucevei\s+si\s+radautilor", re.I)
+
+
+# instituții din oraș al căror nume din SICAP poate să nu conțină „Rădăuți” (nume unice în țară)
+NUME_INCLUSE = re.compile(r"colegiul\s+national\s+\W*eudoxiu\s+hurmuzachi|andronic\s+motrescu|"
+                          r"biblioteca\s+municipala\W+tudor\s+flondor|samuil\s+si\s+eugenia\s+ionet")
+
+# grupele de instituții (lista instituțiilor subordonate e cea de pe site-ul primăriei)
+GRUPE = [
+    ("Primăria", r"\bmunicipiul\s+radauti\b|\bprimaria\b"),
+    ("Instituții subordonate primăriei", r"politi|asistenta\s+sociala|spitalul\s+municipal|servicii\s+comunale|casa\s+(municipala\s+)?de\s+cultura|"
+                                         r"biblioteca|muzeul|galeri|zoologic|clubul\s+sportiv\s+(municipal|scolar)"),
+    ("Școli și grădinițe", r"scoala|gradinita|colegiul|liceul|seminar|clubul\s+copiilor|palatul\s+copiilor"),
+]
+
+
+def grupa(nume):
+    n = _n(nume)
+    for g, rx in GRUPE:
+        if re.search(rx, n):
+            return g
+    return "Alte instituții din oraș"
 
 
 def _n(s):
@@ -122,6 +144,21 @@ class Client:
 
 def init(db):
     db.executescript(SCHEMA)
+    if "tip" not in [r[1] for r in db.execute("PRAGMA table_info(sicap_contract)")]:
+        # 1 = contract, 2 = acord-cadru (valoare maximă, nu cheltuială), 3 = contract subsecvent
+        db.execute("ALTER TABLE sicap_contract ADD COLUMN tip INTEGER")
+        for r in db.execute("SELECT id, json FROM sicap_contract").fetchall():
+            try:
+                t = json.loads(r[1] or "{}").get("contractType")
+            except ValueError:
+                t = None
+            db.execute("UPDATE sicap_contract SET tip=? WHERE id=?", (t, r[0]))
+        db.commit()
+    # o autoritate exclusă ulterior (vezi EXCLUSE) nu mai intră în date
+    for r in db.execute("SELECT id, text FROM sicap_ca WHERE inclus=1").fetchall():
+        if EXCLUSE.search(_n(r[1])):
+            db.execute("UPDATE sicap_ca SET inclus=0 WHERE id=?", (r[0],))
+    db.commit()
     col = [r[1] for r in db.execute("PRAGMA table_info(sicap_ca)")]
     if "istoric" not in col:
         # data la care s-a adus tot istoricul instituției (din 2018); instituțiile care au deja
@@ -156,7 +193,8 @@ def autoritati(store, cl, termeni=("RADAUTI", "RĂDĂUŢI", "RĂDĂUȚI"), cui_e
         if cui is None:
             m = re.search(r"\b(\d{4,10})\b", text)
             cui = m.group(1) if m else None
-        inclus = int(("radauti" in _n(text) or (cui and cui in cui_extra)) and not EXCLUSE.search(_n(text)))
+        inclus = int(("radauti" in _n(text) or (cui and cui in cui_extra) or bool(NUME_INCLUSE.search(_n(text))))
+                     and not EXCLUSE.search(_n(text)))
         row = db.execute("SELECT inclus FROM sicap_ca WHERE id=?", (i,)).fetchone()
         if row is None:
             noi += 1
@@ -354,7 +392,7 @@ def _castigatori(it):
 
     walk(it)
     # câmpuri plate pe contract: winnerTitle / winnerFiscalNumber, supplierName / supplierCif
-    flat_n = it.get("winnerTitle") or it.get("winnerName") or it.get("supplierName") or it.get("winner")
+    flat_n = it.get("winnerCaption") or it.get("winnerTitle") or it.get("winnerName") or it.get("supplierName") or it.get("winner")
     flat_c = it.get("winnerFiscalNumber") or it.get("supplierCif") or it.get("winnerCif")
     if isinstance(flat_n, str) and flat_n:
         c, n = cui_si_nume(flat_n)
@@ -388,12 +426,13 @@ def salveaza_contracte(db, can_id, items):
             val = _num(it.get(key))
             if val is not None:
                 break
-        db.execute("INSERT OR REPLACE INTO sicap_contract VALUES (?,?,?,?,?,?,?,?,?)", (
+        tip = it.get("contractType")
+        db.execute("INSERT OR REPLACE INTO sicap_contract VALUES (?,?,?,?,?,?,?,?,?,?)", (
             str(cid if cid is not None else f"{can_id}-{k}"), can_id,
             it.get("contractNo") or it.get("contractNumber"), (str(it.get("contractDate") or ""))[:10] or None,
             it.get("contractTitle") or it.get("title"), val,
             "; ".join(n for n, _ in cast if n) or None, (cast[0][1] if cast else None) or None,
-            json.dumps(it, ensure_ascii=False)))
+            json.dumps(it, ensure_ascii=False), tip if isinstance(tip, int) else None))
         n += 1
     return n
 
@@ -479,7 +518,7 @@ def semnale_divizare(acte):
     return sorted(out, key=lambda x: -x["suma"])
 
 
-NEREALIZATE = ("refuz", "respins", "anulat", "expirat", "retras", "neatribuit", "esuat", "renunt")
+NEREALIZATE = ("refuz", "respins", "anulat", "expirat", "retras", "neatribuit", "esuat", "renunt", "neaccept")
 
 
 def realizata(stare):
@@ -535,7 +574,7 @@ def export(store, azi=None):
     for ca in db.execute("SELECT * FROM sicap_ca WHERE inclus=1 ORDER BY text"):
         cui, nume = cui_si_nume(ca["text"])
         inst_ix[ca["id"]] = len(inst)
-        inst.append([ca["id"], nume or ca["text"], ca["cui"] or cui])
+        inst.append([ca["id"], nume or ca["text"], ca["cui"] or cui, grupa(nume or ca["text"])])
     furn, furn_ix, cpvs, cpv_ix = [], {}, [], {}
 
     def fx(cui, nume):
@@ -589,16 +628,24 @@ def export(store, azi=None):
             if ct:   # cu contractele cunoscute: câte un rând pe contract, cu câștigătorul lui
                 for c in ct:
                     dc = c["data"] or r["data"] or ""
+                    tip = c["tip"] or 1
                     can.append([r["id"], inst_ix[r["ca_id"]], dc, cx(r["cpv"]), c["valoare"], curs.eur(c["valoare"], dc),
                                 c["titlu"] or r["titlu"] or "", r["nr"] or "", r["procedura"] or "", r["tip_contract"] or "",
                                 fx(c["castigator_cui"], c["castigator"]) if (c["castigator"] or c["castigator_cui"]) else -1,
-                                c["nr"] or ""])
-                    rez[r["ca_id"]]["can_val"] += c["valoare"] or 0
+                                c["nr"] or "", tip])
+                    if tip != 2:   # acordul-cadru e valoarea maximă; banii se văd în contractele subsecvente
+                        rez[r["ca_id"]]["can_val"] += c["valoare"] or 0
             else:
+                try:
+                    atr = _txt(json.loads(r["json"] or "{}").get("sysContractAssigmentType")) or ""
+                except ValueError:
+                    atr = ""
+                tip = 2 if "acord" in _n(atr) else 0
                 can.append([r["id"], inst_ix[r["ca_id"]], r["data"] or "", cx(r["cpv"]), r["valoare"],
                             curs.eur(r["valoare"], r["data"]), r["titlu"] or "", r["nr"] or "", r["procedura"] or "",
-                            r["tip_contract"] or "", -1, ""])
-                rez[r["ca_id"]]["can_val"] += r["valoare"] or 0
+                            r["tip_contract"] or "", -1, "", tip])
+                if tip != 2:
+                    rez[r["ca_id"]]["can_val"] += r["valoare"] or 0
             rez[r["ca_id"]]["can"] += 1
         for r in db.execute(f"SELECT * FROM sicap_cn WHERE ca_id IN ({ids}) ORDER BY data DESC, id DESC"):
             cn.append([r["id"], inst_ix[r["ca_id"]], r["data"] or "", cx(r["cpv"]), r["valoare_estimata"],
@@ -617,7 +664,7 @@ def export(store, azi=None):
                   "coloane": {"da": ["id", "inst", "data", "furnizor", "cpv", "lei", "euro", "obiect", "cod", "nivel",
                                      "stare", "incheiata"],
                               "can": ["id", "inst", "data", "cpv", "lei", "euro", "obiect", "nr", "procedura", "tip",
-                                      "castigator", "nr_contract"],
+                                      "castigator", "nr_contract", "fel_contract (1 contract, 2 acord-cadru, 3 subsecvent)"],
                               "cn": ["id", "inst", "data", "cpv", "lei_estimat", "euro", "obiect", "nr", "procedura",
                                      "stare", "contestatie"]}}
     return rezumat, explorator
@@ -650,7 +697,11 @@ def raport_de_verificat(expl):
         toate[expl["stari"][x[10]]] = toate.get(expl["stari"][x[10]], 0) + 1
     out += ["", "Toate stările achizițiilor directe: " + ", ".join(f"{k or 'fără stare'}: {v}" for k, v in toate.items())]
     cc = [x for x in expl["can"] if x[10] >= 0]
-    out += ["", f"Contracte din licitații cu câștigător cunoscut: {len(cc)} din {len(expl['can'])} rânduri de atribuire"]
+    ac = [x for x in expl["can"] if x[12] == 2]
+    out += ["", f"Contracte din licitații cu câștigător cunoscut: {len(cc)} din {len(expl['can'])} rânduri de atribuire",
+            f"Acorduri-cadru (valoare maximă, nu intră în totaluri): {len(ac)}, în total {sum(x[4] or 0 for x in ac):,.2f} lei",
+            f"Contracte și contracte subsecvente (intră în totaluri): {sum(1 for x in expl['can'] if x[12] != 2)}, "
+            f"în total {sum(x[4] or 0 for x in expl['can'] if x[12] != 2):,.2f} lei"]
     tot = {}
     for x in expl["da"]:
         if x[9] < 2 and x[11]:

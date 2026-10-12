@@ -60,4 +60,5 @@ def export(store, today=None):
         return out
 
     return {"generat_la": (today or date.today()).isoformat(), "hcl": hcl, "pv": pv, "registre": reg,
-            "proiecte": postari("proiecte"), "contracte": postari("contracte")}
+            "proiecte": postari("proiecte"), "contracte": postari("contracte"),
+            "buget": postari("buget"), "bilanturi": postari("bilanturi")}
