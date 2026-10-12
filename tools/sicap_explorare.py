@@ -64,12 +64,18 @@ def main():
     try:
         html = S.get(BASE + "/pub", timeout=60, headers={"Accept": "text/html"}).text
         save("pagina.html", html)
-        scripts = re.findall(r'<script[^>]+src="([^"]+\.js[^"]*)"', html)
+        scripts = [x for x in re.findall(r'<script[^>]+src="([^"]+)"', html)
+                   if x.startswith("/") and not x.startswith("//")]
         REZ.append(f"- pagina /pub: {len(html)} caractere, {len(scripts)} scripturi")
         for src in scripts[:25]:
             time.sleep(1)
             u = src if src.startswith("http") else BASE + "/" + src.lstrip("/")
             js = S.get(u, timeout=120, headers={"Accept": "*/*"}).text
+            save("script-" + re.sub(r"[^A-Za-z0-9]+", "-", src)[:60] + ".js", js)
+            for kw in ("DirectAcquisition", "contractingAuthority", "ComboPub", "GetCAList", "publicationDateStart",
+                       "finalizationDate", "caId", "contractingAuthorityId", "sysDirectAcquisitionStateId"):
+                for mm in list(re.finditer(kw, js))[:6]:
+                    snippets.setdefault("kw:" + kw, []).append(js[max(0, mm.start() - 500): mm.end() + 700])
             for m in re.finditer(r"api-pub/[A-Za-z0-9_/\-]+", js):
                 p = m.group(0)
                 paths.add(p)
@@ -77,7 +83,7 @@ def main():
     except Exception as e:
         REZ.append(f"- eroare la citirea paginii: {e}")
     save("cai-api.json", sorted(paths))
-    save("fragmente-cod.json", {p: v[:3] for p, v in snippets.items()})
+    save("fragmente-cod.json", {p: v[:6] for p, v in snippets.items()})
     REZ.append(f"- căi /api-pub găsite în cod: {len(paths)}")
 
     # 2. cererile de bază, pe o fereastră scurtă
@@ -85,6 +91,14 @@ def main():
     call("achizitii-directe", "POST", "/api-pub/DirectAcquisitionCommon/GetDirectAcquisitionList/",
          {"pageSize": 5, "pageIndex": 0, "showOngoingDa": False, "cookieContext": None,
           "sysDirectAcquisitionStateId": None, "publicationDateStart": d0, "publicationDateEnd": d1})
+    for i, extra in enumerate([
+            {"finalizationDateStart": d0, "finalizationDateEnd": d1},
+            {"publicationDateStart": "2026-09-01", "publicationDateEnd": "2026-09-02"},
+            {"publicationDateStart": d0, "publicationDateEnd": d1, "finalizationDateStart": d0, "finalizationDateEnd": d1}]):
+        body = {"pageSize": 5, "pageIndex": 0, "showOngoingDa": False, "cookieContext": None,
+                "sysDirectAcquisitionStateId": None}
+        body.update(extra)
+        call(f"achizitii-directe-v{i + 2}", "POST", "/api-pub/DirectAcquisitionCommon/GetDirectAcquisitionList/", body)
     call("anunturi-participare", "POST", "/api-pub/NoticeCommon/GetCNoticeList/",
          {"sysNoticeTypeIds": [2, 6, 7, 17], "sortProperties": [], "pageSize": 5, "pageIndex": 0,
           "hasUnansweredQuestions": False, "startPublicationDate": d0, "endPublicationDate": "2026-09-10T00:00:00.000Z"})
@@ -95,9 +109,11 @@ def main():
     # 3. autoritățile contractante din Rădăuți: încercăm căile de tip listă/combo găsite în cod
     cand = [p for p in paths if re.search(r"(?i)(combo|authorit|entity|\bca)", p)]
     REZ.append(f"- căi candidate pentru autorități: {len(cand)}")
-    for i, p in enumerate(sorted(cand)[:20]):
-        call(f"autoritati-{i:02d}-get", "GET", "/" + p.strip("/") + "/", params={"filter": "RADAUTI", "pageSize": 100})
-        call(f"autoritati-{i:02d}-post", "POST", "/" + p.strip("/") + "/", {"filter": "RADAUTI", "pageSize": 100, "pageIndex": 0})
+    for i, p in enumerate(sorted(cand)[:25]):
+        u = "/" + p.strip("/") + "/"
+        call(f"autoritati-{i:02d}-get", "GET", u, params={"filter": "RADAUTI", "pageSize": 100})
+        call(f"autoritati-{i:02d}-get-text", "GET", u, params={"text": "RADAUTI"})
+        call(f"autoritati-{i:02d}-post", "POST", u, {"filter": "RADAUTI", "pageSize": 100, "pageIndex": 0})
 
     save("rezumat.md", "# Explorare SICAP\n\n" + "\n".join(REZ) + "\n")
     print("\n".join(REZ))
