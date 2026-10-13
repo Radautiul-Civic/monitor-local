@@ -163,22 +163,46 @@ def _extrage_general(text):
 # „Din totalul de 15 consilieri prezenţi, 13 au participat la vot (nu au participat domnul Jecalo și
 #  domnul Țarevici), 13 au votat pentru, 0 împotrivă, O abţineri, proiectul de hotărâre fiind aprobat.”
 N0 = r"(\d{1,2}|o|zero)"   # OCR citește des „0” ca „O”
-ANCORA = re.compile(r"din\s+totalul\s+de\s+(\d{1,2})\s+consilieri(?:\s+locali)?\s+prezen\w*")
-R_PART = re.compile(r"(\d{1,2})\s+(?:consilieri\s+)?au\s+participat\s+la\s+vot(?:\s*\(([^)]{3,300})\))?")
-R_PENTRU = re.compile(r"(\d{1,2})\s+(?:consilieri\s+)?au\s+votat\s*'?\s*pentru")
+# numere de consilieri citite greșit de OCR: „î8” sau „1&” în loc de 18, „1l” în loc de 11
+NO = r"(?<![a-z\d])(\d[\d&il]?|[il|!]\d)"
+ANCORA = re.compile(r"din\s+totalul\s+de\s+" + NO + r"\s+consilieri(?:\s+locali)?\s+prezen\w*")
+R_PART = re.compile(NO + r"\s+(?:consilieri\s+)?au\s+participat\s+la\s+vot(?:\s*\(([^)]{3,300})\))?")
+R_PENTRU = re.compile(NO + r"\s+(?:consilieri\s+)?au\s+votat\s*'?\s*pentru")
 R_IMP = re.compile(N0 + r"\W{0,4}(?:voturi\s+)?'?\s*(?:impotriva|contra)(?:\s*\(([^)]{3,300})\))?")
 R_ABT = re.compile(N0 + r"\W{0,4}'?\s*abtiner\w*(?:\s*\(([^)]{3,300})\))?")
 R_FIIND = re.compile(r"(proiectul\s+de\s+hotarare|ordinea\s+de\s+zi|procesul[\s-]+verbal|amendamentul|propunerea)?[^.]{0,40}?"
                      r"\bfiind\s+(aprobat\w*|adoptat\w*|respins\w*|neaprobat\w*|neadoptat\w*)")
-R_TRECE = re.compile(r"se\s+trece\s+la\s+punctul\s+(\d{1,2})[^\n]{0,80}?(proiect\w*\s+de\s+hotarare[^\n]*)")
-R_PREZ = re.compile(r"din\s+cei\s+(\d{1,2})\s+consilieri(?:\s+locali)?\s+in\s+functie\s+sunt\s+prezen\w*(?:\s+la\s+sedinta)?\s+(\d{1,2})")
+R_TRECE = re.compile(r"se\s+trece\s+la\s+punctul\s+" + NO + r"[^\n]{0,80}?(proiect\w*\s+de\s+hotarare[^\n]*)")
+R_FUNCTIE = re.compile(r"din\s+(?:cei\s+|totalul\s+de\s+)?" + NO + r"\s+consilieri(?:\s+locali)?\s+in\s+functie")
+R_PREZ = re.compile(r"in\s+functie[^.]{0,30}?(?:sunt|fiind)\s+prezen\w*(?:\s+la\s+sedinta)?\s+(?:toti\s+(?:cei\s+)?)?" + NO)
 R_ABSENT = re.compile(r"absenteaza[^.]{0,80}?(?:respectiv|:)\s*:?\s*([^.]{3,400})\.")
+# „Lipsesc nemotivat de la şedinţă consilierii locali Airinei Cristina, Ihnatiuc Maria şi Lorin Iosif.”
+R_LIPSESC = re.compile(r"\blipse(?:sc|ste)\s+(?:ne)?(?:motivat\s+)?(?:de\s+la\s+sedinta\s+)?(?:consilier\w*\s+)?(?:local\w*\s+)?"
+                       r"(?:respectiv\s*:?\s*)?([^.]{3,300})\.")
 R_CONFLICT = re.compile(r"\b(?:dl|dna|domnul|doamna)\.?\s+(\w[\w\- ]{2,40}?)\s+intervine\s+si\s+precizeaza\s+ca\s+nu\s+participa"
                         r"[^.]{0,60}?punctul\s+(\d{1,2})")
 
 
 def _n0(x):
     return 0 if x in ("o", "zero") else int(x)
+
+
+def _no(x):
+    """Număr de consilieri din OCR: „i8” -> 18, „1&” -> 18, „1l” -> 11."""
+    return int(x.translate(str.maketrans("il|!&", "11118")))
+
+
+_MARE = "A-ZĂÂÎȘŞȚŢ"
+
+
+def _nume_simple(orig):
+    """„Airinei Cristina, Ihnatiuc Maria şi Lorin Iosif” (fără domnul/doamna) -> nume."""
+    out = []
+    for b in re.split(r",|;|\s+(?:și|şi|si)\s+", orig):
+        b = re.sub(r"\s+", " ", b).strip()
+        if re.fullmatch(rf"[{_MARE}][\w\-]+(?: [{_MARE}][\w\-]+){{1,2}}", b) and b not in out:
+            out.append(b)
+    return out
 
 
 def _nume_lista(orig):
@@ -195,12 +219,21 @@ def prezenta(text):
     """Prezența la ședință: {in_functie, prezenti, absenti: [nume], nu_participa: {punct: [nume]}}."""
     s = normalizeaza(text or "")
     out = {"in_functie": None, "prezenti": None, "absenti": [], "nu_participa": {}}
+    m = R_FUNCTIE.search(s)
+    if m:
+        out["in_functie"] = _no(m.group(1))
     m = R_PREZ.search(s)
     if m:
-        out["in_functie"], out["prezenti"] = int(m.group(1)), int(m.group(2))
-    m = R_ABSENT.search(s)
-    if m:
-        out["absenti"] = _nume_lista(text[m.start(1):m.end(1)])
+        out["prezenti"] = _no(m.group(1))
+    elif out["in_functie"] and re.search(r"in\s+functie[^.]{0,30}?prezen\w*(?:\s+la\s+sedinta)?\s+toti\b", s):
+        out["prezenti"] = out["in_functie"]
+    for r in (R_ABSENT, R_LIPSESC):
+        m = r.search(s)
+        if m:
+            seg = text[m.start(1):m.end(1)]
+            out["absenti"] = _nume_lista(seg) or _nume_simple(seg)
+            if out["absenti"]:
+                break
     for m in R_CONFLICT.finditer(s):
         nume = re.sub(r"\s+", " ", text[m.start(1):m.end(1)]).strip()
         out["nu_participa"].setdefault(int(m.group(2)), []).append(nume)
@@ -222,20 +255,21 @@ def extrage_radauti(text):
         obiect = (mf.group(1) or "") if mf else ""
         # votul pe ordinea de zi sau pe procesul-verbal anterior nu e un vot pe o hotărâre
         procedural = bool(re.search(r"ordinea\s+de\s+zi|procesul[\s-]+verbal", obiect)) or \
+            bool(re.search(r"(ordinea|ordinii)\s+de\s+zi|procesul\w*[\s-]+verbal", fer[-90:])) or \
             bool(re.search(r"supune\s+la\s+vot\s+(ordinea\s+de\s+zi|procesul)", s[max(prev, a.start() - 300):a.start()]))
         inapoi = s[prev:a.start()]
         mt = list(R_TRECE.finditer(inapoi))
         titlu, punct = None, None
         if mt:
-            punct = int(mt[-1].group(1))
+            punct = _no(mt[-1].group(1))
             st0 = prev + mt[-1].start(2)
             titlu = re.sub(r"\s+", " ", orig[st0: prev + mt[-1].end(2)]).strip().rstrip(".")
         nep = _nume_lista(orig[a.start() + mp.start(2): a.start() + mp.end(2)]) if mp and mp.group(2) else []
-        v = {"punct": punct, "titlu": titlu, "prezenti": int(a.group(1)),
-             "participanti": int(mp.group(1)) if mp else None,
-             "pentru": int(mpe.group(1)) if mpe else None,
+        v = {"punct": punct, "titlu": titlu, "prezenti": _no(a.group(1)),
+             "participanti": _no(mp.group(1)) if mp else None,
+             "pentru": _no(mpe.group(1)) if mpe else None,
              "impotriva": _n0(mi.group(1)) if mi else 0, "abtineri": _n0(ma.group(1)) if ma else 0,
-             "nu_voteaza": (int(a.group(1)) - int(mp.group(1))) if mp else 0, "nume_nu_voteaza": nep,
+             "nu_voteaza": (_no(a.group(1)) - _no(mp.group(1))) if mp else 0, "nume_nu_voteaza": nep,
              "nume_impotriva": _nume_lista(orig[a.start() + mi.start(2): a.start() + mi.end(2)]) if mi and mi.group(2) else [],
              "nume_abtineri": _nume_lista(orig[a.start() + ma.start(2): a.start() + ma.end(2)]) if ma and ma.group(2) else [],
              "rezultat": ("respins" if re.match(r"(respins|neaprob|neadopt)", mf.group(2)) else "adoptat") if mf else None,
@@ -273,24 +307,50 @@ def _cuv(t):
              "consiliul", "anul", "nr"}}
 
 
+def _scor(titlu, h):
+    """Cât de bine se potrivește titlul proiectului votat cu o hotărâre: după titlul de pe site sau după
+    începutul textului hotărârii (pe site titlul e adesea doar „HCL nr. ...”)."""
+    a = _cuv(titlu)
+    if not a:
+        return 0.0
+    b = _cuv(h[2])
+    j = len(a & b) / max(1, len(a | b))
+    if len(h) > 3 and h[3]:
+        c = _cuv(h[3])
+        j = max(j, len(a & c) / len(a) * 0.9)
+    return j
+
+
 def leaga_hcl(voturi, hcl):
-    """hcl: [(an, nr, titlu)] adoptate în ședință. Fiecare vot primește hotărârea cu titlul cel mai apropiat."""
-    folosite = set()
-    for v in voturi:
-        if not v.get("titlu"):
+    """hcl: [(an, nr, titlu[, început de text])] adoptate în ședință. Fiecare vot primește hotărârea cea mai
+    apropiată (potrivirile cele mai sigure întâi). Dacă rămân la fel de multe voturi adoptate cât hotărâri
+    nelegate, se leagă în ordine (hotărârile se numerotează în ordinea de pe ordinea de zi)."""
+    perechi = []
+    for i, v in enumerate(voturi):
+        if v.get("titlu"):
+            for h in hcl:
+                sc = _scor(v["titlu"], h)
+                if sc >= 0.3:
+                    perechi.append((sc, i, (h[0], h[1])))
+    folosite, legate = set(), set()
+    for sc, i, k in sorted(perechi, key=lambda x: -x[0]):
+        if i in legate or k in folosite:
             continue
-        a = _cuv(v["titlu"])
-        best, scor = None, 0.0
-        for an, nr, t in hcl:
-            if (an, nr) in folosite:
-                continue
-            b = _cuv(t)
-            j = len(a & b) / max(1, len(a | b))
-            if j > scor:
-                best, scor = (an, nr), j
-        if best and scor >= 0.3:
-            v["hcl"] = {"an": best[0], "nr": best[1], "potrivire": round(scor, 2)}
-            folosite.add(best)
+        voturi[i]["hcl"] = {"an": k[0], "nr": k[1], "potrivire": round(sc, 2)}
+        legate.add(i)
+        folosite.add(k)
+    rest_v = [i for i, v in enumerate(voturi) if i not in legate and v.get("rezultat") == "adoptat"]
+    rest_h = sorted((h[0], h[1]) for h in hcl if (h[0], h[1]) not in folosite)
+    if rest_v and len(rest_v) == len(rest_h):
+        # ordinea trebuie să fie compatibilă cu legăturile deja făcute
+        for i, k in zip(rest_v, rest_h):
+            inainte = [voturi[j]["hcl"]["nr"] for j in legate if j < i]
+            dupa = [voturi[j]["hcl"]["nr"] for j in legate if j > i]
+            if (inainte and max(inainte) > k[1]) or (dupa and min(dupa) < k[1]):
+                break
+        else:
+            for i, k in zip(rest_v, rest_h):
+                voturi[i]["hcl"] = {"an": k[0], "nr": k[1], "potrivire": "ordine"}
     return voturi
 
 
@@ -305,6 +365,23 @@ def _text(db, wp_id):
         except OSError:
             continue
     return "\n".join(parts)
+
+
+def _text_hcl(db, wp_id, pdf_url, maxim=2500):
+    """Începutul textului hotărârii (titlul complet e acolo), după postarea de pe site sau după PDF (arhiva)."""
+    if wp_id:
+        t = _text(db, wp_id)
+        if t:
+            return t[:maxim]
+    if pdf_url:
+        r = db.execute("SELECT text_path FROM documents WHERE url=? AND text_path IS NOT NULL", (pdf_url,)).fetchone()
+        if r:
+            try:
+                with open(r["text_path"], encoding="utf-8") as f:
+                    return f.read(maxim)
+            except OSError:
+                pass
+    return ""
 
 
 CHEI_MOSTRA = re.compile(r"vot|pentru|impotriv|abtin|unanim|prezen|adopt|aprob|respins|consilier")
@@ -341,8 +418,8 @@ def export(store, mostre=8):
         k = (r["session_date"], r["session_type"])
         if k in sedinte and len(sedinte[k]["voturi"]) >= len(vot):
             continue
-        hcl = [(x["year"], x["number"], x["title"]) for x in db.execute(
-            "SELECT year, number, title FROM hcl WHERE adoption_date=?", (r["session_date"],))]
+        hcl = [(x["year"], x["number"], x["title"], _text_hcl(db, x["wp_id"], x["pdf_url"])) for x in db.execute(
+            "SELECT year, number, title, wp_id, pdf_url FROM hcl WHERE adoption_date=?", (r["session_date"],))]
         pdf = db.execute("SELECT url FROM documents WHERE wp_id=? ORDER BY rowid LIMIT 1", (r["wp_id"],)).fetchone()
         prz = prezenta(text)
         for v in vot:   # cei care au anunțat că nu participă la vot (conflict de interese)

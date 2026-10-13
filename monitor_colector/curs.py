@@ -17,11 +17,14 @@ from . import config
 log = logging.getLogger(__name__)
 
 URL = "https://www.bnr.ro/files/xml/years/nbrfxrates{an}.xml"
-SCHEMA = "CREATE TABLE IF NOT EXISTS curs_bnr (data TEXT PRIMARY KEY, eur REAL);"
+SCHEMA = "CREATE TABLE IF NOT EXISTS curs_bnr (data TEXT PRIMARY KEY, eur REAL, sursa TEXT DEFAULT 'BNR');"
 
 
 def init(db):
     db.executescript(SCHEMA)
+    if "sursa" not in [r[1] for r in db.execute("PRAGMA table_info(curs_bnr)")]:
+        db.execute("ALTER TABLE curs_bnr ADD COLUMN sursa TEXT DEFAULT 'BNR'")
+        db.commit()
 
 
 def parse(xml_bytes, moneda="EUR"):
@@ -41,27 +44,63 @@ def parse(xml_bytes, moneda="EUR"):
     return out
 
 
+URLS_BNR = ("https://www.bnr.ro/files/xml/years/nbrfxrates{an}.xml", "https://bnr.ro/files/xml/years/nbrfxrates{an}.xml")
+# rezervă: cursul de referință al Băncii Centrale Europene pentru leu (practic identic cu al BNR)
+URL_BCE = "https://data-api.ecb.europa.eu/service/data/EXR/D.RON.EUR.SP00.A?startPeriod={de_la}-01-01&format=csvdata"
+
+
+def parse_bce(text):
+    import csv
+    import io
+    out = []
+    for r in csv.DictReader(io.StringIO(text)):
+        try:
+            out.append((r["TIME_PERIOD"][:10], float(r["OBS_VALUE"])))
+        except (KeyError, ValueError, TypeError):
+            continue
+    return out
+
+
 def actualizeaza(db, de_la=2018, azi=None, session=None):
-    """Descarcă anii lipsă și anul curent. Întoarce numărul de zile cu curs din bază."""
+    """Descarcă anii lipsă și anul curent, de la BNR; dacă BNR nu răspunde, de la BCE.
+    Întoarce câte zile cu curs are baza și erorile întâlnite."""
     init(db)
     azi = azi or date.today()
     s = session or requests.Session()
     if not session:
-        s.headers.update({"User-Agent": config.USER_AGENT})
+        s.headers.update({"User-Agent": "Mozilla/5.0 (compatible; " + config.USER_AGENT + ")",
+                          "Accept": "application/xml,text/xml,*/*"})
+    erori, lipsa = {}, False
     for an in range(de_la, azi.year + 1):
         are = db.execute("SELECT COUNT(*) FROM curs_bnr WHERE data LIKE ?", (f"{an}-%",)).fetchone()[0]
         if an < azi.year and are >= 240:
             continue
+        zile = None
+        for u in URLS_BNR:
+            try:
+                r = s.get(u.format(an=an), timeout=60)
+                r.raise_for_status()
+                zile = parse(r.content)
+                if zile:
+                    break
+            except Exception as e:
+                erori[u.format(an=an)] = str(e)[:160]
+        if zile:
+            db.executemany("INSERT OR REPLACE INTO curs_bnr VALUES (?,?,'BNR')", zile)
+            db.commit()
+        else:
+            lipsa = True
+    if lipsa:   # BNR indisponibil: completăm zilele lipsă cu cursul BCE
         try:
-            r = s.get(URL.format(an=an), timeout=60)
+            r = s.get(URL_BCE.format(de_la=de_la), timeout=90, headers={"Accept": "text/csv"})
             r.raise_for_status()
-            zile = parse(r.content)
-        except Exception as e:   # BNR indisponibil: rămâne cursul deja salvat (sau rezerva din SICAP)
-            log.warning("curs BNR %s: %s", an, e)
-            continue
-        db.executemany("INSERT OR REPLACE INTO curs_bnr VALUES (?,?)", zile)
-        db.commit()
-    return db.execute("SELECT COUNT(*) FROM curs_bnr").fetchone()[0]
+            db.executemany("INSERT OR IGNORE INTO curs_bnr VALUES (?,?,'BCE')", parse_bce(r.text))
+            db.commit()
+        except Exception as e:
+            erori["BCE"] = str(e)[:160]
+    if erori:
+        log.warning("curs: %s", erori)
+    return {"zile": db.execute("SELECT COUNT(*) FROM curs_bnr").fetchone()[0], "erori": erori}
 
 
 class Curs:
@@ -69,9 +108,11 @@ class Curs:
 
     def __init__(self, db, rezerva_pe_an=None):
         init(db)
-        rows = db.execute("SELECT data, eur FROM curs_bnr ORDER BY data").fetchall()
+        rows = db.execute("SELECT data, eur, sursa FROM curs_bnr ORDER BY data").fetchall()
         self.zile = [r[0] for r in rows]
         self.val = [r[1] for r in rows]
+        surse = [r[2] or "BNR" for r in rows]
+        self._sursa = max(set(surse), key=surse.count) if surse else None
         self.rezerva = dict(rezerva_pe_an or {})
 
     def rata(self, data_iso):
@@ -102,4 +143,4 @@ class Curs:
 
     @property
     def sursa(self):
-        return "BNR" if self.zile else ("SICAP" if self.rezerva else None)
+        return self._sursa or ("SICAP" if self.rezerva else None)

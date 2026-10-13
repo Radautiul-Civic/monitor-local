@@ -1083,6 +1083,25 @@ abţineri, proiectul de hotărâre fiind aprobat.
         self.assertEqual((b["punct"], b["pentru"], b["impotriva"], b["abtineri"], b["rezultat"], b["unanimitate"], b["consistent"]),
                          (2, 12, 2, 1, "adoptat", False, True))
 
+    def test_ocr_absenti_si_legare(self):
+        from monitor_colector import voturi as V
+        t = ("din cei 18 consilieri locali în funcţie sunt prezenţi la şedinţă 15 consilieri locali.\n"
+             "Lipsesc nemotivat de la şedinţă consilierii locali Airinei Cristina, Ihnatiuc Maria şi Lorin Iosif.\n"
+             "Din totalul de 15 consilieri prezenţi, î5 au participat la vot, 15 au votat pentru, O împotrivă, 0 abţineri, "
+             "suplimentarea ordinii de zi fiind aprobată.\n"
+             "Se trece la punctul 1l de pe ordinea de zi si anume proiectul de hotărâre nr. 9/2026 privind statul de funcţii al Spitalului.\n"
+             "Din totalul de 15 consilieri prezenți, 1& au participat la vot, 15 au votat pentru, O împotrivă, O abţineri, proiectul de hotărâre fiind aprobat\n"
+             "Se trece la punctul 12 de pe ordinea de zi si anume proiectul de hotărâre nr. 10/2026 privind modernizarea străzii Ștefan cel Mare.\n"
+             "Din totalul de 15 consilieri prezenţi, 15 au participat la vot, 15 au votat pentru, O împotrivă, O abţineri, proiectul de hotărâre fiind aprobat\n")
+        p = V.prezenta(t)
+        self.assertEqual((p["in_functie"], p["prezenti"]), (18, 15))
+        self.assertEqual(p["absenti"], ["Airinei Cristina", "Ihnatiuc Maria", "Lorin Iosif"])
+        _, v = V.extrage(t)
+        self.assertEqual([(x["punct"], x["participanti"], x["consistent"]) for x in v], [(11, 18, False), (12, 15, True)])
+        V.leaga_hcl(v, [(2026, 152, "HCL nr. 152", "HOTĂRÂRE privind modernizarea străzii Ștefan cel Mare"),
+                        (2026, 151, "HCL nr. 151", "")])
+        self.assertEqual((v[1]["hcl"]["nr"], v[0]["hcl"]["nr"], v[0]["hcl"]["potrivire"]), (152, 151, "ordine"))
+
 
 class TestPublicare(unittest.TestCase):
     def test_zona_publica_doar_hotarari_si_sicap(self):
