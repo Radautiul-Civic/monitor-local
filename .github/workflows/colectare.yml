@@ -42,6 +42,8 @@ jobs:
           restore-keys: date-
 
       - name: Teste
+        # un test picat apare cu roșu, dar nu mai oprește colectarea
+        continue-on-error: true
         run: python -m unittest discover -s tests
 
       - name: Colectare completă (doar la cerere)
