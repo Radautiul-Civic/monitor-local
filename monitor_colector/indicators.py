@@ -156,7 +156,8 @@ def compute(store, today=None):
         from . import litigii
         ex = litigii.export(store, public=True, azi=today)
         out["litigii"] = {"total": len(ex["dosare"]), "in_curs": sum(1 for d in ex["dosare"] if d["stare"] == "în curs"),
-                          "primul_an": min((d["an"] for d in ex["dosare"] if d["an"]), default=None)} if ex["dosare"] else None
+                          "primul_an": min((d["an"] for d in ex["dosare"] if d["an"]), default=None),
+                          "autoritati": litigii.indicatori(ex)["autoritati"]} if ex["dosare"] else None
     except Exception:
         out["litigii"] = None
     try:

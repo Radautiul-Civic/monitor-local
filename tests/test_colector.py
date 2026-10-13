@@ -910,7 +910,9 @@ class TestLitigii(unittest.TestCase):
 <sedinte><DosarSedinta><complet>C1</complet><data>2024-03-01T00:00:00</data><ora>09:00</ora><solutie>Amână cauza</solutie>
 <solutieSumar /></DosarSedinta><DosarSedinta><complet>C1</complet><data>2024-05-10T00:00:00</data><ora>09:00</ora>
 <solutie>Admite</solutie><solutieSumar>Admite acţiunea formulată de reclamantul Popescu Ion.</solutieSumar>
-<dataPronuntare>2024-05-20T00:00:00</dataPronuntare></DosarSedinta></sedinte>
+<dataPronuntare>2024-05-20T00:00:00</dataPronuntare><documentSedinta>Hotarâre</documentSedinta><numarDocument>412/2024</numarDocument>
+<dataDocument>2024-05-20T00:00:00</dataDocument></DosarSedinta></sedinte>
+<caiAtac><DosarCaleAtac><dataDeclarare>2024-05-28T00:00:00</dataDeclarare><parteDeclaratoare>MUNICIPIUL RĂDĂUŢI PRIN PRIMAR</parteDeclaratoare><tipCaleAtac>Apel</tipCaleAtac></DosarCaleAtac></caiAtac>
 <numar>1234/285/2024</numar><numarVechi /><data>2024-01-15T00:00:00</data><institutie>TribunalulSUCEAVA</institutie>
 <departament>Contencios</departament><categorieCaz>Contencios_administrativ_si_fiscal</categorieCaz>
 <stadiuProcesual>Fond</stadiuProcesual><obiect>anulare act administrativ</obiect><dataModificare>2024-05-20T00:00:00</dataModificare>
@@ -937,6 +939,31 @@ class TestLitigii(unittest.TestCase):
         self.assertEqual(LT.instanta("TribunalulSUCEAVA"), "Tribunalul Suceava")
         self.assertEqual(LT.instanta("JudecatoriaRADAUTI"), "Judecătoria Rădăuți")
         self.assertEqual(LT.instanta("CurteadeApelSUCEAVA"), "Curtea de Apel Suceava")
+
+    def test_autoritati_si_intervenienti(self):
+        from monitor_colector import litigii as LT
+        db = sqlite3.connect(":memory:")
+        db.execute("CREATE TABLE sicap_ca (id INTEGER PRIMARY KEY, text TEXT, cui TEXT, inclus INTEGER, gasit_la TEXT)")
+        db.executemany("INSERT INTO sicap_ca VALUES (?,?,?,1,'x')", [(1, "Municipiul Radauti", "4244148"),
+            (2, 'GRADINITA CU PROGRAM PRELUNGIT "PRICHINDELUL" RADAUTI', "18252370"), (3, "Scoala 1 Gheorghe Popadiuc Radauti", "18252396")])
+        LT.incarca_institutii(db)
+        A = LT.autoritate
+        self.assertEqual(A("PRIMARUL MUNICIPIULUI RĂDĂUŢI"), ("Municipiul Rădăuți", "Primarul"))
+        self.assertEqual(A("SPITALUL MUNICIPAL RĂDĂUŢI")[0], "Spitalul Municipal Rădăuți")
+        self.assertEqual(A("SC SERVICII COMUNALE SA", "TribunalulSUCEAVA")[0], "Servicii Comunale S.A.")
+        self.assertIsNone(A("SC SERVICII COMUNALE SA", "TribunalulBRAILA"))            # alt oraș
+        self.assertEqual(A("COLEGIUL NAŢIONAL EUDOXIU HURMUZACHI", "JudecatoriaRADAUTI")[0], "Colegiul Național „Eudoxiu Hurmuzachi”")
+        self.assertEqual(A("GRĂDINIŢA PRICHINDELUL RĂDĂUŢI")[0], 'GRADINITA CU PROGRAM PRELUNGIT "PRICHINDELUL" RADAUTI')
+        self.assertEqual(A("ŞCOALA GIMNAZIALĂ NR. 1 GHEORGHE POPADIUC RĂDĂUŢI")[0], "Scoala 1 Gheorghe Popadiuc Radauti")
+        for nu in ("PARCHETUL DE PE LÂNGĂ JUDECĂTORIA RĂDĂUŢI", "POLIŢIA MUNICIPIULUI RĂDĂUŢI", "SC AVACONSULTING SRL RĂDĂUŢI",
+                   "COMUNA RĂDĂUŢI-PRUT", "ASOCIAŢIA RĂDĂUŢIUL CIVIC"):
+            self.assertIsNone(A(nu), nu)
+        r, p_, alte = LT.parti_pe_parte({"parti": [{"nume": "PREFECTUL JUDEŢULUI SUCEAVA", "calitate": "Reclamant"},
+                                                   {"nume": "PRIMARUL MUNICIPIULUI RĂDĂUŢI", "calitate": "Pârât"},
+                                                   {"nume": "ASOCIAŢIA RĂDĂUŢIUL CIVIC", "calitate": "Intervenient în nume propriu"}]})
+        self.assertEqual((r, p_, alte), (["PREFECTUL JUDEŢULUI SUCEAVA"], ["PRIMARUL MUNICIPIULUI RĂDĂUŢI"],
+                                         ["ASOCIAŢIA RĂDĂUŢIUL CIVIC (intervenient în nume propriu)"]))
+        del LT.INSTITUTII_SICAP[:]
 
     def test_colectare_cu_rezerva_si_export(self):
         from monitor_colector import litigii as LT
@@ -971,6 +998,9 @@ class TestLitigii(unittest.TestCase):
         self.assertEqual((d["reclamanti"], d["parati"]), (["persoană fizică"], ["MUNICIPIUL RĂDĂUŢI PRIN PRIMAR"]))
         self.assertEqual([(n["fel"], n["data"]) for n in ex["noutati"]], [("soluție", "2024-05-20"), ("dosar nou", "2024-01-15")])
         self.assertEqual((ex["noutati"][0]["rezultat"], ex["noutati"][0]["sumar"]), ("pierdut", None))
+        self.assertEqual(ex["noutati"][0]["hotarare"], {"tip": "Hotărâre", "nr": "412/2024", "data": "2024-05-20"})
+        self.assertEqual(d["etape"][0]["hotarare"]["nr"], "412/2024")
+        self.assertEqual(d["etape"][0]["cai_atac"], [{"tip": "Apel", "data": "2024-05-28", "parte": "MUNICIPIUL RĂDĂUŢI PRIN PRIMAR"}])
         intern = LT.export(store, public=False, azi=date(2024, 6, 1))
         self.assertIn("POPESCU ION", json.dumps(intern, ensure_ascii=False))
         self.assertIn("Admite acţiunea", intern["noutati"][0]["sumar"])
@@ -1157,6 +1187,29 @@ abţineri, proiectul de hotărâre fiind aprobat.
              {"punct": 2, "titlu": None, "rezultat": "adoptat"}]
         V.leaga_hcl(w, [(2026, 10, "", ""), (2026, 11, "", "")])
         self.assertEqual([x.get("hcl", {}).get("nr") for x in w], [10, None, 11])
+
+
+class TestConsilieri(unittest.TestCase):
+    def test_profiluri_si_voturi_deduse(self):
+        from monitor_colector import voturi as V
+        vot = lambda part, pen, imp=0, abt=0, ni=(), na=(): {"participanti": part, "pentru": pen, "impotriva": imp, "abtineri": abt, "nu_voteaza": 0,
+                                                            "nume_impotriva": list(ni), "nume_abtineri": list(na), "nume_nu_voteaza": [], "consistent": True}
+        S = [{"data": "2024-10-01", "in_functie": 5, "prezenti": 4, "absenti": ["Mutrescu Dan"], "online": ["Ihnatiuc Maria", "Cigoli Augustin"],
+              "presedinte": None, "voturi": [vot(4, 3, abt=1, na=["Cigoli Augustin"])]},
+             {"data": "2024-08-01", "in_functie": 5, "prezenti": 4, "absenti": ["Lorin Iosif"], "online": [], "presedinte": "Pop Ana",
+              "voturi": [vot(4, 3, imp=1, ni=["Mutrescu"]), vot(4, 4)]}]
+        C = {c["nume"]: c for c in V.consilieri(S, mandate={"2024-2028": "2024-07-01"})}
+        self.assertEqual(sorted(C), ["Cigoli Augustin", "Ihnatiuc Maria", "Lorin Iosif", "Mutrescu Dan", "Pop Ana"])
+        self.assertEqual(C["Pop Ana"]["cod"], {"2024-08-01": "pPP", "2024-10-01": "pP"})
+        self.assertEqual(C["Lorin Iosif"]["cod"], {"2024-08-01": "XXX", "2024-10-01": "pP"})
+        self.assertEqual(C["Mutrescu Dan"]["cod"], {"2024-08-01": "pIP", "2024-10-01": "XX"})
+        self.assertEqual(C["Cigoli Augustin"]["cod"]["2024-10-01"], "pA")
+        self.assertEqual((C["Mutrescu Dan"]["stat"]["absent"], C["Mutrescu Dan"]["stat"]["I"], C["Pop Ana"]["mandate"]), (1, 1, ["2024-2028"]))
+        # dacă nu știm toți absenții, votul „pentru” nu se deduce
+        S[1]["absenti"] = []
+        C = {c["nume"]: c for c in V.consilieri(S, mandate={"2024-2028": "2024-07-01"})}
+        self.assertEqual(C["Pop Ana"]["cod"]["2024-08-01"], "???")
+        self.assertEqual(V.extra_sedinta("Preşedinte de şedinţă este domnul consilier local Ciobotariu Dumitru, conform")["presedinte"], "Ciobotariu Dumitru")
 
 
 class TestPublicare(unittest.TestCase):

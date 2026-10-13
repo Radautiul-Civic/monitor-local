@@ -9,7 +9,7 @@
   sicap [--tot]        achizițiile din SICAP ale instituțiilor din Rădăuți (--tot = din 2018) și câștigătorii licitațiilor
   geocodare [--minute M]  coordonatele adreselor din registrele de urbanism (OpenStreetMap), pentru hartă
   buget                execuția bugetară a municipiului și a instituțiilor din oraș (transparenta.eu)
-  litigii [--tot]      dosarele în care e parte municipiul, din portalquery.just.ro (--tot = din 2010)
+  litigii [--tot]      dosarele autorităților din Rădăuți (municipiul și instituțiile din SICAP), din portalquery.just.ro (--tot = din 2010)
   word                 textele extrase ca documente Word -> data/texte/<sursa>/*.docx
   indicatori           indicatorii și listele -> data/indicatori.json, .md, data/liste.json
   coada                coada OCR pentru recuperare -> data/coada-ocr.json

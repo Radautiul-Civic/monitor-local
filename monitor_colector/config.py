@@ -81,3 +81,12 @@ SICAP_TERMENI_EXTRA = ("SERVICII COMUNALE", "HURMUZACHI", "MOTRESCU", "FLONDOR",
 # Format: "AAAA-LL-ZZ": {"lei": suma, "sursa": "link sau HCL nr/an"}
 DATORIE_SOLD = {
 }
+
+# Mandatele consiliului local (începutul aproximativ, după alegeri). Dacă procesele-verbale conțin ședința de
+# constituire, data ei o înlocuiește automat. Se folosesc la profilurile consilierilor.
+CONSILIU_MANDATE = {
+    "2012-2016": "2012-06-25",
+    "2016-2020": "2016-06-27",
+    "2020-2024": "2020-10-26",
+    "2024-2028": "2024-07-01",
+}

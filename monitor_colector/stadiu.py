@@ -113,11 +113,11 @@ def compute(ind):
     # ---- Alte surse ----
     lt = ind.get("litigii") or {}
     if lt.get("total"):
-        add("Primărie", "Litigii", "complet",
-            f"{lt['total']} dosare în care e parte municipiul (din {lt['primul_an']}), {lt['in_curs']} în curs; "
-            "sursa: portal.just.ro.")
+        add("Litigii", "Dosare în instanță", "complet",
+            f"{lt['total']} dosare în care e parte o autoritate din Rădăuți (din {lt['primul_an']}), {lt['in_curs']} în curs; "
+            f"{len(lt.get('autoritati') or {}) or 1} autorități; sursa: portal.just.ro, verificat zilnic.")
     else:
-        add("Primărie", "Litigii", "planificat", "Dosarele în care primăria e parte (portal.just.ro).")
+        add("Litigii", "Dosare în instanță", "planificat", "Dosarele în care sunt parte autoritățile din Rădăuți (portal.just.ro).")
 
     add("Primărie", "Buget și bilanțuri", "partial",
         "Documentele sunt colectate; indicatorii de buget nu sunt încă afișați.")
