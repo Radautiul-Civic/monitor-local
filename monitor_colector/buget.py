@@ -228,6 +228,27 @@ def _cap(cod, nume, tabel):
     return tabel.get(c) or (re.sub(r"\s+", " ", nume or "").strip()[:60] if nume else (f"Capitolul {c}" if c else "Neclasificat"))
 
 
+# sursele de venit, grupate pentru graficul pe ani (după primele două cifre ale codului de venit)
+SURSE = [("Impozite și taxe locale", ("07", "12", "15", "16", "18")),
+         ("Cote din impozitul pe venit", ("03", "04")),
+         ("Sume defalcate din TVA", ("11",)),
+         ("Alte venituri proprii (chirii, servicii, amenzi)", ("30", "31", "33", "34", "35", "36", "37", "39")),
+         ("Subvenții de la stat și alte bugete", ("42", "43")),
+         ("Fonduri europene", ("45", "46", "48", "50", "56", "58")),
+         ("Excedent din anii trecuți și alte operațiuni financiare", ("40", "41"))]
+SURSA_IMPRUMUT = "Împrumuturi"
+
+
+def sursa_venit(cod, nume):
+    if _tragere(nume):
+        return SURSA_IMPRUMUT
+    c = re.sub(r"\D", "", str(cod or ""))[:2]
+    for g, coduri in SURSE:
+        if c in coduri:
+            return g
+    return "Alte venituri"
+
+
 def _tragere(nume):
     """Rând de venit care e o tragere dintr-un împrumut (nu rambursarea unui împrumut acordat de municipiu)."""
     t = _n(nume)
@@ -269,13 +290,15 @@ def export(store):
     det = {}
     for r in db.execute("SELECT cui, an, categorie, cod_functional, nume_functional, cod_economic, nume_economic, fel, suma "
                         "FROM buget_rand"):
-        d = det.setdefault(r["cui"], {}).setdefault(str(r["an"]), {"ch": {}, "vn": {}, "fel": {}, "economic": {}})
+        d = det.setdefault(r["cui"], {}).setdefault(str(r["an"]), {"ch": {}, "vn": {}, "fel": {}, "economic": {}, "surse": {}, "dezv": {}})
         s = r["suma"] or 0
         if r["categorie"] == "ch":
             k = _cap(r["cod_functional"], r["nume_functional"], CAPITOLE_CH)
             d["ch"][k] = d["ch"].get(k, 0) + s
             f = {"dezvoltare": "Investiții (dezvoltare)", "functionare": "Funcționare"}.get(r["fel"] or "", "Nespecificat")
             d["fel"][f] = d["fel"].get(f, 0) + s
+            if r["fel"] == "dezvoltare":   # pe ce s-a investit
+                d["dezv"][k] = d["dezv"].get(k, 0) + s
             e = re.sub(r"\D", "", str(r["cod_economic"] or ""))[:2]
             ek = {"10": "Cheltuieli de personal", "20": "Bunuri și servicii", "30": "Dobânzi", "40": "Subvenții",
                   "50": "Fonduri de rezervă", "51": "Transferuri", "55": "Alte transferuri", "56": "Proiecte cu fonduri europene",
@@ -286,6 +309,8 @@ def export(store):
         else:
             k = _cap(r["cod_functional"], r["nume_functional"], CAPITOLE_VN)
             d["vn"][k] = d["vn"].get(k, 0) + s
+            g = sursa_venit(r["cod_functional"], f"{r['nume_functional'] or ''} {r['nume_economic'] or ''}")
+            d["surse"][g] = d["surse"].get(g, 0) + s
     for c in det.values():
         for a in c.values():
             for k in a:

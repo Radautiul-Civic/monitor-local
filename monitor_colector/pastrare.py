@@ -25,7 +25,9 @@ import re
 import sqlite3
 import sys
 import tempfile
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
 from urllib.parse import urlparse, unquote
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
@@ -42,6 +44,11 @@ SITES = {"arhiva": config.ARCHIVE_URL, "site": config.BASE_URL}
 DEST = "intern/arhiva-copie"          # pe hosting; „intern/” cere parolă
 INTERN_URL = os.environ.get("INTERN_URL", "https://monitor.radautiulcivic.ro/intern/")
 DELAY = float(os.environ.get("MC_DELAY", "1.0"))
+# copia de siguranță: fișiere statice (wp-content/uploads), deci se pot cere mai des decât paginile;
+# câteva descărcări și urcări în paralel, fiecare cu conexiunea ei FTP
+DELAY_COPIE = float(os.environ.get("MC_ARHIVA_DELAY", "0.35"))
+PARALEL = int(os.environ.get("MC_ARHIVA_PARALEL", "4"))
+EXT_DOC = (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".odt", ".ods", ".zip", ".rar", ".rtf", ".ppt", ".pptx", ".txt", ".csv")
 # Adrese care NU se trimit în Internet Archive (copia publică e permanentă și nu mai poate fi
 # retrasă de noi). Ex.: r"publicatii-casatorii|casatori" pentru anunțurile de căsătorie.
 # Se copiază oricum pe hostingul nostru (protejat).
@@ -82,12 +89,14 @@ class Ritm:
     """Cel mult o cerere la DELAY secunde (politețe față de serverul primăriei)."""
     def __init__(self, delay=DELAY):
         self.delay, self.t = delay, 0.0
+        self._lock = threading.Lock()
 
     def asteapta(self):
-        w = self.delay - (time.monotonic() - self.t)
-        if w > 0:
-            time.sleep(w)
-        self.t = time.monotonic()
+        with self.__dict__.setdefault("_lock", threading.Lock()):   # comun pentru toate firele de lucru
+            w = self.delay - (time.monotonic() - self.t)
+            if w > 0:
+                time.sleep(w)
+            self.t = time.monotonic()
 
 
 def _vazut(c, url, site, sursa, **f):
@@ -286,55 +295,115 @@ class SpatiuEpuizat(Exception):
     pass
 
 
-def copiaza(c, minute=None, s=None, ritm=None, ftp=None, limita=None):
-    """Descarcă fișierele încă necopiate și le urcă pe hosting. Se oprește la buget sau la spațiu plin."""
+def _prioritate_sql():
+    """Documentele întâi (PDF, Word, Excel, arhive), apoi celelalte fișiere (imagini), apoi paginile."""
+    doc = " OR ".join(f"lower(url) LIKE '%{e}'" for e in EXT_DOC)
+    return f"CASE WHEN {doc} THEN 0 WHEN sursa='pagina' THEN 2 ELSE 1 END"
+
+
+def _o_copie(url, site, s, ritm, ftp):
+    """Descarcă un fișier și îl urcă pe hosting. Întoarce (sha256, octeți, cale)."""
+    ritm.asteapta()
+    tmp = None
+    try:
+        h, n = hashlib.sha256(), 0
+        with s.get(url, stream=True, timeout=120) as resp:
+            resp.raise_for_status()
+            fd, tmp = tempfile.mkstemp(dir=DIR)
+            with os.fdopen(fd, "wb") as out:
+                for chunk in resp.iter_content(1 << 16):
+                    out.write(chunk)
+                    h.update(chunk)
+                    n += len(chunk)
+        cale = cale_copie(url, site)
+        ftp.urca(tmp, cale)
+        return h.hexdigest(), n, cale
+    finally:
+        if tmp and os.path.exists(tmp):
+            os.remove(tmp)
+
+
+def copiaza(c, minute=None, s=None, ritm=None, ftp=None, limita=None, paralel=None):
+    """Descarcă fișierele încă necopiate și le urcă pe hosting, cu `paralel` fire de lucru (fiecare cu
+    conexiunea lui FTP). Se oprește la bugetul de timp sau când spațiul de pe hosting e plin."""
     if ftp is None and not intern_protejat():
         raise RuntimeError("folderul intern/ nu cere parolă: copiile nu se urcă")
-    s, ritm, ftp = s or sesiune(), ritm or Ritm(), ftp or FTP()
-    stop = time.time() + minute * 60 if minute else None
-    stats = {"copiate": 0, "octeti": 0, "erori": 0, "oprit_la_buget": False, "spatiu_epuizat": False}
+    paralel = 1 if ftp is not None else (paralel or PARALEL)
+    ritm = ritm or Ritm(DELAY_COPIE)
+    t0 = time.time()
+    stop = t0 + minute * 60 if minute else None
+    stats = {"copiate": 0, "octeti": 0, "erori": 0, "oprit_la_buget": False, "spatiu_epuizat": False,
+             "paralel": paralel, "ramase_inainte": 0, "exemple_erori": {}}
     rows = c.execute("SELECT url, site FROM fisiere WHERE copiat_la IS NULL AND erori < 3 "
-                     "ORDER BY sursa='pagina', data_upload").fetchall()
+                     f"ORDER BY {_prioritate_sql()}, data_upload").fetchall()
+    rows = rows[:limita] if limita else rows
+    stats["ramase_inainte"] = len(rows)
+    local = threading.local()
+    toate_ftp, lacat = [], threading.Lock()
+
+    def lucreaza(url, site):
+        if not hasattr(local, "ftp"):
+            local.ftp = ftp or FTP()
+            local.s = s or sesiune()
+            with lacat:
+                toate_ftp.append(local.ftp)
+        return _o_copie(url, site, local.s, ritm, local.ftp)
+
+    def rezultat(url, fut):
+        try:
+            h, n, cale = fut.result()
+            c.execute("UPDATE fisiere SET sha256=?, marime=?, copiat_la=?, cale=?, eroare=NULL WHERE url=?",
+                      (h, n, now(), cale, url))
+            stats["copiate"] += 1
+            stats["octeti"] += n
+        except ftplib.error_perm as e:
+            if str(e).startswith(("552", "452")):
+                stats["spatiu_epuizat"] = True
+                raise SpatiuEpuizat(str(e))
+            _eroare(url, e)
+        except SpatiuEpuizat:
+            raise
+        except Exception as e:
+            _eroare(url, e)
+
+    def _eroare(url, e):
+        c.execute("UPDATE fisiere SET erori=erori+1, eroare=? WHERE url=?", (str(e)[:300], url))
+        stats["erori"] += 1
+        k = re.sub(r"\d{3,}|https?://\S+", "#", str(e))[:80]
+        stats["exemple_erori"][k] = stats["exemple_erori"].get(k, 0) + 1
+
+    pool = ThreadPoolExecutor(max_workers=paralel)
+    in_lucru = {}
     try:
-        for r in rows[:limita] if limita else rows:
-            if stop and time.time() > stop:
-                stats["oprit_la_buget"] = True
+        it = iter(rows)
+        while True:
+            while len(in_lucru) < paralel * 2:
+                if stop and time.time() > stop:
+                    stats["oprit_la_buget"] = True
+                    break
+                r = next(it, None)
+                if r is None:
+                    break
+                in_lucru[pool.submit(lucreaza, r["url"], r["site"])] = r["url"]
+            if not in_lucru:
                 break
-            ritm.asteapta()
-            tmp = None
-            try:
-                h, n = hashlib.sha256(), 0
-                with s.get(r["url"], stream=True, timeout=120) as resp:
-                    resp.raise_for_status()
-                    fd, tmp = tempfile.mkstemp(dir=DIR)
-                    with os.fdopen(fd, "wb") as out:
-                        for chunk in resp.iter_content(1 << 16):
-                            out.write(chunk)
-                            h.update(chunk)
-                            n += len(chunk)
-                cale = cale_copie(r["url"], r["site"])
-                ftp.urca(tmp, cale)
-                c.execute("UPDATE fisiere SET sha256=?, marime=?, copiat_la=?, cale=?, eroare=NULL WHERE url=?",
-                          (h.hexdigest(), n, now(), cale, r["url"]))
-                stats["copiate"] += 1
-                stats["octeti"] += n
-            except ftplib.error_perm as e:
-                if str(e).startswith(("552", "452")):
-                    stats["spatiu_epuizat"] = True
-                    raise SpatiuEpuizat(str(e))
-                c.execute("UPDATE fisiere SET erori=erori+1, eroare=? WHERE url=?", (str(e)[:300], r["url"]))
-                stats["erori"] += 1
-            except Exception as e:
-                c.execute("UPDATE fisiere SET erori=erori+1, eroare=? WHERE url=?", (str(e)[:300], r["url"]))
-                stats["erori"] += 1
-            finally:
-                if tmp and os.path.exists(tmp):
-                    os.remove(tmp)
-                c.commit()
+            gata, _ = wait(list(in_lucru), return_when=FIRST_COMPLETED)
+            for f in gata:
+                rezultat(in_lucru.pop(f), f)
+            c.commit()
+            if stats["oprit_la_buget"] and not in_lucru:
+                break
     except SpatiuEpuizat:
-        pass
+        for f in in_lucru:
+            f.cancel()
     finally:
-        ftp.inchide()
+        pool.shutdown(wait=True)
+        c.commit()
+        for f in toate_ftp:
+            f.inchide()
+    dur = max(1.0, time.time() - t0)
+    stats["secunde"] = round(dur)
+    stats["fisiere_pe_ora"] = round(stats["copiate"] * 3600 / dur)
     return stats
 
 
@@ -416,6 +485,15 @@ def manifest(c):
         stare["site_uri"][site] = {"adresa": SITES[site], "total": q[0] or 0, "copiate": q[1] or 0,
                                    "octeti_copiati": q[2] or 0, "in_wayback": q[3] or 0, "disparute": q[4] or 0,
                                    "octeti_estimati": q[5] or 0}
+    try:   # ritmul ultimelor copieri, ca să estimăm când se termină
+        rs = [json.loads(r[0]) for r in c.execute("SELECT stats FROM rulari WHERE pas='copiaza' ORDER BY cand DESC LIMIT 1")]
+        if rs and isinstance(rs[0], dict):
+            stare["ultima_copiere"] = {k: rs[0].get(k) for k in ("copiate", "octeti", "erori", "secunde", "fisiere_pe_ora",
+                                                                  "paralel", "spatiu_epuizat", "exemple_erori")}
+        stare["documente"] = dict(zip(("total", "copiate"), c.execute(
+            f"SELECT COUNT(*), SUM(copiat_la IS NOT NULL) FROM fisiere WHERE {_prioritate_sql()} = 0").fetchone()))
+    except Exception as e:
+        log.warning("stare: %s", e)
     with open(os.path.join(DIR, "stare.json"), "w", encoding="utf-8") as f:
         json.dump(stare, f, ensure_ascii=False, indent=1)
     return stare

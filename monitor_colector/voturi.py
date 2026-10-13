@@ -339,7 +339,9 @@ def leaga_hcl(voturi, hcl):
         voturi[i]["hcl"] = {"an": k[0], "nr": k[1], "potrivire": round(sc, 2)}
         legate.add(i)
         folosite.add(k)
-    rest_v = [i for i, v in enumerate(voturi) if i not in legate and v.get("rezultat") == "adoptat"]
+    # voturile fără punct pe ordinea de zi (amendamente, suplimentări) nu produc o hotărâre proprie
+    rest_v = [i for i, v in enumerate(voturi) if i not in legate and v.get("rezultat") == "adoptat"
+              and (v.get("punct") is not None or all(x.get("punct") is None for x in voturi))]
     rest_h = sorted((h[0], h[1]) for h in hcl if (h[0], h[1]) not in folosite)
     if rest_v and len(rest_v) == len(rest_h):
         # ordinea trebuie să fie compatibilă cu legăturile deja făcute

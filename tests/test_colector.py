@@ -508,6 +508,43 @@ class TestPastrare(unittest.TestCase):
             P.DIR = old
             shutil.rmtree(tmp)
 
+    def test_copie_paralela_documente_intai(self):
+        from monitor_colector import pastrare as P
+        tmp = tempfile.mkdtemp()
+        old = (P.DIR, P.FTP, P.intern_protejat)
+        P.DIR = tmp
+        urcate = {}
+
+        class F:
+            def urca(self, local, remote):
+                with open(local, "rb") as fh:
+                    urcate[remote] = fh.read()
+
+            def inchide(self):
+                pass
+        P.FTP, P.intern_protejat = F, (lambda: True)
+        try:
+            c = sqlite3.connect(os.path.join(tmp, "p.db"), check_same_thread=False)
+            c.row_factory = sqlite3.Row
+            c.executescript(P.SCHEMA)
+            for i, (u, src) in enumerate([("https://a.ro/despre/", "pagina"), ("https://a.ro/wp-content/uploads/poza.jpg", "media"),
+                                          ("https://a.ro/wp-content/uploads/hcl.PDF", "media")] +
+                                         [(f"https://a.ro/wp-content/uploads/d{k}.pdf", "media") for k in range(6)]):
+                c.execute("INSERT INTO fisiere (url, site, sursa, data_upload) VALUES (?, 'arhiva', ?, ?)", (u, src, f"2020-01-0{i % 9 + 1}"))
+            st = P.copiaza(c, s=self.Sesiune([]), ritm=P.Ritm(0), limita=1)
+            self.assertEqual(list(urcate), ["intern/arhiva-copie/arhiva/wp-content/uploads/hcl.PDF"])   # documentele întâi
+            st = P.copiaza(c, s=self.Sesiune([]), ritm=P.Ritm(0), paralel=3)
+            self.assertEqual((st["copiate"], st["erori"], st["paralel"]), (8, 0, 3))
+            self.assertEqual(len(urcate), 9)
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM fisiere WHERE copiat_la IS NULL").fetchone()[0], 0)
+            c.execute("INSERT INTO rulari VALUES ('x', 'copiaza', ?)", (json.dumps(st),))
+            stare = P.manifest(c)
+            self.assertEqual((stare["documente"]["total"], stare["ultima_copiere"]["copiate"]), (7, 8))
+            c.close()
+        finally:
+            P.DIR, P.FTP, P.intern_protejat = old
+            shutil.rmtree(tmp)
+
 
 class TestWayback(unittest.TestCase):
     def test_existent_si_trimis(self):
@@ -1058,6 +1095,9 @@ class TestBuget(unittest.TestCase):
         self.assertEqual(d["ch"]["Datoria publică (dobânzi și rate)"], 12.0)
         self.assertEqual(d["vn"]["Sume defalcate din TVA"], 70.0)
         self.assertEqual(ex["datorie"]["pe_ani"]["2025"], {"trageri": 25.0, "rambursari": 9.0, "dobanzi": 3.0})
+        self.assertEqual(d["surse"], {"Sume defalcate din TVA": 70.0, "Împrumuturi": 25.0,
+                                      "Excedent din anii trecuți și alte operațiuni financiare": 1.0})
+        self.assertEqual(d["dezv"], {"Transporturi (străzi, drumuri, transport public)": 40.0})
         self.assertEqual(d["fel"]["Investiții (dezvoltare)"], 40.0)
         self.assertEqual(d["economic"]["Cheltuieli de personal"], 50.0)
         self.assertNotIn("4244113", ex["detalii"])                       # doar municipiul are rânduri detaliate
@@ -1112,6 +1152,11 @@ abţineri, proiectul de hotărâre fiind aprobat.
         V.leaga_hcl(v, [(2026, 152, "HCL nr. 152", "HOTĂRÂRE privind modernizarea străzii Ștefan cel Mare"),
                         (2026, 151, "HCL nr. 151", "")])
         self.assertEqual((v[1]["hcl"]["nr"], v[0]["hcl"]["nr"], v[0]["hcl"]["potrivire"]), (152, 151, "ordine"))
+        # un amendament (fără punct) între voturi nu strică legarea în ordine
+        w = [{"punct": 1, "titlu": None, "rezultat": "adoptat"}, {"punct": None, "titlu": None, "rezultat": "adoptat"},
+             {"punct": 2, "titlu": None, "rezultat": "adoptat"}]
+        V.leaga_hcl(w, [(2026, 10, "", ""), (2026, 11, "", "")])
+        self.assertEqual([x.get("hcl", {}).get("nr") for x in w], [10, None, 11])
 
 
 class TestPublicare(unittest.TestCase):
