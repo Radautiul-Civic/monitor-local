@@ -150,11 +150,35 @@ def main(argv=None):
             import shutil   # fișierele vechi pe instituții, înlocuite de exploratorul unic
             shutil.rmtree(os.path.join(config.DATA_DIR, "sicap"), ignore_errors=True)
             stats["indicatori"] = "data/indicatori.json, data/liste.json, data/urbanism.json, data/sicap*.json"
+        if a.comanda in ("geocodare", "buget", "litigii", "sicap"):   # jurnal pentru rapoarte.zip (zona internă)
+            _jurnal(store, a.comanda, stats)
         store.log_run(t0, a.comanda, stats)
     finally:
         store.close()
     print(json.dumps(stats, ensure_ascii=False, indent=2, default=str))
     return 0
+
+
+def _jurnal(store, comanda, stats):
+    """data/rulare-<comanda>.txt: ce a făcut pasul la ultima rulare (cu erorile), pentru verificare."""
+    from datetime import datetime
+    linii = [f"{comanda} - {datetime.now().isoformat(timespec='seconds')}",
+             json.dumps(stats, ensure_ascii=False, indent=2, default=str)]
+    try:
+        if comanda == "geocodare":
+            r = store.db.execute("SELECT COUNT(*), SUM(lat IS NOT NULL), SUM(lat IS NOT NULL AND cheie LIKE '%|%') "
+                                 "FROM geocod").fetchone()
+            linii.append(f"total căutate: {r[0]}, găsite: {r[1] or 0} (din care cu număr: {r[2] or 0})")
+        if comanda == "buget":
+            for t in ("buget_entitate", "buget_an", "buget_rand"):
+                linii.append(f"{t}: {store.db.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0]} rânduri")
+            for r in store.db.execute("SELECT * FROM buget_an ORDER BY 1, 2 LIMIT 60"):
+                linii.append("  " + " | ".join(str(x) for x in tuple(r)))
+    except Exception as e:   # tabelele pot lipsi dacă pasul a picat înainte să le creeze
+        linii.append(f"(rezumat indisponibil: {e})")
+    os.makedirs(config.DATA_DIR, exist_ok=True)
+    with open(os.path.join(config.DATA_DIR, f"rulare-{comanda}.txt"), "w", encoding="utf-8") as f:
+        f.write("\n".join(linii) + "\n")
 
 
 if __name__ == "__main__":

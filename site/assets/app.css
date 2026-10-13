@@ -189,3 +189,6 @@ button.lnk{font:inherit;font-size:.85rem;border:0;background:none;color:var(--ac
 .h-row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .lnks{display:inline-flex;gap:6px 14px;flex-wrap:wrap;align-items:center}
 @media print{header.top{position:static}nav.main,.subnav,.filters,.more{display:none}}
+
+.lit-t td{vertical-align:top;font-size:.9rem}
+.nw{white-space:nowrap}

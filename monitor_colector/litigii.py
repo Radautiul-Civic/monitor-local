@@ -401,6 +401,16 @@ def export(store, public=True, azi=None):
                  "data": r["data"], "materie": r["materie"], "obiect": r["obiect"], "parti": parti,
                  "entitati": [{"entitate": e["entitate"], "calitate": e["calitate"]} for e in ent], **s}
         etapa["rezultat"] = rezultat_etapa(etapa, sumar) if s["stare"] != "în curs" else None
+        # soluțiile pronunțate în etapă (fără amânări), pentru noutăți
+        etapa["_solutii"] = []
+        for x in d.get("sedinte") or []:
+            sol = x.get("solutie")
+            dt = ((x.get("dataPronuntare") or x.get("data") or "")[:10])
+            if sol and dt and dt <= azi.isoformat() and not AMANARI.search(sol):
+                etapa["_solutii"].append({"data": dt, "solutie": sol,
+                                          "sumar": None if public else x.get("solutieSumar"),
+                                          "rezultat": rezultat_etapa(etapa, x.get("solutieSumar"))})
+        etapa["_gasit_la"] = r["gasit_la"]
         pe_nr.setdefault(r["numar"], []).append(etapa)
     dosare = []
     for nr, et in pe_nr.items():
@@ -419,6 +429,7 @@ def export(store, public=True, azi=None):
                     vazute.add((p["nume"], p["calitate"]))
                     adverse.append({"nume": p["nume"], "calitate": p["calitate"]})
         stadii = [e["stadiu"] for e in et if e["stadiu"]]
+        recl, par = parti_pe_parte(prima)
         dosare.append({"numar": nr, "data": prima["data"], "an": (prima["data"] or "")[:4], "obiect": prima["obiect"] or ultima["obiect"],
                        "grup": grup_obiect(prima["obiect"] or ultima["obiect"]),
                        "materie": prima["materie"], "entitati": sorted({e["entitate"] for x in et for e in x["entitati"]}),
@@ -429,9 +440,33 @@ def export(store, public=True, azi=None):
                        "rezultat_la": f"{decise[-1]['stadiu'] or ''} · {decise[-1]['instanta']}".strip(" ·") if decise else None,
                        "stadiu_max": stadii[-1] if stadii else None, "instante": sorted({e["instanta"] for e in et}),
                        "cod_portal": (nr.split("/")[1] if nr and nr.count("/") >= 2 else None),
-                       "adverse": adverse, "etape": et})
+                       "adverse": adverse, "reclamanti": recl, "parati": par, "etape": et})
+    noutati = []
+    for d in dosare:
+        for e in d["etape"]:
+            ev = {"numar": d["numar"], "obiect": d["obiect"], "instanta": e["instanta"], "stadiu": e["stadiu"],
+                  "rol": d["rol"], "reclamanti": d["reclamanti"], "parati": d["parati"]}
+            if e["data"]:
+                noutati.append(dict(ev, fel="dosar nou", data=e["data"], gasit_la=e.pop("_gasit_la", None)))
+            for x in e.pop("_solutii", []):
+                noutati.append(dict(ev, fel="soluție", **x))
+            e.pop("_gasit_la", None)
+    noutati.sort(key=lambda x: (x["data"], x["fel"] == "soluție"), reverse=True)
     dosare.sort(key=lambda x: x["data"] or "", reverse=True)
-    return {"generat_la": azi.isoformat(), "dosare": dosare}
+    return {"generat_la": azi.isoformat(), "dosare": dosare, "noutati": noutati[:200]}
+
+
+def parti_pe_parte(etapa):
+    """(cine a pornit procesul, cine e chemat) în prima etapă, cu numele din dosar; persoanele fizice
+    sunt deja anonimizate în exportul public."""
+    recl, par = [], []
+    for p in etapa.get("parti") or []:
+        c = _n(p.get("calitate"))
+        nume = re.sub(r"\s+", " ", p.get("nume") or "").strip()
+        tinta = recl if INITIATOR.search(c) else par if RESPONDENT.search(c) else None
+        if tinta is not None and nume and nume not in tinta:
+            tinta.append(nume)
+    return recl, par
 
 
 def indicatori(ex):

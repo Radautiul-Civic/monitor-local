@@ -931,8 +931,13 @@ class TestLitigii(unittest.TestCase):
         nume = [p["nume"] for p in d["etape"][0]["parti"]]
         self.assertIn("persoană fizică", nume)
         self.assertNotIn("POPESCU ION", json.dumps(ex, ensure_ascii=False))
+        self.assertEqual((d["reclamanti"], d["parati"]), (["persoană fizică"], ["MUNICIPIUL RĂDĂUŢI PRIN PRIMAR"]))
+        self.assertEqual([(n["fel"], n["data"]) for n in ex["noutati"]], [("soluție", "2024-05-20"), ("dosar nou", "2024-01-15")])
+        self.assertEqual((ex["noutati"][0]["rezultat"], ex["noutati"][0]["sumar"]), ("pierdut", None))
         intern = LT.export(store, public=False, azi=date(2024, 6, 1))
         self.assertIn("POPESCU ION", json.dumps(intern, ensure_ascii=False))
+        self.assertIn("Admite acţiunea", intern["noutati"][0]["sumar"])
+        self.assertNotIn("_solutii", json.dumps(intern))
         ind = LT.indicatori(ex)
         self.assertEqual((ind["total"], ind["roluri"]["a fost chemată în judecată"]), (1, 1))
         # înainte de termen: dosarul e în curs
@@ -1031,8 +1036,12 @@ class TestBuget(unittest.TestCase):
                 n = lambda cat, fc, fn, ec, fel, s: {"account_category": cat, "expense_type": fel, "functionalClassification": {"functional_code": fc, "functional_name": fn},
                                                      "economicClassification": {"economic_code": ec, "economic_name": "x"}, "ytd_amount": s}
                 return {"entity": {"ch": {"nodes": [n("ch", "65.02.03", "Invatamant prescolar", "10.01.01", "functionare", 50.0),
-                                                    n("ch", "84.02.03.03", "Strazi", "71.01.01", "dezvoltare", 40.0)]},
-                                   "vn": {"nodes": [n("vn", "11.02.02", "Sume defalcate din TVA", "", None, 70.0)]}}}
+                                                    n("ch", "84.02.03.03", "Strazi", "71.01.01", "dezvoltare", 40.0),
+                                                    n("ch", "55.02.01", "Datorie publica interna locala", "30.02.01", "functionare", 3.0),
+                                                    n("ch", "55.02.01", "Datorie publica interna locala", "81.01.05", "functionare", 9.0)]},
+                                   "vn": {"nodes": [n("vn", "11.02.02", "Sume defalcate din TVA", "", None, 70.0),
+                                                    n("vn", "41.06.01", "Trageri din imprumuturi interne", "", None, 25.0),
+                                                    n("vn", "40.08.00", "Incasari din rambursarea imprumuturilor acordate", "", None, 1.0)]}}}
             return {}
 
     def test_colectare_si_export(self):
@@ -1045,8 +1054,10 @@ class TestBuget(unittest.TestCase):
         m = ex["entitati"][0]
         self.assertEqual((m["cui"], m["ani"]["2025"]["cheltuieli"], m["populatie"]), ("4244148", 130.0, 24292))
         d = ex["detalii"]["4244148"]["2025"]
-        self.assertEqual(d["ch"], {"Învățământ": 50.0, "Transporturi (străzi, drumuri, transport public)": 40.0})
-        self.assertEqual(d["vn"], {"Sume defalcate din TVA": 70.0})
+        self.assertEqual(d["ch"]["Învățământ"], 50.0)
+        self.assertEqual(d["ch"]["Datoria publică (dobânzi și rate)"], 12.0)
+        self.assertEqual(d["vn"]["Sume defalcate din TVA"], 70.0)
+        self.assertEqual(ex["datorie"]["pe_ani"]["2025"], {"trageri": 25.0, "rambursari": 9.0, "dobanzi": 3.0})
         self.assertEqual(d["fel"]["Investiții (dezvoltare)"], 40.0)
         self.assertEqual(d["economic"]["Cheltuieli de personal"], 50.0)
         self.assertNotIn("4244113", ex["detalii"])                       # doar municipiul are rânduri detaliate

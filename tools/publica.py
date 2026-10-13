@@ -184,7 +184,7 @@ def intern_date():
 
 
 RAPOARTE = ("indicatori.md", "urbanism-registre.txt", "sicap-de-verificat.txt", "sicap-castigatori-proba.json",
-            "voturi-proba.txt", "geocodare.txt")
+            "voturi-proba.txt", "rulare-geocodare.txt", "rulare-buget.txt", "rulare-litigii.txt", "rulare-sicap.txt")
 
 
 def main():

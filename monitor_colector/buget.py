@@ -205,7 +205,7 @@ def colecteaza(store, cl=None, azi=None, detaliat=(CUI_MUNICIPIU,)):
 
 
 # capitolele clasificației funcționale (primele două cifre), cu nume scurte pentru grafice
-CAPITOLE_CH = {"51": "Administrație publică", "54": "Alte servicii publice generale", "55": "Dobânzi la datorii",
+CAPITOLE_CH = {"51": "Administrație publică", "54": "Alte servicii publice generale", "55": "Datoria publică (dobânzi și rate)",
                "56": "Transferuri între niveluri de administrație", "60": "Apărare", "61": "Ordine publică și siguranță",
                "65": "Învățământ", "66": "Sănătate", "67": "Cultură, sport, religie, recreere",
                "68": "Asistență socială", "70": "Locuințe, servicii și dezvoltare publică (iluminat, apă, drumuri locale)",
@@ -226,6 +226,34 @@ CAPITOLE_VN = {"03": "Impozit pe venit", "04": "Cote și sume defalcate din impo
 def _cap(cod, nume, tabel):
     c = re.sub(r"\D", "", str(cod or ""))[:2]
     return tabel.get(c) or (re.sub(r"\s+", " ", nume or "").strip()[:60] if nume else (f"Capitolul {c}" if c else "Neclasificat"))
+
+
+def _tragere(nume):
+    """Rând de venit care e o tragere dintr-un împrumut (nu rambursarea unui împrumut acordat de municipiu)."""
+    t = _n(nume)
+    return bool(re.search(r"trager|incasari din imprumut|imprumuturi (interne|externe)|finantari rambursabile", t)) and \
+        not re.search(r"rambursar|acordat", t)
+
+
+def datorie(db, cui=CUI_MUNICIPIU):
+    """Datoria municipiului, din execuția bugetară: pe ani, banii trași din împrumuturi (datorie nouă),
+    ratele rambursate și dobânzile plătite. Soldul datoriei nu e raportat aici; se completează din
+    documentele primăriei (config.DATORIE_SOLD)."""
+    pe = {}
+    for r in db.execute("SELECT an, categorie, cod_functional, nume_functional, cod_economic, nume_economic, suma "
+                        "FROM buget_rand WHERE cui=?", (cui,)):
+        a = pe.setdefault(str(r["an"]), {"trageri": 0.0, "rambursari": 0.0, "dobanzi": 0.0})
+        s = r["suma"] or 0
+        e = re.sub(r"\D", "", str(r["cod_economic"] or ""))[:2]
+        if r["categorie"] == "ch":
+            if e == "81":
+                a["rambursari"] += s
+            elif e == "30":
+                a["dobanzi"] += s
+        elif _tragere(f"{r['nume_functional'] or ''} {r['nume_economic'] or ''}"):
+            a["trageri"] += s
+    pe = {k: {x: round(v, 2) for x, v in a.items()} for k, a in sorted(pe.items()) if any(a.values())}
+    return {"pe_ani": pe, "sold": getattr(config, "DATORIE_SOLD", {})}
 
 
 def export(store):
@@ -262,6 +290,6 @@ def export(store):
         for a in c.values():
             for k in a:
                 a[k] = {x: round(v, 2) for x, v in sorted(a[k].items(), key=lambda t: -t[1]) if v}
-    return {"generat_la": date.today().isoformat(), "sursa": "transparenta.eu (Transparență bugetară, Ministerul Finanțelor)",
+    return {"datorie": datorie(db), "generat_la": date.today().isoformat(), "sursa": "transparenta.eu (Transparență bugetară, Ministerul Finanțelor)",
             "municipiu": CUI_MUNICIPIU, "entitati": sorted(ent.values(), key=lambda e: (e["cui"] != CUI_MUNICIPIU, e["nume"] or "")),
             "detalii": det}

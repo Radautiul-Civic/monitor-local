@@ -74,3 +74,10 @@ SICAP_CUI_EXTRA = (
 SICAP_TERMENI_EXTRA = ("SERVICII COMUNALE", "HURMUZACHI", "MOTRESCU", "FLONDOR", "IONET", "POLITIA LOCALA RADAUTI",
                        "POLITIEI LOCALE RADAUTI", "CASA MUNICIPALA DE CULTURA", "MUZEUL DE ETNOGRAFIE RADAUTI",
                        "ZOOLOGIC RADAUTI", "GALERIILE DE ARTA RADAUTI")
+
+# Soldul datoriei publice a municipiului (cât mai are de rambursat), din documentele publice ale primăriei:
+# anexa „Situația datoriei publice locale” / „Gradul de îndatorare” de la aprobarea bugetului, registrul
+# datoriei publice etc. Execuția bugetară arată doar banii trași, ratele și dobânzile, nu soldul.
+# Format: "AAAA-LL-ZZ": {"lei": suma, "sursa": "link sau HCL nr/an"}
+DATORIE_SOLD = {
+}
