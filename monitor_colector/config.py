@@ -67,11 +67,12 @@ ARCHIVE_REGISTRE = {
 # instituțiilor care nu au orașul în denumire (ex. o școală numită doar după patron).
 SICAP_CUI_EXTRA = (
     "2563140",   # SERVICII COMUNALE S.A. (societatea municipiului; în SICAP numele nu conține „Rădăuți”)
+    "713519",    # ACET S.A. Suceava (operatorul regional de apă și canalizare, care furnizează apa în Rădăuți)
 )
 # Termeni de căutare suplimentari în lista autorităților SICAP: pentru CUI-urile de mai sus și pentru
 # instituții din oraș care s-ar putea să nu aibă „Rădăuți” în nume (nume unice, ca să nu aducă jumătate de țară).
 # Cele găsite, dar neincluse, apar pe pagina internă; de acolo li se adaugă CUI-ul în SICAP_CUI_EXTRA.
-SICAP_TERMENI_EXTRA = ("SERVICII COMUNALE", "HURMUZACHI", "MOTRESCU", "FLONDOR", "IONET", "POLITIA LOCALA RADAUTI",
+SICAP_TERMENI_EXTRA = ("ACET", "SERVICII COMUNALE", "HURMUZACHI", "MOTRESCU", "FLONDOR", "IONET", "POLITIA LOCALA RADAUTI",
                        "POLITIEI LOCALE RADAUTI", "CASA MUNICIPALA DE CULTURA", "MUZEUL DE ETNOGRAFIE RADAUTI",
                        "ZOOLOGIC RADAUTI", "GALERIILE DE ARTA RADAUTI")
 
@@ -93,3 +94,6 @@ CONSILIU_MANDATE = {
 # Datele alegerilor locale: o ședință „de constituire” găsită într-un PV mută începutul mandatului doar dacă
 # e în cel mult 200 de zile după alegeri (altfel e o mențiune întâmplătoare, ex. constituirea comisiilor).
 ALEGERI_LOCALE = ("2012-06-10", "2016-06-05", "2020-09-27", "2024-06-09")
+# Începutul fiecărei legislaturi, verificat de echipă (ex. ("2016-06-23", "2020-10-23", "2023-03-13", ...)), inclusiv
+# consiliile alese la alegeri parțiale după o dizolvare. Dacă lista e goală, se deduce din PV-uri și hotărâri.
+CONSILIU_LEGISLATURI = ()

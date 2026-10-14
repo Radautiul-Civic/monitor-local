@@ -254,3 +254,23 @@ details.mai-filtre{margin-top:8px}
 details.mai-filtre summary{cursor:pointer;color:var(--accent);font-size:.9rem;margin-bottom:6px}
 .doc.ft .fr{font-size:.88rem;margin:4px 0 2px;line-height:1.5;overflow-wrap:anywhere}
 .doc.ft mark{background:color-mix(in srgb,var(--warn) 30%,transparent);color:inherit;border-radius:3px;padding:0 2px}
+.tag.faza{background:var(--surface);border-color:var(--s1);color:var(--ink)}
+.lc-steps .nrd{font-variant-numeric:tabular-nums;color:var(--muted);font-size:.82rem}
+details.lc-asoc{margin-top:12px;font-size:.88rem}
+details.lc-asoc summary{cursor:pointer;color:var(--accent)}
+.lc-as{border-left:3px solid var(--plan);padding:4px 0 4px 10px;margin:8px 0}
+.lc-as.c{border-left-color:var(--good)}.lc-as.p{border-left-color:var(--bad)}.lc-as.ic{border-left-color:var(--s1)}
+/* arhiva structurată */
+.arh-h{font-size:.78rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:14px 0 6px}
+.arh-chips{display:flex;flex-wrap:wrap;gap:6px}
+.arh-chips button{font:inherit;font-size:.86rem;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:99px;padding:4px 12px;cursor:pointer}
+.arh-chips button small{color:var(--muted);font-variant-numeric:tabular-nums}
+.arh-chips button[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.arh-chips button[aria-pressed="true"] small{color:var(--surface)}
+.arh-an{font-size:1rem;margin:18px 0 4px;padding-bottom:4px;border-bottom:2px solid var(--line)}
+.arh-r{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.arh-t{font-size:.7rem;text-transform:uppercase;font-weight:700;letter-spacing:.04em;text-align:center;border:1px solid var(--line);border-radius:6px;padding:4px 0;color:var(--ink-2);background:var(--surface-2)}
+.arh-n{overflow-wrap:anywhere;font-size:.93rem}
+.arh-b .muted{font-size:.8rem}
+.arh-l{display:flex;gap:10px;font-size:.85rem;white-space:nowrap}
+@media (max-width:640px){.arh-r{grid-template-columns:44px minmax(0,1fr)}.arh-l{grid-column:2}}

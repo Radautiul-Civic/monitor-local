@@ -59,6 +59,7 @@ GRUPE = [
     ("Instituții subordonate primăriei", r"politi|asistenta\s+sociala|spitalul\s+municipal|servicii\s+comunale|casa\s+(municipala\s+)?de\s+cultura|"
                                          r"biblioteca|muzeul|galeri|zoologic|clubul\s+sportiv\s+(municipal|scolar)"),
     ("Școli și grădinițe", r"scoala|gradinita|colegiul|liceul|seminar|clubul\s+copiilor|palatul\s+copiilor"),
+    ("Operatori de utilități (apă, canalizare)", r"\bacet\b"),
 ]
 
 

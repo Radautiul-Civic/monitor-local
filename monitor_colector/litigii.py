@@ -36,7 +36,7 @@ INSTANTE_REZERVA = ("JudecatoriaRADAUTI", "TribunalulSUCEAVA", "CurteadeApelSUCE
 TERMENI = ("RADAUTI", "RĂDĂUŢI", "RĂDĂUȚI")
 # instituții din oraș al căror nume din instanță poate să nu conțină „Rădăuți”: le căutăm și după numele lor,
 # dar le păstrăm doar dacă dosarul e la o instanță din județul Suceava
-TERMENI_FARA_ORAS = ("SERVICII COMUNALE", "HURMUZACHI", "MOTRESCU", "TUDOR FLONDOR", "IONET")
+TERMENI_FARA_ORAS = ("SERVICII COMUNALE", "HURMUZACHI", "MOTRESCU", "TUDOR FLONDOR", "IONET", "ACET")
 INSTANTE_SUCEAVA = re.compile(r"SUCEAVA|RADAUTI|CAMPULUNGMOLDOVENESC|FALTICENI|GURAHUMORULUI|VATRADORNEI", re.I)
 MUNICIPIUL = "Municipiul Rădăuți"
 # (numele afișat, expresie pe numele părții fără diacritice, merge fără „Rădăuți” în nume)
@@ -51,6 +51,7 @@ ALIASURI = [
     ("Casa Municipală de Cultură", r"\bCASA (MUNICIPALA )?DE CULTURA\b", False),
     ("Clubul Sportiv Municipal Bucovina", r"\bCLUBUL SPORTIV MUNICIPAL\b|\bCSM BUCOVINA\b", False),
     ("Muzeul de Etnografie", r"\bMUZEUL\b", False),
+    ("ACET S.A. (apă și canalizare)", r"\bA ?C ?E ?T\b", "radauti"),
 ]
 # părți care conțin „Rădăuți” dar nu sunt autorități urmărite (instanțe, parchet, poliția statului, firme)
 NU_AUTORITATE = re.compile(r"\b(PARCHET\w*|JUDECATORIA|TRIBUNALUL|POLITIA MUNICIPIULUI|INSPECTORATUL|PROTOPOPIAT\w*|PAROHIA)\b")
@@ -102,7 +103,7 @@ def incarca_institutii(db):
             INSTITUTII_SICAP.append((re.sub(r"\s+", " ", r[0]).strip(), cuv))
 
 
-def autoritate(nume, institutie=None):
+def autoritate(nume, institutie=None, numar=None):
     """(autoritatea din Rădăuți, eticheta părții) pentru o parte dintr-un dosar, sau None.
     Municipiul are mai multe etichete (primarul, consiliul local...); celelalte instituții, numele lor."""
     e = entitate(nume)
@@ -114,6 +115,10 @@ def autoritate(nume, institutie=None):
     oras = "RADAUTI" in n
     in_judet = bool(INSTANTE_SUCEAVA.search(institutie or "")) if institutie else True
     for afisat, rx, fara_oras in ALIASURI:
+        if fara_oras == "radauti":   # ACET lucrează în tot județul: doar dosarele de la Judecătoria Rădăuți
+            if re.search(rx, n) and (oras or "RADAUTI" in (institutie or "").upper() or "/285/" in (numar or "")):
+                return afisat, afisat
+            continue
         if re.search(rx, n) and (oras or (fara_oras and in_judet)) and (fara_oras or not FIRMA.search(n)):
             return afisat, afisat
     if oras and not FIRMA.search(n):
@@ -265,7 +270,7 @@ def _cauta_fereastra(cl, termen, d0, d1, institutie, stats):
 def _salveaza(db, d, azi):
     ent = []
     for p in d.get("parti") or []:
-        a = autoritate(p.get("nume"), d.get("institutie"))
+        a = autoritate(p.get("nume"), d.get("institutie"), d.get("numar"))
         if a:
             ent.append({"autoritate": a[0], "entitate": a[1], "nume": p.get("nume"), "calitate": p.get("calitateParte")})
     if not ent:
@@ -371,9 +376,38 @@ def hotarare(sedinta):
     dt = (sedinta.get("dataDocument") or sedinta.get("dataPronuntare") or "")[:10] or None
     if not (nr or tip):
         return None
-    tip = {"hotarare": "Hotărâre", "hotarâre": "Hotărâre", "incheierefinala": "Încheiere finală", "decizie": "Decizie",
-           "sentinta": "Sentință"}.get(re.sub(r"[^a-zâ]", "", _n(tip).lower()), tip) or "Hotărâre"
-    return {"tip": tip, "nr": nr or None, "data": dt}
+    return {"tip": tip_document(tip), "nr": nr or None, "data": dt}
+
+
+TIPURI_DOC = {"hotarare": "Hotărâre", "sentinta": "Sentință", "sentintacivila": "Sentință civilă", "sentintapenala": "Sentință penală",
+              "decizie": "Decizie", "incheiere": "Încheiere", "incheierefinala": "Încheiere finală",
+              "incheierefinaladezinvestire": "Încheiere finală (dezinvestire)", "incheieredesedinta": "Încheiere de ședință",
+              "incheiereinterlocutorie": "Încheiere interlocutorie", "minuta": "Minută"}
+
+
+def tip_document(tip):
+    """„_IncheiereFinalaDezinvestire” -> „Încheiere finală (dezinvestire)”."""
+    t = (tip or "").strip(" _")
+    if not t:
+        return "Hotărâre"
+    k = re.sub(r"[^a-z]", "", _n(t).lower())
+    if k in TIPURI_DOC:
+        return TIPURI_DOC[k]
+    t = re.sub(r"(?<=[a-zăâîșț])(?=[A-ZĂÂÎȘȚ])", " ", t).replace("_", " ")
+    return t[:1].upper() + t[1:].lower()
+
+
+def numar_baza(nr):
+    """Numărul dosarului principal: „4586/285/2026/a1” și „435/86/2021*” -> „4586/285/2026”, „435/86/2021”."""
+    nr = re.sub(r"\s+", "", nr or "")
+    nr = re.sub(r"/a\d+.*$", "", nr, flags=re.I)
+    return nr.rstrip("*")
+
+
+def asociat(nr):
+    """Dosarele asociate (/a1, /a2: măsuri, contestații, cameră preliminară) și cele reînregistrate (*)."""
+    m = re.search(r"/(a\d+)", nr or "", re.I)
+    return m.group(1).lower() if m else ("reînregistrat" if (nr or "").endswith("*") else None)
 
 
 ORASE = {"RADAUTI": "Rădăuți", "SUCEAVA": "Suceava", "BUCURESTI": "București", "IASI": "Iași", "FALTICENI": "Fălticeni",
@@ -457,6 +491,7 @@ GRUPE_OBIECT = [
     ("Urbanism și construcții", r"AUTORIZA|CONSTRUCT|DEMOLAR|DESFIINTAR|URBANISM"),
     ("Obligația de a face", r"OBLIGATIA DE A FACE|OBLIGATIE DE A FACE"),
     ("Informații de interes public", r"544|INFORMATI"),
+    ("Penal", r"LOVIRE|VIOLENT|FURT|INFRACT|CAMERA PRELIMINARA|PLANGERE IMPOTRIVA SOLUTIEI|N ?C ?P\b|COD PENAL|INSELACIUNE|DISTRUGERE"),
 ]
 
 
@@ -476,6 +511,20 @@ def export(store, public=True, azi=None):
     incarca_institutii(db)
     azi = azi or date.today()
     pe_nr = {}
+    # legăturile între numere: dosarele asociate și numărul vechi (dosarul de fond, la apel sau la rejudecare)
+    radacina = {}
+
+    def gaseste(x):
+        while radacina.get(x, x) != x:
+            x = radacina[x]
+        return x
+    for r in db.execute("SELECT numar, json FROM litigii_dosar"):
+        a = numar_baza(r["numar"])
+        vechi = numar_baza((json.loads(r["json"]).get("numarVechi") or "").strip())
+        if vechi and vechi != a:
+            ra, rv = gaseste(a), gaseste(vechi)
+            if ra != rv:
+                radacina[ra] = rv
     for r in db.execute("SELECT * FROM litigii_dosar ORDER BY data, numar"):
         d = json.loads(r["json"])
         s = stare(d, azi)
@@ -484,14 +533,15 @@ def export(store, public=True, azi=None):
             s["sumar"] = None
         parti, ent = [], []
         for p in d.get("parti") or []:
-            a = autoritate(p.get("nume"), r["institutie"])
+            a = autoritate(p.get("nume"), r["institutie"], r["numar"])
             parti.append({"nume": p.get("nume") if (not public or a) else nume_public(p.get("nume")),
                           "calitate": p.get("calitateParte"), "municipiu": bool(a), "autoritate": a[0] if a else None})
             if a:
                 ent.append({"autoritate": a[0], "entitate": a[1], "calitate": p.get("calitateParte")})
         if not ent:   # salvat după reguli mai vechi și nu mai e o autoritate urmărită
             continue
-        etapa = {"instanta": instanta(r["institutie"]), "cod_instanta": r["institutie"], "stadiu": r["stadiu"],
+        etapa = {"numar": r["numar"], "asociat": asociat(r["numar"]), "numar_vechi": (d.get("numarVechi") or "").strip() or None,
+                 "instanta": instanta(r["institutie"]), "cod_instanta": r["institutie"], "stadiu": r["stadiu"],
                  "data": r["data"], "materie": r["materie"], "obiect": r["obiect"], "parti": parti, "entitati": ent, **s}
         etapa["rezultat"] = rezultat_etapa(etapa, sumar) if s["stare"] != "în curs" else None
         # soluțiile pronunțate în etapă (fără amânări), pentru noutăți
@@ -508,15 +558,19 @@ def export(store, public=True, azi=None):
                               "parte": (c.get("parteDeclaratoare") if not public or autoritate(c.get("parteDeclaratoare"), r["institutie"])
                                         else nume_public(c.get("parteDeclaratoare")))}
                              for c in d.get("caiAtac") or [] if c.get("tipCaleAtac")]
-        pe_nr.setdefault(r["numar"], []).append(etapa)
+        pe_nr.setdefault(gaseste(numar_baza(r["numar"])), []).append(etapa)
     dosare = []
     for nr, et in pe_nr.items():
-        et.sort(key=lambda e: (e["data"] or "", {"Fond": 0, "Apel": 1, "Recurs": 2}.get(e["stadiu"] or "", 3)))
-        prima, ultima = et[0], et[-1]
+        et.sort(key=lambda e: (e["asociat"] is not None and e["asociat"] != "reînregistrat", e["data"] or "",
+                               {"Fond": 0, "Apel": 1, "Recurs": 2}.get(e["stadiu"] or "", 3)))
+        princ = [e for e in et if e["asociat"] in (None, "reînregistrat")] or et
+        princ.sort(key=lambda e: (e["data"] or "", {"Fond": 0, "Apel": 1, "Recurs": 2}.get(e["stadiu"] or "", 3)))
+        prima, ultima = princ[0], princ[-1]
         rol = _rol((prima["entitati"] or [{}])[0].get("calitate"))
-        in_curs = any(e["stare"] == "în curs" for e in et)
-        # rezultatul: ultima etapă cu o soluție interpretabilă; dacă o etapă ulterioară e în curs, e provizoriu
-        decise = [e for e in et if e.get("rezultat")]
+        in_curs = any(e["stare"] == "în curs" for e in princ)
+        # rezultatul: ultima etapă a dosarului principal cu o soluție interpretabilă (nu cele din dosarele asociate,
+        # ex. cameră preliminară); dacă o etapă ulterioară e în curs, e provizoriu
+        decise = [e for e in princ if e.get("rezultat")]
         rez = decise[-1]["rezultat"] if decise else None
         provizoriu = bool(decise) and in_curs
         adverse, vazute = [], set()
@@ -525,9 +579,15 @@ def export(store, public=True, azi=None):
                 if not p["municipiu"] and (p["nume"], p["calitate"]) not in vazute:
                     vazute.add((p["nume"], p["calitate"]))
                     adverse.append({"nume": p["nume"], "calitate": p["calitate"]})
-        stadii = [e["stadiu"] for e in et if e["stadiu"]]
+        stadii = [e["stadiu"] for e in princ if e["stadiu"]]
+        curs = [e for e in princ if e["stare"] == "în curs"]
+        if curs:
+            faza = f"{(curs[-1]['stadiu'] or 'în judecată').capitalize()} - în curs"
+        else:
+            faza = f"Soluționat ({(ultima['stadiu'] or 'etapă necunoscută').lower()})" if ultima.get("solutie") else "Fără soluție afișată"
+        numere = sorted({e["numar"] for e in et}, key=lambda x: (x != nr, x))
         recl, par, alte = parti_pe_parte(prima)
-        dosare.append({"numar": nr, "data": prima["data"], "an": (prima["data"] or "")[:4], "obiect": prima["obiect"] or ultima["obiect"],
+        dosare.append({"numar": nr, "numere": numere, "faza": faza, "data": prima["data"], "an": (prima["data"] or "")[:4], "obiect": prima["obiect"] or ultima["obiect"],
                        "grup": grup_obiect(prima["obiect"] or ultima["obiect"]),
                        "materie": prima["materie"], "entitati": sorted({e["entitate"] for x in et for e in x["entitati"]}),
                        "autoritati": sorted({e["autoritate"] for x in et for e in x["entitati"]}),
@@ -542,7 +602,7 @@ def export(store, public=True, azi=None):
     noutati = []
     for d in dosare:
         for e in d["etape"]:
-            ev = {"numar": d["numar"], "obiect": d["obiect"], "instanta": e["instanta"], "stadiu": e["stadiu"],
+            ev = {"numar": e["numar"], "cauza": d["numar"], "obiect": e.get("obiect") or d["obiect"], "instanta": e["instanta"], "stadiu": e["stadiu"],
                   "rol": d["rol"], "reclamanti": d["reclamanti"], "parati": d["parati"], "alte_parti": d["alte_parti"],
                   "autoritati": d["autoritati"]}
             if e["data"]:

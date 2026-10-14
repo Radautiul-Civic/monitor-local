@@ -506,7 +506,8 @@ def scrie(store, data_dir):
 R_PRESEDINTE = re.compile(r"presedinte\w*\s+de\s+sedinta\s+(?:este|a\s+fost\s+\w+|va\s+fi)\s+(?:ales\w*\s+)?(?:domnul|doamna|dl\.?|dna\.?)\s+"
                           r"(?:consilier\w*\s+(?:local\s+)?)?")
 R_ONLINE = re.compile(r"prezen\w*\s+online[^.]{0,120}?respectiv\s*:?\s*([^.]{3,300})\.")
-R_CONSTITUIRE = re.compile(r"constituir\w*\s+(?:a\s+)?consiliului\s+local|depunerea\s+juramantului|ceremoni\w*\s+de\s+constituire")
+R_CONSTITUIRE = re.compile(r"sedint\w*\s+de\s+constituire|ceremoni\w*\s+de\s+constituire|constituir\w*\s+(?:a\s+)?consiliului\s+local|"
+                           r"legal\s+constituit|ordinul\s+prefectului[^.]{0,80}constituir")
 GAP_ZILE = 400
 LIPIRE_ZILE = 400
 # cuvinte care arată că „numele” prins nu e al unui consilier (funcții, text din jur)
@@ -588,6 +589,14 @@ def extra_sedinta(text):
     m = R_ONLINE.search(s)
     if m:
         out["online"] = _nume_lista(text[m.start(1):m.end(1)])
+    # consilierul care intră în locul altuia depune jurământul în ședință
+    out["juramant"] = []
+    for m in re.finditer(r"depun\w*\s+(?:a\s+)?juramant\w*|a\s+depus\s+juramantul", s):
+        zona = s[max(0, m.start() - 220): m.end() + 220]
+        for p in re.finditer(r"\b(?:domnul|doamna|domnului|doamnei|dl\.?|dna\.?)\s+(?:consilier\w*\s+(?:local\s+)?(?:supleant\s+)?)?", zona):
+            n = _nume_presedinte(text, max(0, m.start() - 220) + p.end())
+            if n and not (NU_NUME & set(_tok(n))) and n not in out["juramant"]:
+                out["juramant"].append(n)
     return out
 
 
@@ -610,8 +619,9 @@ R_PREFIX_NUME = re.compile(r"\b(?:domnului|doamnei|dlui|dnei|d-lui|d-nei|dl\.?|d
 R_VALIDARE = re.compile(r"validar\w*\s+(?:a\s+)?mandat\w*")
 R_INCETARE = re.compile(r"incetar\w*\s+(?:de\s+drept\s+|inainte\s+de\s+termen\s+)*(?:a\s+)?(?:unui\s+)?mandat\w*|demisi\w*\s+(?:din\s+)?(?:functia|mandatul)")
 R_CONSILIER = re.compile(r"consilier\w*\s+local")
-R_ORGANIZARE = re.compile(r"legal\s+constituit|constituir\w*\s+(?:a\s+)?consiliului\s+local|comisiilor\s+de\s+specialitate|alegerea\s+viceprimarului|"
-                          r"organizarea\s+si\s+functionarea\s+consiliului|validar\w*\s+(?:a\s+)?mandat")
+# doar în titlul hotărârii (în text, „avizul comisiilor de specialitate” apare la orice hotărâre)
+R_ORGANIZARE = re.compile(r"legal\s+constituit|constituir\w*\s+(?:a\s+)?consiliului\s+local|(?:organizar\w*|constituir\w*|componen\w*|"
+                          r"stabilir\w*)\s+(?:a\s+)?comisiilor\s+de\s+specialitate|alegerea\s+viceprimarului")
 
 
 def _nume_majuscule(orig, start):
@@ -646,35 +656,49 @@ def evenimente_mandat(db):
                         if n and not any(e["nume"] == n and e["data"] == ref["data"] for e in out[fel]):
                             out[fel].append(dict(ref, nume=n))
                             gasit = True
-            if R_ORGANIZARE.search(s[:600]):
-                out["organizare"].append(ref)
+            if orig is titlu and R_ORGANIZARE.search(s):
+                out["organizare"].append(dict(ref, titlu=titlu[:160]))
             if gasit or orig is text:
                 break
     return out
 
 
+def dovezi_legislaturi(sedinte, evenimente=None):
+    """Indiciile că a început un consiliu nou: ședințe de constituire (din PV), hotărâri de organizare (comisii de
+    specialitate, viceprimar) și multe validări de mandat în aceeași zi. [(data, descriere)]"""
+    ev = evenimente or {}
+    alegeri = getattr(config, "ALEGERI_LOCALE", ())
+    out = [(x["data"], "PV: ședință de constituire") for x in sedinte if x.get("constituire")]
+    out += [(e["data"], f"HCL {e['nr']}/{e['an']}: {e.get('titlu', 'organizare')}") for e in ev.get("organizare", [])]
+    pe_zi = {}
+    for e in ev.get("validari", []):
+        pe_zi.setdefault(e["data"], []).append(e)
+    out += [(d, f"{len(l)} validări de mandat") for d, l in pe_zi.items() if len(l) >= 4]
+    # în Rădăuți nu au fost alegeri parțiale: un consiliu nou începe doar după alegerile generale
+    return sorted(x for x in out if any(0 <= (date.fromisoformat(x[0]) - date.fromisoformat(a)).days <= 200 for a in alegeri))
+
+
 def legislaturi(sedinte, evenimente=None, mandate=None):
-    """[(eticheta, început, sfârșit)]: începutul fiecărui mandat e prima hotărâre de organizare (comisii, viceprimar,
-    validări) din cele 200 de zile de după alegeri; dacă nu o găsim, data din config."""
+    """[(eticheta, început, sfârșit)]. Dacă config.CONSILIU_LEGISLATURI are date, se folosesc exact acelea (verificate
+    de echipă). Altfel: fiecare indiciu de consiliu nou (dovezi_legislaturi; indiciile la mai puțin de 90 de zile
+    unul de altul sunt același început) plus mandatele din config fără niciun indiciu în apropiere."""
+    fortat = list(getattr(config, "CONSILIU_LEGISLATURI", ()) or ())
     mandate = dict(mandate or getattr(config, "CONSILIU_MANDATE", {}))
-    alegeri = sorted(getattr(config, "ALEGERI_LOCALE", ()))
-    org = sorted({e["data"] for e in (evenimente or {}).get("organizare", []) + (evenimente or {}).get("validari", [])})
-    starturi = []
-    for a in alegeri:
-        d = [x for x in org if 0 <= (date.fromisoformat(x) - date.fromisoformat(a)).days <= 200]
-        din_pv = [x["data"] for x in sedinte if x.get("constituire") and 0 <= (date.fromisoformat(x["data"]) - date.fromisoformat(a)).days <= 200]
-        cfg = [v for v in mandate.values() if 0 <= (date.fromisoformat(v) - date.fromisoformat(a)).days <= 200]
-        st = min(d + din_pv) if d or din_pv else (cfg[0] if cfg else None)
-        if st:
-            starturi.append(st)
-    for v in mandate.values():   # mandatele din config fără alegeri cunoscute
-        if not any(abs((date.fromisoformat(v) - date.fromisoformat(x)).days) < 200 for x in starturi):
-            starturi.append(v)
-    starturi.sort()
+    if fortat:
+        starturi = sorted(fortat)
+    else:
+        starturi = []
+        for d, _ in dovezi_legislaturi(sedinte, evenimente):
+            if not starturi or (date.fromisoformat(d) - date.fromisoformat(starturi[-1])).days > 90:
+                starturi.append(d)
+        for v in mandate.values():
+            if not any(abs((date.fromisoformat(v) - date.fromisoformat(x)).days) < 200 for x in starturi):
+                starturi.append(v)
+        starturi.sort()
     out = []
     for i, st in enumerate(starturi):
         sf = (date.fromisoformat(starturi[i + 1]) - timedelta(days=1)).isoformat() if i + 1 < len(starturi) else "9999-12-31"
-        out.append((f"{st[:4]}-{int(st[:4]) + 4}", st, sf))
+        out.append((f"{st[:4]}-{starturi[i + 1][:4] if i + 1 < len(starturi) else int(st[:4]) + 4}", st, sf))
     return out
 
 
@@ -706,6 +730,8 @@ def consilieri(sedinte, mandate=None, azi=None, evenimente=None, min_mentiuni=2)
             for n in (v.get("nume_impotriva") or []) + (v.get("nume_abtineri") or []) + (v.get("nume_nu_voteaza") or []):
                 if len(_tok(n)) >= 2:
                     adauga(n, x["data"])
+    ev = dict(ev, validari=list(ev.get("validari", [])) + [{"nume": n, "data": x["data"], "an": None, "nr": None, "sursa": "PV: jurământ"}
+                                                         for x in S for n in x.get("juramant") or []])
     for fel in ("validari", "incetari"):
         for e in ev.get(fel, []):
             adauga(e["nume"], e["data"], 0)
@@ -734,10 +760,33 @@ def consilieri(sedinte, mandate=None, azi=None, evenimente=None, min_mentiuni=2)
             legc.setdefault(k, []).append(eticheta)
             for fel, dct in (("validare", val), ("încetare", inc)):
                 if k in dct:
-                    evc.setdefault(k, []).append({"fel": fel, "data": dct[k]["data"], "hcl": {"an": dct[k]["an"], "nr": dct[k]["nr"]}})
+                    evc.setdefault(k, []).append({"fel": fel, "data": dct[k]["data"],
+                                                  "hcl": {"an": dct[k]["an"], "nr": dct[k]["nr"]} if dct[k].get("nr") else None,
+                                                  "sursa": dct[k].get("sursa")})
 
-    def activi(d):
-        return [k for k, seg in perioade.items() if any(a <= d <= b for a, b in seg)]
+    ment = {k: sorted(set(v)) for k, v in aparitii.items()}
+    fix = {k for k, l in evc.items() if l}
+
+    def activi(d, nf=None):
+        ros = [k for k, seg in perioade.items() if any(a <= d <= b for a, b in seg)]
+        if not nf or len(ros) <= nf:
+            return ros
+        # mai mulți decât „în funcție”: scoatem pe cei care nu apar în PV-uri de mult (au plecat) sau abia mai târziu
+        # (au venit în locul cuiva), cel mai îndepărtați întâi; cei cu validare sau încetare găsită rămân cum sunt
+        st, sf = next(((a, b) for _, a, b in LEG if a <= d <= b), ("0000", "9999"))
+        zi_ = date.fromisoformat(d)
+
+        def dist(k):
+            m = [x for x in ment.get(k, []) if st <= x <= sf]
+            if k in fix or not m:
+                return 0
+            a, b = date.fromisoformat(m[0]) - timedelta(days=150), date.fromisoformat(m[-1]) + timedelta(days=150)
+            return 0 if a <= zi_ <= b else min(abs((zi_ - a).days), abs((zi_ - b).days))
+        for k in sorted(ros, key=dist, reverse=True):
+            if len(ros) <= nf or dist(k) == 0:
+                break
+            ros.remove(k)
+        return ros
 
     def rezolva(n, d, ros):
         t = _tok(n)
@@ -755,12 +804,13 @@ def consilieri(sedinte, mandate=None, azi=None, evenimente=None, min_mentiuni=2)
     # 3. pe fiecare ședință: cine era în consiliu, cine a lipsit, cum a votat fiecare
     cod = {k: {} for k in perioade}
     for x in S:
-        ros = activi(x["data"])
+        ros = activi(x["data"], x.get("in_functie"))
         abs_ = {rezolva(n, x["data"], ros) for n in x.get("absenti") or []} - {None}
         nf, pr = x.get("in_functie"), x.get("prezenti")
         complet = bool(nf and pr is not None and len(abs_) == nf - pr)
         x["roster_ok"] = bool(nf and len(ros) == nf and complet)
         x["in_consiliu"] = len(ros)
+        x["absenti_complet"] = complet
         for k in ros:
             sir = []
             for v in x.get("voturi") or []:
@@ -790,6 +840,13 @@ def consilieri(sedinte, mandate=None, azi=None, evenimente=None, min_mentiuni=2)
             st[{"p": "prezent", "X": "absent"}.get(c[0], "prezenta_necunoscuta")] += 1
             for ch in c[1:]:
                 st[ch] += 1
+        # perioada afișată: prima și ultima ședință în care a fost socotit în consiliu (după ce am scos plecații)
+        reale = []
+        for a_, b_ in seg:
+            ds = sorted(d for d in cod[k] if a_ <= d <= b_)
+            if ds:
+                reale.append([a_ if (date.fromisoformat(ds[0]) - date.fromisoformat(a_)).days <= 60 else ds[0], ds[-1]])
+        seg = reale or seg
         out.append({"id": re.sub(r"\s+", "-", k), "nume": nume, "variante": sorted(forme[k]), "perioade": seg,
                     "mandate": legc.get(k, []), "evenimente": evc.get(k, []), "stat": st, "cod": cod[k]})
     out.sort(key=lambda c: (-int(c["perioade"][-1][1] >= (ultima or "")), c["nume"]))
@@ -805,12 +862,16 @@ def raport_consilieri(ex):
         S = [x for x in ex["sedinte"] if l["start"] <= x["data"] <= l["sfarsit"]]
         nf = sorted({x.get("in_functie") for x in S if x.get("in_functie")})
         out.append(f"Legislatura {l['eticheta']}: de la {l['start']}, {l['membri']} consilieri găsiți; „în funcție” în PV-uri: {nf}; "
-                   f"ședințe cu lista completă: {sum(1 for x in S if x.get('roster_ok'))} din {len(S)}")
+                   f"ședințe cu lista completă: {sum(1 for x in S if x.get('roster_ok'))} din {len(S)} "
+                   f"(cu toți absenții numiți: {sum(1 for x in S if x.get('absenti_complet'))}; "
+                   f"cu numărul nostru de consilieri = „în funcție”: {sum(1 for x in S if x.get('in_functie') and x.get('in_consiliu') == x.get('in_functie'))})")
     ev = ex.get("evenimente_mandat") or {}
     for fel in ("validari", "incetari"):
         for e in ev.get(fel, []):
             out.append(f"  {fel[:-1]}: {e['nume']} - HCL {e['nr']}/{e['an']} din {e['data']}")
-    out.append("  hotărâri de organizare (început de mandat): " + ", ".join(f"{e['nr']}/{e['an']} ({e['data']})" for e in ev.get("organizare", [])[:40]))
+    out.append("  Indicii de consiliu nou (de aici se stabilesc legislaturile):")
+    for d, t in dovezi_legislaturi(ex["sedinte"], ev):
+        out.append(f"    {d}: {t}")
     out.append("")
     for c in ex.get("consilieri", []):
         s = c["stat"]

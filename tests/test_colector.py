@@ -1012,6 +1012,32 @@ class TestLitigii(unittest.TestCase):
         store.close()
         shutil.rmtree(tmp)
 
+    def test_dosare_asociate_si_cai_de_atac(self):
+        from monitor_colector import litigii as LT
+        tmp = tempfile.mkdtemp()
+        store = Store(os.path.join(tmp, "t.db"))
+        LT.init(store.db)
+        parti = [{"nume": "SPITALUL MUNICIPAL RĂDĂUŢI", "calitateParte": "Parte civilă"}, {"nume": "POP ION", "calitateParte": "Inculpat"}]
+        baza = {"parti": parti, "institutie": "JudecatoriaRADAUTI", "stadiuProcesualNume": "Fond", "obiect": "lovire"}
+        sed = lambda d, sol, tip: [{"data": d + "T00:00:00", "solutie": sol, "solutieSumar": sol + " ...", "dataPronuntare": d + "T00:00:00",
+                                    "documentSedinta": tip, "numarDocument": "1/2026"}]
+        for nr, extra in (("4586/285/2026", {"data": "2026-03-01T00:00:00", "sedinte": sed("2026-06-10", "Condamnă", "Hotarare")}),
+                          ("4586/285/2026/a1", {"data": "2026-03-05T00:00:00", "obiect": "măsuri preventive",
+                                                "sedinte": sed("2026-03-10", "Admite", "_IncheiereFinalaDezinvestire")}),
+                          ("900/86/2026", {"data": "2026-07-01T00:00:00", "institutie": "TribunalulSUCEAVA", "stadiuProcesualNume": "Apel",
+                                           "numarVechi": "4586/285/2026", "sedinte": [{"data": "2026-11-20T00:00:00", "solutie": ""}]})):
+            d = dict(baza, numar=nr, **extra)
+            LT._salveaza(store.db, d, date(2026, 10, 1))
+        store.db.commit()
+        ex = LT.export(store, public=False, azi=date(2026, 10, 1))
+        self.assertEqual(len(ex["dosare"]), 1)
+        d = ex["dosare"][0]
+        self.assertEqual((d["numar"], d["numere"], d["faza"]), ("4586/285/2026", ["4586/285/2026", "4586/285/2026/a1", "900/86/2026"], "Apel - în curs"))
+        self.assertEqual([e["asociat"] for e in d["etape"]], [None, None, "a1"])
+        self.assertEqual(d["etape"][2]["hotarare"]["tip"], "Încheiere finală (dezinvestire)")
+        self.assertEqual(LT.numar_baza("435/86/2021*/a2"), "435/86/2021")
+        store.close()
+
 
 class TestVoturi(unittest.TestCase):
     PV = """PROCES-VERBAL al ședinței ordinare din 25 septembrie 2026
