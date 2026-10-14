@@ -90,3 +90,6 @@ CONSILIU_MANDATE = {
     "2020-2024": "2020-10-26",
     "2024-2028": "2024-07-01",
 }
+# Datele alegerilor locale: o ședință „de constituire” găsită într-un PV mută începutul mandatului doar dacă
+# e în cel mult 200 de zile după alegeri (altfel e o mențiune întâmplătoare, ex. constituirea comisiilor).
+ALEGERI_LOCALE = ("2012-06-10", "2016-06-05", "2020-09-27", "2024-06-09")

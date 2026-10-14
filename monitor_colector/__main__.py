@@ -142,6 +142,11 @@ def main(argv=None):
                 with open(os.path.join(config.DATA_DIR, "intern-date", "litigii.json"), "w", encoding="utf-8") as f:
                     json.dump(litigii.export(store, public=False), f, ensure_ascii=False, separators=(",", ":"))
             stats["voturi"] = voturi.scrie(store, config.DATA_DIR)
+            try:   # indexul pentru căutarea în textul documentelor (pagina internă)
+                from . import cautare_text
+                stats["cautare_text"] = cautare_text.construieste(store, config.DATA_DIR)
+            except Exception as e:
+                stats["cautare_text"] = f"eroare: {e}"
             from . import buget
             bx = buget.export(store)
             if bx["entitati"]:
