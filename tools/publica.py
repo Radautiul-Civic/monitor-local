@@ -183,6 +183,34 @@ def intern_date():
     return out   # arhiva de siguranță se urcă în intern/date/ de fluxul „Arhivare”
 
 
+MANIFEST_CAUTARE = os.path.join(ROOT, "data", "publicat-cautare.json")
+
+
+def cautare_de_urcat(base):
+    """Indexul de căutare în text (data/cautare/): doar fișierele noi sau schimbate, după amprentă."""
+    import hashlib
+    d = os.path.join(ROOT, "data", "cautare")
+    if not os.path.isdir(d):
+        return [], None
+    try:
+        with open(MANIFEST_CAUTARE, encoding="utf-8") as f:
+            done = json.load(f)
+    except (OSError, ValueError):
+        done = {}
+    files, new = [], {}
+    for dirpath, _, names in os.walk(d):
+        rel = os.path.relpath(dirpath, d).replace(os.sep, "/")
+        for n in names:
+            p = os.path.join(dirpath, n)
+            with open(p, "rb") as f:
+                h = hashlib.sha1(f.read()).hexdigest()
+            key = (rel + "/" + n) if rel != "." else n
+            new[key] = h
+            if done.get(key) != h:
+                files.append((p, "/".join(x for x in ("intern", "date", "cautare", rel if rel != "." else "") if x), n))
+    return files, new
+
+
 RAPOARTE = ("indicatori.md", "urbanism-registre.txt", "sicap-de-verificat.txt", "sicap-castigatori-proba.json",
             "voturi-proba.txt", "rulare-geocodare.txt", "rulare-buget.txt", "rulare-litigii.txt", "rulare-sicap.txt")
 
@@ -206,7 +234,7 @@ def main():
     for name, local in public_date().items():
         files.append((local, "date", name))
 
-    manifest = None
+    manifest = manifest_cautare = None
     if intern_protejat():
         tf, manifest = texte_de_urcat(base)
         print(f"intern: {len(tf)} fișiere noi sau modificate")
@@ -214,6 +242,9 @@ def main():
         # zona internă: toate datele (urbanism, litigii cu nume, buget, voturi, contracte...)
         for name, local in intern_date().items():
             files.append((local, "intern/date", name))
+        cf, manifest_cautare = cautare_de_urcat(base)
+        print(f"căutare în text: {len(cf)} fișiere noi sau modificate")
+        files += cf
     else:
         print("intern: folderul nu cere parolă (sau nu există); textele și datele interne NU se urcă", file=sys.stderr)
 
@@ -237,6 +268,9 @@ def main():
     if manifest is not None:
         with open(MANIFEST, "w", encoding="utf-8") as f:
             json.dump(manifest, f)
+    if manifest_cautare is not None:
+        with open(MANIFEST_CAUTARE, "w", encoding="utf-8") as f:
+            json.dump(manifest_cautare, f)
     return 0
 
 

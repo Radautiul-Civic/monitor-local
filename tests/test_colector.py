@@ -1198,7 +1198,7 @@ class TestConsilieri(unittest.TestCase):
               "presedinte": None, "voturi": [vot(4, 3, abt=1, na=["Cigoli Augustin"])]},
              {"data": "2024-08-01", "in_functie": 5, "prezenti": 4, "absenti": ["Lorin Iosif"], "online": [], "presedinte": "Pop Ana",
               "voturi": [vot(4, 3, imp=1, ni=["Mutrescu"]), vot(4, 4)]}]
-        C = {c["nume"]: c for c in V.consilieri(S, mandate={"2024-2028": "2024-07-01"})}
+        C = {c["nume"]: c for c in V.consilieri(S, mandate={"2024-2028": "2024-07-01"}, min_mentiuni=1)[0]}
         self.assertEqual(sorted(C), ["Cigoli Augustin", "Ihnatiuc Maria", "Lorin Iosif", "Mutrescu Dan", "Pop Ana"])
         self.assertEqual(C["Pop Ana"]["cod"], {"2024-08-01": "pPP", "2024-10-01": "pP"})
         self.assertEqual(C["Lorin Iosif"]["cod"], {"2024-08-01": "XXX", "2024-10-01": "pP"})
@@ -1207,9 +1207,54 @@ class TestConsilieri(unittest.TestCase):
         self.assertEqual((C["Mutrescu Dan"]["stat"]["absent"], C["Mutrescu Dan"]["stat"]["I"], C["Pop Ana"]["mandate"]), (1, 1, ["2024-2028"]))
         # dacă nu știm toți absenții, votul „pentru” nu se deduce
         S[1]["absenti"] = []
-        C = {c["nume"]: c for c in V.consilieri(S, mandate={"2024-2028": "2024-07-01"})}
+        C = {c["nume"]: c for c in V.consilieri(S, mandate={"2024-2028": "2024-07-01"}, min_mentiuni=1)[0]}
         self.assertEqual(C["Pop Ana"]["cod"]["2024-08-01"], "???")
         self.assertEqual(V.extra_sedinta("Preşedinte de şedinţă este domnul consilier local Ciobotariu Dumitru, conform")["presedinte"], "Ciobotariu Dumitru")
+        # validările și încetările de mandat din titlurile hotărârilor
+        db = sqlite3.connect(":memory:")
+        db.row_factory = sqlite3.Row
+        db.execute("CREATE TABLE hcl (year INTEGER, number INTEGER, adoption_date TEXT, title TEXT, wp_id INTEGER, pdf_url TEXT)")
+        db.execute("CREATE TABLE documents (url TEXT, wp_id INTEGER, text_path TEXT)")
+        db.executemany("INSERT INTO hcl VALUES (?,?,?,?,NULL,NULL)", [
+            (2024, 140, "2024-07-04", "privind organizarea comisiilor de specialitate ale Consiliului Local al Municipiului Rădăuți"),
+            (2025, 60, "2025-03-27", "privind constatarea încetării de drept a mandatului de consilier local al domnului Andronachi Traian"),
+            (2025, 61, "2025-03-27", "privind validarea mandatului de consilier local al domnului Hrițcan Constantin-Cristinel")])
+        ev = V.evenimente_mandat(db)
+        self.assertEqual([(e["nume"], e["nr"]) for e in ev["incetari"]], [("Andronachi Traian", 60)])
+        self.assertEqual([(e["nume"], e["nr"]) for e in ev["validari"]], [("Hrițcan Constantin-Cristinel", 61)])
+        self.assertEqual(V.legislaturi([], ev, {"2024-2028": "2024-10-01"})[-1][:2], ("2024-2028", "2024-07-04"))
+        u = V.unifica_nume({"galan romeo": 3, "galan gheorghe romeo": 9, "carcalete petru": 40, "carcalete peru": 1, "dan marcu george": 5, "dan mutrescu": 7})
+        self.assertEqual((u["galan romeo"], u["carcalete peru"], u["dan mutrescu"]), ("galan gheorghe romeo", "carcalete petru", "dan mutrescu"))
+
+
+class TestCautareText(unittest.TestCase):
+    def test_index(self):
+        from monitor_colector import cautare_text as CT
+        tmp = tempfile.mkdtemp()
+        store = Store(os.path.join(tmp, "t.db"))
+        db = store.db
+        texte = {"a.pdf": "HOTĂRÂRE privind rectificarea bugetului local. Consiliul Local al Municipiului Rădăuți. Strada Putnei nr. 12, CNP 1850101123456.",
+                 "b.pdf": "Proces-verbal. Consiliul Local. Se discută iluminatul public pe strada Putnei.",
+                 "c.pdf": "Consiliul Local. Proiect privind concesionarea terenului."}
+        for i, (u, t) in enumerate(texte.items()):
+            tp = os.path.join(tmp, f"{i}.txt")
+            open(tp, "w", encoding="utf-8").write(t)
+            db.execute("INSERT INTO documents (url, wp_id, origin, text_path, text_layer) VALUES (?,?,?,?,0)", (u, 10 + i, "site", tp))
+        db.execute("INSERT INTO hcl (year, number, adoption_date, title, origin, wp_id, pdf_url) VALUES (2025, 7, '2025-02-20', 'privind rectificarea bugetului', 'site', 10, 'a.pdf')")
+        db.execute("INSERT INTO pv (wp_id, kind, session_type, session_date, title) VALUES (11, 'pv_sedinta', 'ordinara', '2025-03-27', 'PV ședința din 27.03.2025')")
+        db.commit()
+        st = CT.construieste(store, tmp, prag_comun=0.9, minim=1)
+        self.assertEqual(st["documente"], 3)
+        meta = json.load(open(os.path.join(tmp, "cautare", "docs.json"), encoding="utf-8"))
+        self.assertEqual([d[1] for d in meta["docs"]], ["hcl", "pv", "altele"])
+        self.assertEqual(meta["docs"][0][6], "#consiliu/hcl/2025/7")
+        self.assertIn("consiliul", meta["comune"])               # în toate documentele: nu se indexează
+        pu = json.load(open(os.path.join(tmp, "cautare", "idx", "pu.json")))
+        self.assertEqual(pu["putnei"], [0, 1])                    # pozițiile 0 și 1, scrise ca diferențe
+        self.assertNotIn("1850101123456", json.dumps(meta))
+        self.assertFalse(os.path.exists(os.path.join(tmp, "cautare", "idx", "18.json")))   # numerele lungi nu se indexează
+        self.assertEqual(len(os.listdir(os.path.join(tmp, "cautare", "txt"))), 3)
+        store.close()
 
 
 class TestPublicare(unittest.TestCase):

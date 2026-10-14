@@ -252,3 +252,5 @@ a.lc-nr{color:var(--ink)}
 .lc-p .alte{grid-column:1/-1;border-top:1px dashed var(--line);padding-top:8px}
 details.mai-filtre{margin-top:8px}
 details.mai-filtre summary{cursor:pointer;color:var(--accent);font-size:.9rem;margin-bottom:6px}
+.doc.ft .fr{font-size:.88rem;margin:4px 0 2px;line-height:1.5;overflow-wrap:anywhere}
+.doc.ft mark{background:color-mix(in srgb,var(--warn) 30%,transparent);color:inherit;border-radius:3px;padding:0 2px}
