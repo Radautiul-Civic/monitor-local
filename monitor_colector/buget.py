@@ -315,6 +315,12 @@ def export(store):
         for a in c.values():
             for k in a:
                 a[k] = {x: round(v, 2) for x, v in sorted(a[k].items(), key=lambda t: -t[1]) if v}
-    return {"datorie": datorie(db), "generat_la": date.today().isoformat(), "sursa": "transparenta.eu (Transparență bugetară, Ministerul Finanțelor)",
+    try:   # bugetele aprobate, din PDF-urile puse în surse/buget/
+        from . import buget_aprobat
+        aprobat = buget_aprobat.toate()
+    except Exception as e:
+        log.warning("bugete aprobate: %s", e)
+        aprobat = {}
+    return {"datorie": datorie(db), "aprobat": aprobat, "generat_la": date.today().isoformat(), "sursa": "transparenta.eu (Transparență bugetară, Ministerul Finanțelor)",
             "municipiu": CUI_MUNICIPIU, "entitati": sorted(ent.values(), key=lambda e: (e["cui"] != CUI_MUNICIPIU, e["nume"] or "")),
             "detalii": det}

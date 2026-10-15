@@ -1283,6 +1283,46 @@ class TestCautareText(unittest.TestCase):
         store.close()
 
 
+class TestBugetAprobat(unittest.TestCase):
+    TEXT = """ An pentru care se depune bugetul                    2       0   2    6
+02. Bugetul local: 0000000000 0000 - A. Integral de la buget, Sectiune Functionare (lei)            Sterge
+Venituri:                                                90.000.000                0                    0      0      0      0      0
+04                                                      33.000.000                 0                    0      0      0      0      0
+370300                           -5.000.000   0   0   0   0            0             0 X
+Cheltuieli:                      80.000.000   0   0   0   0    81.000.000    81.000.000
+51                               11.000.000   0   0   0   0   11.000.000    11.000.000
+5101                             11.000.000   0   0   0   0   11.000.000    11.000.000
+65                               69.000.000   0   0   0   0   69.000.000    69.000.000
+02. Bugetul local: 0000000000 0000 - A. Integral de la buget, Sectiune Dezvoltare (lei)            Sterge
+Venituri:                                   20.000.000                         0      0      0      0      0      0
+37                                          5.000.000                          0      0      0      0      0      0
+40                                          3.000.000                          0      0      0      0      0      0
+42                                          8.000.000                          0      0      0      0      0      0
+4288               ASPNRRAAFN               2.000.000                          0      0      0      0      0      0
+4549           FSE+CF21 27        1.293.900   0   0   0   0   0   0
+45                                4.000.000   0   0   0   0           0             0
+Cheltuieli:                      19.000.000   0   0   0   0   19.000.000   19.000.000
+84                               19.000.000   0   0   0   0   19.000.000   19.000.000
+02. Bugetul local: 0000000000 0000 - C. Credite interne, Sectiune Dezvoltare (lei)            Sterge
+Venituri:                                      5.000.000                       0      0      0      0      0      0
+41                 AOpFin                   5.000.000                          0      0      0      0      0      0
+Cheltuieli:                                    5.000.000                       0      0      0      0      0      0
+84                                          5.000.000                          0      0      0      0      0      0
+"""
+
+    def test_citire(self):
+        from monitor_colector import buget_aprobat as BA
+        b = BA.citeste(text=self.TEXT)
+        self.assertEqual(b["an"], 2026)
+        self.assertEqual([(s["sursa"], s["sectiune"], s["cheltuieli"]) for s in b["sectiuni"]],
+                         [("A", "functionare", 80000000), ("A", "dezvoltare", 19000000), ("C", "dezvoltare", 5000000)])
+        self.assertEqual(b["sectiuni"][0]["ch"], {"51": 11000000, "65": 69000000})
+        self.assertEqual(b["sectiuni"][1]["vn"]["4549"], 1293900)          # numele scurt cu cifre nu încurcă suma
+        f = BA.finantare_dezvoltare(b["sectiuni"])
+        self.assertEqual((f["Împrumuturi"], f["PNRR"], f["Programe naționale (PNDL, Anghel Saligny etc.)"], f["Excedentul din anii trecuți"],
+                          f["Bani mutați din secțiunea de funcționare"], f["Fonduri europene"]), (5000000, 2000000, 6000000, 3000000, 5000000, 4000000))
+
+
 class TestPublicare(unittest.TestCase):
     def test_zona_publica_doar_hotarari_si_sicap(self):
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))

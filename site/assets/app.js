@@ -839,7 +839,7 @@
     var divs = {}; SX.A.forEach(function (x) { divs[SX.div[x.c]] = 1; });
     var opt = function (v, t, s) { return '<option value="' + esc(v) + '"' + (String(s) === String(v) ? " selected" : "") + ">" + esc(t) + "</option>"; };
     var aniOpt = function (s, gol) { return opt("", gol, s) + SX.ani.map(function (a) { return opt(a, a, s); }).join(""); };
-    el.innerHTML = cap +
+    el.innerHTML = cap + '<div class="sx-wrap"><div class="sx-main">' +
       '<div class="card section sx-bar"><div class="filters">' +
       '<select id="f-i" aria-label="Instituția">' + opt("", "Toate instituțiile (" + SX.inst.length + ")", F.i) + grupeInst().map(function (g) {
         var din = instOrd.filter(function (i) { return (SX.inst[i][3] || "Alte instituții din oraș") === g; });
@@ -856,7 +856,7 @@
       segMon() + "</div>" +
       '<div class="sx-act"><label class="chk"><input type="checkbox" id="f-ab"' + (F.ab ? " checked" : "") + "> include valorile aberante din SICAP</label>" +
       '<label class="chk"><input type="checkbox" id="f-nf"' + (F.nf ? " checked" : "") + "> include achizițiile directe neîncheiate</label>" +
-      '<a href="#achizitii/sicap" id="f-reset">Șterge filtrele</a></div></div><div id="sx-out"></div>';
+      '<a href="#achizitii/sicap" id="f-reset">Șterge filtrele</a></div></div><div id="sx-out"></div></div><aside class="card sx-feed" id="sx-feed"></aside></div>';
     function citeste() {
       ["i", "t", "c", "q", "a0", "a1", "min"].forEach(function (k) { F[k] = $("f-" + k).value; });
       F.ab = $("f-ab").checked ? "1" : "";
@@ -864,12 +864,14 @@
       if (F.a0 && F.a1 && F.a0 > F.a1) { var t = F.a0; F.a0 = F.a1; F.a1 = t; }
       history.replaceState(null, "", sxHash(F));
       sxOut($("sx-out"), F);
+      sxFeed($("sx-feed"), F);
     }
     ["f-i", "f-t", "f-c", "f-a0", "f-a1", "f-min", "f-ab", "f-nf"].forEach(function (id) { $(id).addEventListener("change", citeste); });
     var tq; $("f-q").addEventListener("input", function () { clearTimeout(tq); tq = setTimeout(citeste, 250); });
-    legaSeg(el, function () { sxOut($("sx-out"), F); });
+    legaSeg(el, function () { sxOut($("sx-out"), F); sxFeed($("sx-feed"), F); });
     SXR = function (patch) { Object.keys(patch).forEach(function (k) { F[k] = patch[k]; }); location.hash = sxHash(F); };
     sxOut($("sx-out"), F);
+    sxFeed($("sx-feed"), F);
     if (INTERN) {   // ce am găsit în SICAP și n-am inclus: de verificat dacă lipsește vreo instituție din oraș
       el.insertAdjacentHTML("beforeend", '<div id="sx-ex"></div>');
       get(DATA + "sicap.json").then(function (d) {
@@ -1022,6 +1024,34 @@
     draw();
   }
 
+  // fluxul de noutăți din achiziții (coloana din dreapta): licitații lansate, contracte atribuite, achiziții directe
+  var FEED_MIN = { "": 0, mari: 50000 };
+  function sxFeed(el, F) {
+    if (!el) return;
+    var fel = el.dataset.fel || "", mari = el.dataset.mari !== "0";
+    var gr = /^g:/.test(F.i) ? F.i.slice(2) : null, ii = F.i !== "" && !gr ? SX.iid[F.i] : null;
+    var ev = SX.A.filter(function (x) {
+      if (!x.ok || x.niv === 2 || !x.d) return false;
+      if (ii != null && x.i !== ii) return false;
+      if (gr && SX.inst[x.i][3] !== gr) return false;
+      if (fel && (fel === "lic" ? x.t !== "cn" : fel === "atr" ? (x.t !== "can" && x.t !== "ac") : x.t !== "da")) return false;
+      if (x.t === "da" && mari && (x.lei || 0) < 50000) return false;
+      return true;
+    }).sort(function (a, b) { return (b.d || "").localeCompare(a.d || ""); }).slice(0, 40);
+    var et = { cn: ["licitație lansată", "ic"], can: ["contract atribuit", "c"], ac: ["acord-cadru atribuit", "c"], da: ["achiziție directă", "n"] };
+    el.innerHTML = '<div class="sx-feed-h"><h2>Noutăți din achiziții</h2><p class="note">Cele mai recente, ' + (ii != null ? "la " + esc(SX.inst[ii][1]) : gr ? "la " + esc(gr.toLowerCase()) : "la toate instituțiile") + ".</p>" +
+      '<div class="seg mic" role="group" aria-label="Ce noutăți">' + [["", "Toate"], ["lic", "Licitații"], ["atr", "Atribuiri"], ["da", "Directe"]].map(function (x) { return '<button type="button" data-f="' + x[0] + '" aria-pressed="' + (fel === x[0]) + '">' + x[1] + "</button>"; }).join("") + "</div>" +
+      '<label class="chk"><input type="checkbox" class="ff-m"' + (mari ? " checked" : "") + "> achizițiile directe doar peste 50.000 lei</label></div>" +
+      (ev.length ? '<ol class="sx-feed-l">' + ev.map(function (x) {
+        var e = et[x.t] || ["", "n"];
+        return '<li class="' + e[1] + '"><div class="ff-d">' + esc(zi(x.d)) + ' · <span>' + esc(x.sub ? "contract subsecvent" : e[0]) + "</span></div>" +
+          '<a class="ff-t" href="' + url(x) + '" rel="noopener">' + esc((x.o || "(fără titlu)").slice(0, 140)) + "</a>" +
+          '<div class="ff-m">' + esc(SX.inst[x.i][1]) + (x.lei ? " · <strong>" + bani(val(x)) + "</strong>" + (x.t === "cn" ? " estimat" : "") : "") + (x.f >= 0 ? " · " + fLink(x.f) : "") + "</div></li>";
+      }).join("") + "</ol>" : '<p class="empty">Nimic recent pentru filtrele alese.</p>');
+    Array.prototype.forEach.call(el.querySelectorAll(".seg button"), function (b) { b.addEventListener("click", function () { el.dataset.fel = b.dataset.f; sxFeed(el, F); }); });
+    el.querySelector(".ff-m").addEventListener("change", function () { el.dataset.mari = this.checked ? "1" : "0"; sxFeed(el, F); });
+  }
+
   function sxItem(x, cuInst) {
     var m = [];
     if (cuInst) m.push("<span>" + esc(SX.inst[x.i][1]) + "</span>");
@@ -1129,7 +1159,7 @@
       (an ? tile("Rectificări de buget în " + an, nr(rect), "", "modificări ale bugetului aprobat la început de an") : "") +
       tile("Documente de buget publicate", nr((L.buget || []).length), "", "pe site-ul primăriei") +
       tile("Bilanțuri contabile", nr((L.bilanturi || []).length), "", "trimestriale, publicate pe site") + "</div>" +
-      '<div id="exec"></div><div id="pe-ani"></div><div id="datorie"></div>' +
+      '<div id="exec"></div><div id="pe-ani"></div><div id="aprobat"></div><div id="datorie"></div>' +
       '<section class="card section"><h2>Hotărâri despre buget, pe ani</h2><p class="note">Hotărârile consiliului local care aprobă, rectifică sau modifică bugetul, după titlu. Multe rectificări într-un an înseamnă un buget schimbat des.</p>' +
       legend(F3.map(function (f) { return [f[1], f[2]]; })) + '<div class="chart" id="ch-b"></div></section>' +
 
@@ -1138,6 +1168,7 @@
     el.innerHTML = h;
     executie($("exec"));
     bugetPeAni($("pe-ani"));
+    bugetAprobat($("aprobat"));
     datoria($("datorie"));
     chart($("ch-b"), { cats: A, stacked: true, label: "Hotărâri despre buget pe ani",
       series: F3.map(function (f) { return { name: f[1], color: f[2], values: A.map(function (y) { return (pe[y] || {})[f[0]] || 0; }) }; }),
@@ -1272,6 +1303,47 @@
           var x = (D[a] || {}).dezv || {};
           return rot(k === "Altele" ? Object.keys(x).filter(function (c) { return capTop.indexOf(c) < 0; }).reduce(function (s, c) { return s + x[c]; }, 0) : (x[k] || 0), u); }) }; }),
       tooltip: function (i) { var a = ani[i], x = (D[a] || {}).dezv || {}; return tt(a, Object.keys(x).sort(function (p, q) { return x[q] - x[p]; }).slice(0, 8).map(function (k) { return [k, x[k]]; })); } });
+  }
+
+  // bugetul aprobat (planul depus la Ministerul Finanțelor) față de execuție
+  var FIN_ORD = ["Împrumuturi", "PNRR", "Fonduri europene", "Programe naționale (PNDL, Anghel Saligny etc.)", "Subvenții de la alte bugete",
+    "Excedentul din anii trecuți", "Bani mutați din secțiunea de funcționare", "Vânzări de bunuri (terenuri, clădiri)", "Alte surse"];
+  var FIN_CUL = { "Împrumuturi": "var(--c8)", "PNRR": "var(--c2)", "Fonduri europene": "var(--c3)", "Programe naționale (PNDL, Anghel Saligny etc.)": "var(--c4)",
+    "Subvenții de la alte bugete": "var(--c5)", "Excedentul din anii trecuți": "var(--c6)", "Bani mutați din secțiunea de funcționare": "var(--c7)", "Vânzări de bunuri (terenuri, clădiri)": "var(--c1)" };
+  function culFin(k) { return FIN_CUL[k] || "var(--plan)"; }
+  function bugetAprobat(el) {
+    var A = (BUG && BUG.aprobat) || {}, ani = Object.keys(A).sort();
+    if (!ani.length) { el.innerHTML = ""; return; }
+    var M = (BUG.entitati || []).filter(function (e) { return e.cui === BUG.municipiu; })[0] || { ani: {} };
+    var D = (BUG.detalii || {})[BUG.municipiu] || {};
+    var realiz = function (a) { return D[a] ? (D[a].fel["Investiții (dezvoltare)"] || 0) : null; };
+    var u = unitate(Math.max.apply(null, ani.map(function (a) { return Math.max(A[a].cheltuieli, A[a].dezvoltare); }).concat([1])));
+    var un = u.n.replace(/ de (euro|lei)$/, " de lei");
+    var surse = FIN_ORD.filter(function (k) { return ani.some(function (a) { return (A[a].finantare_dezvoltare || {})[k]; }); });
+    var cuImpr = ani.filter(function (a) { return (A[a].finantare_dezvoltare || {})["Împrumuturi"]; });
+    var azi = String(new Date().getFullYear());
+    var h = '<section class="card section"><h2>Bugetul aprobat: ce și-a propus primăria</h2>' +
+      '<p class="note">Bugetele municipiului așa cum au fost depuse la Ministerul Finanțelor (formularul „Buget individual”, Transparență bugetară), ' + ani[0] + "-" + ani[ani.length - 1] +
+      ". Sunt bugetele de la începutul anului; pe parcurs se rectifică. Le comparăm cu ce s-a cheltuit efectiv (execuția).</p>" +
+      '<h3 style="margin-top:12px">Investiții planificate și investiții realizate</h3><p class="note">Secțiunea de dezvoltare: cât prevedea bugetul aprobat și cât s-a plătit efectiv în anul respectiv, în ' + un + ".</p>" +
+      legend([["Planificat (buget aprobat)", "var(--track)"], ["Realizat (execuție)", "var(--s1)"]]) + '<div class="chart" id="ch-apr"></div>' +
+      '<h3 style="margin-top:16px">Din ce urmau să fie plătite investițiile</h3><p class="note">Sursele secțiunii de dezvoltare din bugetul aprobat, în ' + un + ". " +
+      (cuImpr.length ? "Împrumuturi apar în bugetul aprobat în: <strong>" + cuImpr.join(", ") + "</strong>." : "În bugetele aprobate nu apare niciun împrumut; dacă s-au contractat credite, au intrat prin rectificări.") + "</p>" +
+      legend(surse.map(function (k) { return [k, culFin(k)]; })) + '<div class="chart" id="ch-fin2"></div>' +
+      '<details class="tbl"><summary>Vezi tabelul</summary><div class="tw"><table><thead><tr><th>An</th><th class="n">Buget aprobat</th><th class="n">Funcționare</th><th class="n">Dezvoltare</th><th class="n">din care împrumuturi</th><th class="n">Cheltuit efectiv</th><th class="n">Investiții realizate</th><th class="n">Realizare investiții</th></tr></thead><tbody>' +
+      ani.slice().reverse().map(function (a) {
+        var x = A[a], r = realiz(a), ex = (M.ani[a] || {}).cheltuieli;
+        return "<tr><td>" + a + '</td><td class="n">' + lei(x.cheltuieli) + '</td><td class="n">' + lei(x.functionare) + '</td><td class="n">' + lei(x.dezvoltare) + '</td><td class="n">' + lei((x.finantare_dezvoltare || {})["Împrumuturi"] || 0) +
+          '</td><td class="n">' + (ex != null ? lei(ex) + (a === azi ? "*" : "") : "-") + '</td><td class="n">' + (r != null ? lei(r) : "-") + '</td><td class="n">' + (r != null && x.dezvoltare ? Math.round(100 * r / x.dezvoltare) + "%" : "-") + "</td></tr>";
+      }).join("") + '</tbody></table></div><p class="note">* anul în curs: execuția până la ultima raportare.</p></details></section>';
+    el.innerHTML = h;
+    chart($("ch-apr"), { cats: ani, grouped: true, label: "Investiții planificate și realizate pe ani",
+      series: [{ name: "Planificat", color: "var(--track)", values: ani.map(function (a) { return rot(A[a].dezvoltare, u); }) },
+               { name: "Realizat", color: "var(--s1)", values: ani.map(function (a) { return rot(realiz(a) || 0, u); }) }],
+      tooltip: function (i) { var a = ani[i], r = realiz(a); return "<b>" + a + "</b><br>Planificat: " + lei(A[a].dezvoltare) + "<br>Realizat: " + (r != null ? lei(r) + (A[a].dezvoltare ? " (" + Math.round(100 * r / A[a].dezvoltare) + "%)" : "") : "fără date de execuție"); } });
+    chart($("ch-fin2"), { cats: ani, stacked: true, label: "Sursele planificate ale investițiilor pe ani",
+      series: surse.map(function (k) { return { name: k, color: culFin(k), values: ani.map(function (a) { return rot(Math.max(0, (A[a].finantare_dezvoltare || {})[k] || 0), u); }) }; }),
+      tooltip: function (i) { var a = ani[i], f = A[a].finantare_dezvoltare || {}; return "<b>" + a + "</b>" + surse.map(function (k) { return f[k] ? "<br>" + k + ": " + lei(f[k]) : ""; }).join(""); } });
   }
 
   // datoria publică: din execuția bugetară (trageri, rate, dobânzi), soldul din documentele primăriei și hotărârile de împrumut
