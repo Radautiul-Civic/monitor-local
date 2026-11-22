@@ -337,11 +337,64 @@ a.nt-s{font-size:.8rem}
 .rz-ed label{display:block;font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 0 3px;font-weight:650}
 .rz-ed textarea,.rz-ed input{width:100%;box-sizing:border-box;font:inherit;font-size:.93rem;border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--surface);color:var(--ink)}
 .rz-ed fieldset{border:1px solid var(--line);border-radius:10px;padding:8px 12px 12px;margin:12px 0}
-.rz-int{display:grid;grid-template-columns:200px 90px minmax(0,1fr);gap:6px;margin-top:6px}
-.rz-vot{display:grid;grid-template-columns:auto 1fr 1.5fr 1fr auto 100px;gap:6px;align-items:center;margin-top:8px}
+.rz-int{display:grid;grid-template-columns:minmax(120px,200px) 90px minmax(0,1fr);gap:6px;margin-top:6px}
+.rz-vot{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;align-items:end;margin-top:8px}
 .rz-vot label{margin:0}
 .rz-act{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px}
 .btn{font:inherit;font-size:.9rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 14px;cursor:pointer}
 .btn.ok{background:var(--good);border-color:var(--good);color:#fff}
 .btn.rau{color:var(--bad);border-color:var(--bad)}
 @media (max-width:640px){.rz-int,.rz-vot{grid-template-columns:minmax(0,1fr)}}
+
+/* achiziții: coloane pe instituții, cu sigla */
+.sx-cols{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;overflow-x:auto;padding-bottom:4px}
+.sx-col{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);min-width:0}
+.sx-col-h{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;color:var(--ink);text-decoration:none;padding-bottom:8px;border-bottom:1px solid var(--line);min-height:118px}
+.sx-col-h img{height:48px;width:auto;max-width:150px;object-fit:contain;background:#fff;border-radius:6px;padding:2px}
+.sx-col-h b{font-size:.9rem;line-height:1.25}
+.sx-col-h .muted{font-size:.8rem}
+.sx-col-alte{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:var(--surface-2);font-weight:700;color:var(--ink-2)}
+.sx-col-l{list-style:none;margin:0;padding:0}
+.sx-col-l li{padding:7px 0;border-bottom:1px solid var(--line);font-size:.85rem;line-height:1.35}
+.sx-col-l li:last-child{border-bottom:0}
+.sx-col-l a{color:var(--ink)}
+@media (max-width:1100px){.sx-cols{grid-template-columns:repeat(5,240px)}}
+
+/* fișa unui act pe hartă */
+.pop-act{font-size:13px;line-height:1.45}
+.pop-act .pop-scop{margin:6px 0;font-size:13px}
+.pop-act table{border-collapse:collapse;width:100%;margin-top:4px}
+.pop-act th{text-align:left;font-weight:600;color:#555;padding:2px 8px 2px 0;vertical-align:top;white-space:nowrap}
+.pop-act td{padding:2px 0;vertical-align:top}
+.pop-act .pop-n{color:#777;font-style:italic;margin:6px 0 0}
+.pop-act .pop-l{margin:8px 0 0}
+.pop-act .pop-l a{margin-right:10px}
+
+/* organigrama interactivă */
+.org-top{display:flex;flex-direction:column;align-items:center;margin:6px 0 14px}
+.org-sus{border:2px solid var(--ink);border-radius:10px;padding:8px 16px;font-weight:700;background:var(--surface);text-align:center}
+.org-sus.prim{border-color:var(--accent);color:var(--accent)}
+.org-lin{width:2px;height:14px;background:var(--line)}
+.org-ram{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px;border-top:2px solid var(--line);padding-top:12px}
+.org-col h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 8px}
+.org-g{border:1px dashed var(--line);border-radius:10px;padding:8px;margin-bottom:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.org-gn{grid-column:1/-1;font-weight:650;font-size:.88rem;color:var(--ink-2)}
+.org-b{font:inherit;text-align:left;cursor:pointer;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;background:var(--surface);padding:8px 10px;display:flex;flex-direction:column;gap:5px;color:var(--ink)}
+.org-b:hover{border-color:var(--accent)}
+.org-b.gol{border-left-color:var(--line)}
+.org-b.act{background:color-mix(in srgb,var(--accent) 10%,var(--surface));border-color:var(--accent)}
+.org-n{font-size:.9rem;font-weight:600;line-height:1.3}
+.org-c{display:flex;flex-wrap:wrap;gap:4px}
+.org-c span{font-size:.74rem;border-radius:99px;padding:0 7px;background:var(--surface-2);color:var(--ink-2)}
+.org-c .ok{background:color-mix(in srgb,var(--good) 15%,transparent);color:var(--good)}
+.org-c .ic{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+.org-c .mut{background:none;color:var(--muted);padding:0}
+.org-det{margin-top:14px;border:2px solid var(--accent);border-radius:12px;padding:12px 14px}
+.org-det h3{margin:0}
+@media (max-width:800px){.org-ram{grid-template-columns:minmax(0,1fr)}}
+
+/* meniul: pe ecran lat se rupe pe două rânduri, ca toate secțiunile să se vadă; pe telefon se derulează */
+@media (min-width:900px){nav.main{flex-wrap:wrap;overflow:visible}}
+.rz-ed textarea{resize:vertical;overflow:hidden;min-height:2.6em}
+.rz-c{overflow-wrap:anywhere}
+.rz-c .h-row h2{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
