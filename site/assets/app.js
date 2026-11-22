@@ -27,7 +27,7 @@
     { id: "strada", nume: "Strada mea" },
     { id: "consiliu", nume: "Consiliul Local", def: "hcl", sub: [["urmatoare", "Ședința următoare"], ["proiecte", "Proiecte de hotărâre"], ["hcl", "Hotărâri adoptate"], ["sedinte", "Ședințe și procese-verbale"], ["consilieri", "Consilieri"]] },
     { id: "primarie", nume: "Primărie", def: "urbanism", sub: [["buget", "Buget"], ["urbanism", "Urbanism"]] },
-    { id: "achizitii", nume: "Achiziții publice", sub: [["contracte", "Contracte"], ["sicap", "SICAP"]] },
+    { id: "achizitii", nume: "Achiziții publice", def: "sicap", sub: [["sicap", "SICAP"], ["contracte", "Contracte"]] },
     { id: "angajari", nume: "Concursuri și angajări", def: "statistici", sub: [["statistici", "Statistici"], ["concursuri", "Concursuri"], ["posturi", "Organigramă și posturi"]] }
   ].concat(INTERN ? [{ id: "litigii", nume: "Litigii", def: "noutati", sub: [["noutati", "Noutăți"], ["dosare", "Dosare"], ["statistici", "Statistici"]] }] : [])
    .concat([{ id: "cauta", nume: "Caută" }]);
@@ -1052,7 +1052,7 @@
     var col = SX_PRINC.filter(function (p) { return idx[p[0]] != null; }).map(function (p) { return { p: p, i: idx[p[0]] }; });
     var princ = {}; col.forEach(function (c) { princ[c.i] = 1; });
     col.push({ p: [null, "Alte instituții din oraș", null], alte: true });
-    var et = { cn: "licitație", can: "contract", ac: "acord-cadru", da: "directă" };
+    var et = { cn: ["licitație lansată", "ic"], can: ["contract atribuit", "c"], ac: ["acord-cadru atribuit", "c"], da: ["achiziție directă", "n"] };
     el.innerHTML = col.map(function (c) {
       var L2 = SX.A.filter(function (x) { return x.ok && x.niv !== 2 && x.d && (c.alte ? !princ[x.i] : x.i === c.i) && (x.t !== "da" || (x.lei || 0) >= 5000); })
         .sort(function (a, b) { return (b.d || "").localeCompare(a.d || ""); });
@@ -1060,10 +1060,12 @@
       var link = c.alte ? "#achizitii/sicap" : sxHash({ i: String(SX.inst[c.i][0]) });
       return '<div class="sx-col"><a class="sx-col-h" href="' + link + '">' + (c.p[2] ? '<img src="' + BASE + "assets/img/sigle/" + c.p[2] + '.png" alt="" loading="lazy">' : '<span class="sx-col-alte">+' + (SX.inst.length - col.length + 1) + "</span>") +
         "<b>" + esc(c.p[1]) + '</b><span class="muted">' + (tot ? bani(tot) + " în " + an : "nimic încheiat în " + an) + "</span></a>" +
-        '<ol class="sx-col-l">' + L2.slice(0, 6).map(function (x) {
-          return '<li><div class="ff-d">' + esc(zi(x.d)) + " · " + esc(et[x.t] || "") + (x.lei ? " · <strong>" + bani(val(x)) + "</strong>" : "") + "</div>" +
-            '<a href="' + url(x) + '" rel="noopener">' + esc((x.o || "(fără titlu)").slice(0, 110)) + "</a>" + (c.alte ? '<div class="ff-m">' + esc(SX.inst[x.i][1]) + "</div>" : "") + "</li>";
-        }).join("") + "</ol></div>";
+        (L2.length ? '<ol class="sx-feed-l sx-col-l">' + L2.slice(0, 15).map(function (x) {
+          var e = et[x.t] || ["", "n"];
+          return '<li class="' + e[1] + '"><div class="ff-d">' + esc(zi(x.d)) + ' · <span>' + esc(x.sub ? "contract subsecvent" : e[0]) + "</span></div>" +
+            '<a class="ff-t" href="' + url(x) + '" rel="noopener">' + esc((x.o || "(fără titlu)").slice(0, 120)) + "</a>" +
+            '<div class="ff-m">' + (c.alte ? esc(SX.inst[x.i][1]) + (x.lei ? " · " : "") : "") + (x.lei ? "<strong>" + bani(val(x)) + "</strong>" + (x.t === "cn" ? " estimat" : "") : "") + (x.f >= 0 ? " · " + fLink(x.f) : "") + "</div></li>";
+        }).join("") + "</ol>" : '<p class="empty">Nimic recent.</p>') + '<a class="sx-col-tot" href="' + link + '">Toate →</a></div>';
     }).join("");
   }
   function sxFeed(el, F) {
@@ -2134,11 +2136,27 @@
       '<div class="lc-a">' + (doc ? '<a href="' + esc(doc) + '" rel="noopener">dispoziția de convocare (documentul primăriei)</a>' : "") +
       (od.length ? '<span class="muted">Ordinea de zi e citită automat din dispoziție; verifică în document.</span>' : "") + "</div></article>";
   }
+  // e-mailul cu propuneri la un proiect în consultare, adresat secretarului general (Legea nr. 52/2003)
+  function mailPropuneri(p) {
+    var catre = p.email || (SED && SED.email) || "secretariat@primariaradauti.ro";
+    var proiect = "proiectul de hotărâre" + (p.nr ? " înregistrat cu nr. " + p.nr + (p.postat ? " din " + zi(p.postat) : "") : "") + " privind " + p.obiect.replace(/^(proiect(ul)? de hot[aă]r[aâ]re\s*)?(nr\.?\s*[\w\/.-]+\s*)?(privind\s*)?/i, "");
+    var subiect = "Propuneri la " + proiect.slice(0, 150) + (proiect.length > 150 ? "..." : "");
+    var corp = "Către: " + ((SED && SED.destinatar) || "Secretarul general al Municipiului Rădăuți") + "\n\n" +
+      "Subsemnatul/Subsemnata, [nume și prenume], cu domiciliul în [localitatea], în temeiul Legii nr. 52/2003 privind transparența decizională în administrația publică, " +
+      "transmit următoarele propuneri, sugestii și opinii la " + proiect + ":\n\n" +
+      "1. [articolul sau prevederea din proiect] - [propunerea] - [motivarea]\n2. \n3. \n\n" +
+      "Vă rog să îmi comunicați modul în care propunerile au fost analizate și, dacă nu au fost preluate, motivele.\n\n" +
+      "Cu stimă,\n[nume și prenume]\n[telefon / e-mail]\n\n" +
+      (safeUrl(p.pagina) ? "Proiectul: " + p.pagina + "\n" : "");
+    return "mailto:" + catre + "?subject=" + encodeURIComponent(subiect) + "&body=" + encodeURIComponent(corp);
+  }
   function consCard(p) {
     var st = p.adoptat ? '<span class="rz c">adoptat ca HCL ' + p.adoptat.nr + "/" + p.adoptat.an + "</span>" : p.deschis ? '<span class="rz ic">propuneri până pe ' + esc(zi(p.termen)) + "</span>" : '<span class="rz n">termen încheiat</span>';
     return '<div class="doc"><div class="h"><span class="id">' + (p.nr ? "Proiect nr. " + esc(p.nr) : "Proiect de hotărâre") + "</span>" + st + '<span class="muted">publicat ' + esc(zi(p.postat)) + "</span></div>" +
       '<div class="t">' + esc(p.obiect) + '</div><div class="m">' + (safeUrl(p.pagina) ? '<a href="' + esc(p.pagina) + '" rel="noopener">anunțul și proiectul</a>' : "") +
-      (p.adoptat ? '<a href="#consiliu/hcl/' + p.adoptat.an + "/" + p.adoptat.nr + '">hotărârea</a>' : "") + (p.termen && p.termen_din && !p.adoptat ? "<span>termen: " + esc(p.termen_din) + "</span>" : "") + "</div></div>";
+      (p.adoptat ? '<a href="#consiliu/hcl/' + p.adoptat.an + "/" + p.adoptat.nr + '">hotărârea</a>' : "") + (p.termen && p.termen_din && !p.adoptat ? "<span>termen: " + esc(p.termen_din) + "</span>" : "") + "</div>" +
+      (p.deschis && !p.adoptat ? '<div class="cons-mail"><a class="btn ok" href="' + esc(mailPropuneri(p)) + '">✉ Trimite propuneri pe e-mail</a><span class="muted">către secretarul general al municipiului, la ' +
+        esc(p.email || SED.email || "secretariat@primariaradauti.ro") + (p.email_din === "din anunț" ? " (adresa din anunț)" : "") + ", până pe " + esc(zi(p.termen)) + ". Se deschide programul tău de e-mail cu un model de scrisoare: completează-l și trimite-l.</span></div>" : "") + "</div>";
   }
   function urmatoare(el, r) {
     var cap = head("Consiliul Local", "Ce se votează la ședința următoare și ce proiecte de hotărâre poți comenta acum.", r);
@@ -2151,7 +2169,8 @@
       '<section class="card section"><h2>Cum poți participa</h2><ul class="pasi">' +
       "<li><b>Vino la ședință.</b> Ședințele consiliului local sunt publice: oricine poate asista, la data, ora și locul din convocare.</li>" +
       "<li><b>Trimite propuneri la proiecte.</b> Legea nr. 52/2003 privind transparența decizională îți dă dreptul să trimiți în scris propuneri, sugestii sau opinii la proiectele de hotărâre puse în consultare, în termenul anunțat de primărie." +
-      (safeUrl(SED.formular) ? ' Primăria are un <a href="' + esc(SED.formular) + '" rel="noopener">formular pentru propuneri</a>.' : "") + "</li>" +
+      " Cel mai simplu: butonul <b>Trimite propuneri pe e-mail</b> de la fiecare proiect deschis, mai jos, care pregătește scrisoarea către secretarul general al municipiului." +
+      (safeUrl(SED.formular) ? ' Primăria are și un <a href="' + esc(SED.formular) + '" rel="noopener">formular pentru propuneri</a>.' : "") + "</li>" +
       "<li><b>Cere o dezbatere publică.</b> Tot după Legea nr. 52/2003, o asociație legal constituită sau o altă autoritate publică poate cere în scris organizarea unei dezbateri publice pe un proiect.</li>" +
       "<li><b>Vezi cum s-a votat.</b> După ședință, procesul-verbal și hotărârile apar în <a href=\"#consiliu/sedinte\">Ședințe</a> și <a href=\"#consiliu/hcl\">Hotărâri</a>, cu votul fiecărui consilier unde se poate citi.</li></ul>" +
       '<p class="note">Termenul pentru propuneri e cel din anunțul primăriei; unde anunțul nu îl spune clar, arătăm 10 zile de la publicare. Verifică întotdeauna în anunț.</p></section>' +

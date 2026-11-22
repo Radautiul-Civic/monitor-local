@@ -21,6 +21,10 @@ from . import config
 from .parse import clean_title, norm
 
 SITE = "https://monitor.radautiulcivic.ro/"
+# adresa generală a primăriei (pagina „Datele de contact ale autorității”); se folosește când anunțul proiectului
+# nu dă altă adresă pentru propuneri
+EMAIL_PROPUNERI = "secretariat@primariaradauti.ro"
+SECRETAR_GENERAL = "Secretarul general al Municipiului Rădăuți"
 FORMULAR_52 = "https://primariaradauti.ro/formular-pentru-colectarea-de-propuneri-opinii-recomandari-cf-legii-nr-52-2003/"
 R_DATA = r"(\d{1,2})\s*[.\-/]\s*(\d{1,2})\s*[.\-/]\s*(\d{4})"
 
@@ -143,6 +147,13 @@ def termen_propuneri(text, postat):
         return None, None
 
 
+def email_propuneri(text):
+    """Adresa la care se trimit propunerile, din textul anunțului (prima adresă a primăriei), altfel cea generală."""
+    adrese = re.findall(r"[\w.+-]+@primariaradauti\.ro", text or "", re.I)
+    adrese = [a.lower() for a in adrese if not a.lower().startswith(("admin@", "webmaster@"))]
+    return (adrese[0], "din anunț") if adrese else (EMAIL_PROPUNERI, "adresa generală a primăriei")
+
+
 def consultari(db, azi, hcl, zile=60):
     out = []
     lim = (azi - timedelta(days=zile)).isoformat()
@@ -150,14 +161,16 @@ def consultari(db, azi, hcl, zile=60):
         titlu = clean_title(r["title"])
         p = parse_proiect(titlu)
         postat = (r["date"] or "")[:10]
-        termen, cum = termen_propuneri(_text(db, r["wp_id"]), postat)
+        text = _text(db, r["wp_id"])
+        termen, cum = termen_propuneri(text, postat)
+        email, email_din = email_propuneri(text)
         adoptat = None
         for h in hcl:   # hotărârea adoptată din proiect: după publicare, titlu asemănător
             if (h["data"] or "") >= postat and _seaman(p["obiect"], h["titlu"]) >= 0.7:
                 adoptat = {"an": h["an"], "nr": h["nr"], "data": h["data"]}
                 break
         out.append({"titlu": titlu, "obiect": p["obiect"], "nr": p["nr"], "postat": postat, "pagina": r["link"], "pdf": _pdf(db, r["wp_id"]),
-                    "termen": termen, "termen_din": cum, "deschis": bool(termen and termen >= azi.isoformat()) and not adoptat, "adoptat": adoptat})
+                    "termen": termen, "termen_din": cum, "email": email, "email_din": email_din, "deschis": bool(termen and termen >= azi.isoformat()) and not adoptat, "adoptat": adoptat})
     return out
 
 
@@ -295,7 +308,8 @@ def export(store, azi=None, concursuri=None):
     leaga_ordinea(conv, toate_pr, hcl)
     viit = sorted([c for c in conv if c["viitoare"]], key=lambda c: (c["data"], c["ora"] or ""))
     trecute = [c for c in conv if not c["viitoare"]][:6]
-    sed = {"generat_la": azi.isoformat(), "urmatoare": viit, "recente": trecute, "consultare": cons, "formular": FORMULAR_52}
+    sed = {"generat_la": azi.isoformat(), "urmatoare": viit, "recente": trecute, "consultare": cons, "formular": FORMULAR_52,
+           "destinatar": SECRETAR_GENERAL, "email": EMAIL_PROPUNERI}
     ev = noutati(db, azi, conv, cons, concursuri)
     return sed, ev
 

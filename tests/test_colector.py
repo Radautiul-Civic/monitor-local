@@ -1570,6 +1570,8 @@ class TestCetateni(unittest.TestCase):
         self.assertEqual(C.termen_propuneri("Propunerile se pot depune până la data de 02.12.2026, la registratură.", "2026-11-20"), ("2026-12-02", "din anunț"))
         self.assertEqual(C.termen_propuneri("", "2026-11-20"), ("2026-11-30", "10 zile de la publicare"))
         self.assertEqual(C.termen_propuneri("în termen de 15 zile de la afișare", "2026-11-20")[0], "2026-12-05")
+        self.assertEqual(C.email_propuneri("Propunerile se transmit la adresa Secretariat@PrimariaRadauti.ro sau la registratură."), ("secretariat@primariaradauti.ro", "din anunț"))
+        self.assertEqual(C.email_propuneri("fără adresă; postat de admin@primariaradauti.ro")[1], "adresa generală a primăriei")
 
     def test_export_si_rss(self):
         from monitor_colector import cetateni as C

@@ -349,15 +349,18 @@ a.nt-s{font-size:.8rem}
 /* achiziții: coloane pe instituții, cu sigla */
 .sx-cols{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;overflow-x:auto;padding-bottom:4px}
 .sx-col{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);min-width:0}
-.sx-col-h{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;color:var(--ink);text-decoration:none;padding-bottom:8px;border-bottom:1px solid var(--line);min-height:118px}
+.sx-col-h{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;color:var(--ink);text-decoration:none;padding-bottom:8px;border-bottom:1px solid var(--line);min-height:138px}
 .sx-col-h img{height:48px;width:auto;max-width:150px;object-fit:contain;background:#fff;border-radius:6px;padding:2px}
 .sx-col-h b{font-size:.9rem;line-height:1.25}
 .sx-col-h .muted{font-size:.8rem}
 .sx-col-alte{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:var(--surface-2);font-weight:700;color:var(--ink-2)}
-.sx-col-l{list-style:none;margin:0;padding:0}
-.sx-col-l li{padding:7px 0;border-bottom:1px solid var(--line);font-size:.85rem;line-height:1.35}
-.sx-col-l li:last-child{border-bottom:0}
-.sx-col-l a{color:var(--ink)}
+.sx-col{display:flex;flex-direction:column}
+.sx-col-l{max-height:520px;overflow:auto;margin-top:10px;padding-right:2px}
+.sx-col-l .ff-t{font-size:.85rem}
+.sx-col-tot{margin-top:auto;padding-top:8px;font-size:.85rem;text-align:right}
+.cons-mail{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:10px}
+.cons-mail .btn{text-decoration:none;white-space:nowrap}
+.cons-mail .muted{font-size:.82rem;flex:1 1 260px}
 @media (max-width:1100px){.sx-cols{grid-template-columns:repeat(5,240px)}}
 
 /* fișa unui act pe hartă */
