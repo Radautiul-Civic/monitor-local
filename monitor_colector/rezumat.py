@@ -141,7 +141,12 @@ def genereaza(ctx, segmente, video, cheie=None, model=MODEL, sesiune=None):
         raise RuntimeError(f"API {r.status_code}: {r.text[:300]}")
     d = r.json()
     text = "".join(b.get("text", "") for b in d.get("content", []) if b.get("type") == "text")
-    rez = _json(text)
+    try:
+        rez = _json(text)
+    except ValueError:
+        # diagnostic pentru jurnal, fără conținut (jurnalele GitHub sunt publice)
+        raise RuntimeError(f"răspuns necitibil: stop_reason={d.get('stop_reason')}, blocuri={[b.get('type') for b in d.get('content', [])]}, "
+                           f"lungime={len(text)}, începe_cu_acoladă={text.lstrip()[:1] == '{'}, usage={d.get('usage')}, model={d.get('model')}")
     rez["_model"] = d.get("model", model)
     rez["_tokeni"] = d.get("usage")
     return rez
