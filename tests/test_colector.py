@@ -1478,3 +1478,62 @@ class TestConcursuri(unittest.TestCase):
         self.assertEqual((r[0], r[1]), (K.ID_ARHIVA + 9861, "angajari_arhiva"))   # nu se suprapune cu postarea 9861 de pe site
         d = store.db.execute("SELECT url, wp_id, origin FROM documents").fetchone()
         self.assertEqual(tuple(d), ("https://arhiva.primariaradauti.ro/wp-content/uploads/anunt.pdf", K.ID_ARHIVA + 9861, "arhiva"))
+
+
+class TestPublicareReluata(unittest.TestCase):
+    def test_reconectare_manifest_si_limita_de_timp(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
+        import publica
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        for p, t in (("site/index.html", "<html></html>"), ("site/assets/app.js", "x"), ("site/assets/app.css", "y"),
+                     ("site_intern/index.html", "<html></html>"), ("data/cautare/docs.json", "{}"), ("data/cautare/idx/ab.json", "{}"),
+                     ("data/cautare/txt/1.txt", "unu"), ("data/cautare/txt/2.txt", "doi"), ("data/indicatori.json", "{}")):
+            os.makedirs(os.path.dirname(os.path.join(tmp, p)), exist_ok=True)
+            open(os.path.join(tmp, p), "w").write(t)
+        urcate, conexiuni = [], []
+
+        class FTP:
+            def __init__(self):
+                conexiuni.append(self)
+            def cwd(self, p): pass
+            def mkd(self, p): pass
+            def delete(self, p): raise ftplib.error_perm("550")
+            def storbinary(self, cmd, f):
+                if cmd.endswith("1.txt") and len(conexiuni) == 1:
+                    raise TimeoutError("timed out")   # prima conexiune cade la mijlocul urcării
+                urcate.append(cmd[5:])
+            def close(self): pass
+            def quit(self): pass
+        import ftplib
+        vechi = (publica.ROOT, publica._conectare, publica.intern_protejat, publica.MANIFEST_CAUTARE, publica.MANIFEST)
+        publica.ROOT = tmp
+        publica.MANIFEST_CAUTARE = os.path.join(tmp, "data", "m-cautare.json")
+        publica.MANIFEST = os.path.join(tmp, "data", "m-texte.json")
+        publica._conectare = lambda *a: FTP()
+        publica.intern_protejat = lambda: False
+        os.environ.update(FTP_HOST="h", FTP_USER="u", FTP_PASSWORD="p")
+        import time as _t
+        dorm = _t.sleep
+        _t.sleep = lambda s: None
+        try:
+            self.assertEqual(publica.main(), 0)
+            c = [x for x in urcate if x in ("ab.json", "docs.json", "1.txt", "2.txt")]
+            self.assertEqual(c, ["ab.json", "docs.json", "1.txt", "2.txt"])   # indexul înaintea listei, textele la urmă
+            self.assertEqual(len(conexiuni), 2)
+            self.assertEqual(sorted(json.load(open(publica.MANIFEST_CAUTARE))), ["docs.json", "idx/ab.json", "txt/1.txt", "txt/2.txt"])
+            # a doua rulare: nimic nou de urcat din căutare
+            urcate.clear()
+            publica.main()
+            self.assertFalse([x for x in urcate if x.endswith(".txt")])
+            # limita de timp: cu 0 minute nu se urcă nimic din căutare, iar manifestul rămâne
+            open(os.path.join(tmp, "data/cautare/txt/3.txt"), "w").write("trei")
+            os.environ["PUBLICARE_MINUTE_CAUTARE"] = "0"
+            urcate.clear()
+            publica.main()
+            self.assertNotIn("3.txt", urcate)
+            self.assertNotIn("txt/3.txt", json.load(open(publica.MANIFEST_CAUTARE)))
+        finally:
+            _t.sleep = dorm
+            os.environ.pop("PUBLICARE_MINUTE_CAUTARE", None)
+            publica.ROOT, publica._conectare, publica.intern_protejat, publica.MANIFEST_CAUTARE, publica.MANIFEST = vechi

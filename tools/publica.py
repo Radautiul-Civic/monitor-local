@@ -82,28 +82,31 @@ def cu_versiune(html_path):
     return out
 
 
-def texte_de_urcat(base):
-    texte = os.path.join(ROOT, "data", "texte")
-    if not os.path.isdir(texte):
-        return [], {}
+def _manifest(path):
     try:
-        with open(MANIFEST, encoding="utf-8") as f:
-            done = json.load(f)
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
     except (OSError, ValueError):
-        done = {}
-    files, new = [], {}
-    for dirpath, _, names in os.walk(texte):
-        rel = os.path.relpath(dirpath, os.path.join(ROOT, "data"))
-        for n in names:
-            p = os.path.join(dirpath, n)
-            sig = f"{os.path.getsize(p)}-{int(os.path.getmtime(p))}"
-            key = f"{rel}/{n}"
-            if done.get(key) != sig:
-                files.append((p, "/".join(x for x in (base, "intern", rel.replace(os.sep, "/")) if x), n))
-            new[key] = sig
+        return {}
+
+
+def texte_de_urcat(base):
+    """Documentele Word (data/texte/) pentru intern/: [(local, folder, nume, cheie, amprentă)], manifestul vechi."""
+    texte = os.path.join(ROOT, "data", "texte")
+    done = _manifest(MANIFEST)
+    files = []
+    if os.path.isdir(texte):
+        for dirpath, _, names in os.walk(texte):
+            rel = os.path.relpath(dirpath, os.path.join(ROOT, "data"))
+            for n in names:
+                p = os.path.join(dirpath, n)
+                sig = f"{os.path.getsize(p)}-{int(os.path.getmtime(p))}"
+                key = f"{rel}/{n}"
+                if done.get(key) != sig:
+                    files.append((p, "/".join(x for x in ("intern", rel.replace(os.sep, "/")) if x), n, key, sig))
     # pagina internă (aceeași aplicație ca site-ul public, cu linkuri la Word)
-    files.append((cu_versiune(os.path.join(ROOT, "site_intern", "index.html")), "/".join(x for x in (base, "intern") if x), "index.html"))
-    return files, new
+    files.append((cu_versiune(os.path.join(ROOT, "site_intern", "index.html")), "intern", "index.html", None, None))
+    return files, done
 
 
 # Decizie (22.11.2026): versiunea publică are tot ce are cea internă, mai puțin litigiile. Documentele sunt luate
@@ -177,41 +180,58 @@ MANIFEST_CAUTARE = os.path.join(ROOT, "data", "publicat-cautare-public.json")
 
 
 def cautare_de_urcat(base):
-    """Indexul de căutare în text (data/cautare/): doar fișierele noi sau schimbate, după amprentă."""
+    """Indexul de căutare în text (data/cautare/), doar fișierele noi sau schimbate, după amprentă.
+    Ordinea contează când urcarea se întrerupe: întâi bucățile de index, apoi docs.json (care le enumeră),
+    la urmă textele (folosite doar pentru fragmentele afișate)."""
     import hashlib
     d = os.path.join(ROOT, "data", "cautare")
     if not os.path.isdir(d):
         return [], None
-    try:
-        with open(MANIFEST_CAUTARE, encoding="utf-8") as f:
-            done = json.load(f)
-    except (OSError, ValueError):
-        done = {}
-    files, new = [], {}
+    done = _manifest(MANIFEST_CAUTARE)
+    files = []
     for dirpath, _, names in os.walk(d):
         rel = os.path.relpath(dirpath, d).replace(os.sep, "/")
-        for n in names:
+        for n in sorted(names):
             p = os.path.join(dirpath, n)
             with open(p, "rb") as f:
                 h = hashlib.sha1(f.read()).hexdigest()
             key = (rel + "/" + n) if rel != "." else n
-            new[key] = h
             if done.get(key) != h:
-                files.append((p, "/".join(x for x in ("date", "cautare", rel if rel != "." else "") if x), n))
-    return files, new
+                files.append((p, "/".join(x for x in ("date", "cautare", rel if rel != "." else "") if x), n, key, h))
+    ordine = lambda x: 0 if x[3].startswith("idx/") else 1 if x[3] == "docs.json" else 2
+    return sorted(files, key=ordine), done
 
 
 RAPOARTE = ("indicatori.md", "urbanism-registre.txt", "sicap-de-verificat.txt", "sicap-castigatori-proba.json",
             "voturi-proba.txt", "concursuri-proba.txt", "rulare-geocodare.txt", "rulare-buget.txt", "rulare-litigii.txt", "rulare-sicap.txt")
 
 
+def _conectare(host, user, pwd):
+    ftp = ftplib.FTP_TLS()
+    ftp.connect(host, int(os.environ.get("FTP_PORT", "21")), timeout=60)
+    ftp.login(user, pwd)
+    ftp.prot_p()
+    _cwd[0] = None
+    return ftp
+
+
+def _scrie_manifest(path, d):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f)
+    os.replace(tmp, path)
+
+
 def main():
+    import time
     host, user, pwd = (os.environ.get(k) for k in ("FTP_HOST", "FTP_USER", "FTP_PASSWORD"))
     if not (host and user and pwd):
         print("lipsesc FTP_HOST / FTP_USER / FTP_PASSWORD; sar peste publicare", file=sys.stderr)
         return 1
     base = os.environ.get("FTP_DIR", "").strip("/")
-    files = []
+    # Căutarea în text are mii de fișiere: o urcăm cât încape în timpul dat și continuăm la rularea următoare.
+    buget_cautare = float(os.environ.get("PUBLICARE_MINUTE_CAUTARE", "40")) * 60
+    files = []   # (local, folder, nume, manifest, cheie, amprentă)
     site = os.path.join(ROOT, "site")
     for dirpath, _, names in os.walk(site):
         rel = os.path.relpath(dirpath, site)
@@ -219,29 +239,32 @@ def main():
             local = os.path.join(dirpath, n)
             if n.endswith(".html"):
                 local = cu_versiune(local)
-            files.append((local, "" if rel == "." else rel, n))
+            files.append((local, "" if rel == "." else rel, n, None, None, None))
     # zona publică: toate datele, fără litigii
     for name, local in public_date().items():
-        files.append((local, "date", name))
-    cf, manifest_cautare = cautare_de_urcat(base)
-    print(f"căutare în text: {len(cf)} fișiere noi sau modificate")
-    files += cf
-
-    manifest = None
+        files.append((local, "date", name, None, None, None))
+    manifeste = {}
     if intern_protejat():
-        tf, manifest = texte_de_urcat(base)
-        print(f"intern: {len(tf)} fișiere noi sau modificate")
-        files += tf
-        # zona internă: toate datele (urbanism, litigii cu nume, buget, voturi, contracte...)
+        # zona internă: toate datele (cu litigiile și rapoartele), apoi documentele Word
         for name, local in intern_date().items():
-            files.append((local, "intern/date", name))
+            files.append((local, "intern/date", name, None, None, None))
+        tf, manifeste["texte"] = texte_de_urcat(base)
+        print(f"intern: {len(tf)} fișiere noi sau modificate")
+        files += [(p, r, n, "texte", k, h) for p, r, n, k, h in tf]
     else:
         print("intern: folderul nu cere parolă (sau nu există); litigiile și rapoartele NU se urcă", file=sys.stderr)
+    cf, manifeste["cautare"] = cautare_de_urcat(base)
+    print(f"căutare în text: {len(cf)} fișiere noi sau modificate")
+    files += [(p, r, n, "cautare", k, h) for p, r, n, k, h in cf]
+    cai = {"texte": MANIFEST, "cautare": MANIFEST_CAUTARE}
 
-    ftp = ftplib.FTP_TLS()
-    ftp.connect(host, int(os.environ.get("FTP_PORT", "21")), timeout=60)
-    ftp.login(user, pwd)
-    ftp.prot_p()
+    def salveaza():
+        for m, d in manifeste.items():
+            if d is not None:
+                _scrie_manifest(cai[m], d)
+
+    ftp = _conectare(host, user, pwd)
+    urcate, start_cautare, oprit = 0, None, 0
     try:
         for name in SCOASE_DIN_PUBLIC:   # fișiere publicate înainte în zona publică, acum doar interne
             try:
@@ -251,16 +274,39 @@ def main():
             except ftplib.all_errors:
                 pass
         _cwd[0] = None
-        for local, rel, name in files:
-            upload(ftp, local, "/".join(p for p in (base, rel) if p), name)
+        for i, (local, rel, name, man, key, sig) in enumerate(files):
+            if man == "cautare":
+                start_cautare = start_cautare or time.monotonic()
+                if time.monotonic() - start_cautare > buget_cautare:
+                    oprit = len(files) - i
+                    break
+            for incercare in range(3):   # o conexiune căzută (timeout) se reface; fișierul se reia
+                try:
+                    upload(ftp, local, "/".join(p for p in (base, rel) if p), name)
+                    break
+                except (ftplib.all_errors + (OSError,)) as e:
+                    print(f"eroare la {rel}/{name}: {e}; reconectare", file=sys.stderr)
+                    try:
+                        ftp.close()
+                    except Exception:
+                        pass
+                    if incercare == 2:
+                        raise
+                    time.sleep(10 * (incercare + 1))
+                    ftp = _conectare(host, user, pwd)
+            if man:
+                manifeste[man][key] = sig
+            urcate += 1
+            if urcate % 200 == 0:
+                salveaza()   # progresul rămâne și dacă rularea se întrerupe
     finally:
-        ftp.quit()
-    if manifest is not None:
-        with open(MANIFEST, "w", encoding="utf-8") as f:
-            json.dump(manifest, f)
-    if manifest_cautare is not None:
-        with open(MANIFEST_CAUTARE, "w", encoding="utf-8") as f:
-            json.dump(manifest_cautare, f)
+        salveaza()
+        try:
+            ftp.quit()
+        except Exception:
+            pass
+    if oprit:
+        print(f"căutare în text: {oprit} fișiere rămase pentru rularea următoare (limita de timp)")
     return 0
 
 
