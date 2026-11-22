@@ -8,9 +8,10 @@ Ce face acum:
 - **HCL 2013-2024** - din paginile anuale ale arhivei (arhiva.primariaradauti.ro).
 - **Documente** - descarcă PDF-urile, calculează amprenta SHA-256, detectează dacă sunt scanate și face OCR în limba română.
 - **Istoric** - dacă primăria modifică o postare, versiunea veche rămâne în baza de date (`post_versions`).
+- **Concursuri și angajări** - anunțurile de angajare de pe site (categoria „Angajări”) și din arhivă (API-ul WordPress al arhivei, „Anunțuri recrutare / promovare”), grupate pe concursuri cu etapele și rezultatele lor (`concursuri.py`); istoricul organigramei din hotărârile consiliului. Raportul de verificare: `concursuri-proba.txt`.
 - **Indicatori** - întârzierea publicării HCL și a PV-urilor, numere de HCL lipsă, erori de publicare (fișier greșit atașat), ședințe pe tipuri, vechimea registrelor de urbanism, zile de la ultimul contract publicat.
 
-Ce nu face încă: SICAP, portal.just.ro, extragerea voturilor din textul PV-urilor (după ce vedem OCR-ul pe PV-uri reale).
+Mai colectează: achizițiile din SICAP, execuția bugetară (Transparență bugetară) și bugetele aprobate (PDF-urile din `surse/buget/`), litigiile (portal.just.ro), voturile și consilierii (din procesele-verbale).
 
 ## Instalare pe server (Debian / Ubuntu)
 
@@ -102,4 +103,4 @@ MC_BASE_URL=http://127.0.0.1:8765 MC_DATA_DIR=/tmp/proba MC_DELAY=0 MC_OCR_LANG=
 
 - Colectăm doar date publicate de autoritate, cu pauză între cereri și un User-Agent care identifică proiectul.
 - Indicatorii sunt observații datate, nu acuzații: fiecare duce la documentul-sursă.
-- Datele cu caracter personal din documente (nume de persoane fizice din HCL individuale sau registre de urbanism) nu se republică în platformă.
+- Zone (decizie din 22.11.2026): versiunea publică are tot ce are cea internă, mai puțin litigiile, arhiva de siguranță și rapoartele de verificare. Documentele sunt cele publicate de primărie și se publică așa cum sunt pe site-ul ei. Problemele de publicare semnalate automat apar public doar după verificarea manuală.

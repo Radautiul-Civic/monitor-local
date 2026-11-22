@@ -1249,6 +1249,13 @@ class TestConsilieri(unittest.TestCase):
         self.assertEqual([(e["nume"], e["nr"]) for e in ev["incetari"]], [("Andronachi Traian", 60)])
         self.assertEqual([(e["nume"], e["nr"]) for e in ev["validari"]], [("Hrițcan Constantin-Cristinel", 61)])
         self.assertEqual(V.legislaturi([], ev, {"2024-2028": "2024-10-01"})[-1][:2], ("2024-2028", "2024-07-04"))
+        # modificarea unei hotărâri vechi despre comisii și alegerea unui viceprimar nu încep un consiliu nou
+        db.executemany("INSERT INTO hcl VALUES (?,?,?,?,NULL,NULL)", [
+            (2024, 139, "2024-06-25", "Hotărâre pentru modificarea H.C.L. nr. 221/28.10.2020 privind constituirea comisiilor de specialitate"),
+            (2024, 149, "2024-06-27", "Hotărâre privind alegerea viceprimarului municipiului Rădăuţi.")])
+        ev = V.evenimente_mandat(db)
+        self.assertEqual([e["nr"] for e in ev["organizare"]], [140, 149])
+        self.assertEqual([x[1] for x in V.legislaturi([], ev, {}) if x[1] >= "2024"], ["2024-07-04"])
         u = V.unifica_nume({"galan romeo": 3, "galan gheorghe romeo": 9, "carcalete petru": 40, "carcalete peru": 1, "dan marcu george": 5, "dan mutrescu": 7})
         self.assertEqual((u["galan romeo"], u["carcalete peru"], u["dan mutrescu"]), ("galan gheorghe romeo", "carcalete petru", "dan mutrescu"))
 
@@ -1324,7 +1331,7 @@ Cheltuieli:                                    5.000.000                       0
 
 
 class TestPublicare(unittest.TestCase):
-    def test_zona_publica_doar_hotarari_si_sicap(self):
+    def test_zona_publica_tot_fara_litigii(self):
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
         import publica
         tmp = tempfile.mkdtemp()
@@ -1337,6 +1344,7 @@ class TestPublicare(unittest.TestCase):
             open(os.path.join(d, n), "w").write("{}")
         json.dump({"ac": [{"nr": "1", "lat": 47.8, "lon": 25.9, "precizie": "adresă"}], "cu": []}, open(os.path.join(d, "urbanism.json"), "w"))
         open(os.path.join(d, "intern-date", "litigii.json"), "w").write("{}")
+        open(os.path.join(d, "intern-date", "voturi.json"), "w").write("{}")
         open(os.path.join(d, "voturi-proba.txt"), "w").write("x")
         old = publica.ROOT
         publica.ROOT = tmp
@@ -1344,15 +1352,129 @@ class TestPublicare(unittest.TestCase):
             pub, intern = publica.public_date(), publica.intern_date()
         finally:
             publica.ROOT = old
-        self.assertEqual(sorted(pub), ["indicatori.json", "liste.json", "sicap-explorer.json", "urbanism.json"])
-        self.assertEqual(json.load(open(pub["urbanism.json"]))["ac"], [{"nr": "1"}])   # fără coordonate: harta e internă
+        self.assertEqual(sorted(pub), ["buget.json", "indicatori.json", "liste.json", "sicap-explorer.json", "sicap.json",
+                                       "urbanism.json", "voturi.json"])
+        self.assertEqual(json.load(open(pub["urbanism.json"]))["ac"][0]["lat"], 47.8)   # harta e și publică
         ind = json.load(open(pub["indicatori.json"]))
         self.assertNotIn("litigii", ind)
         self.assertIn("registre_urbanism", ind)
         self.assertEqual(len(ind["hcl_probleme"]), 1)
-        self.assertEqual(sorted(json.load(open(pub["liste.json"]))), ["generat_la", "hcl", "registre"])
+        self.assertEqual(sorted(json.load(open(pub["liste.json"]))), ["contracte", "generat_la", "hcl", "pv"])
         self.assertTrue({"urbanism.json", "buget.json", "litigii.json", "rapoarte.zip"} <= set(intern))
-        for n in ("litigii.json", "buget.json"):
-            self.assertIn(n, publica.SCOASE_DIN_PUBLIC)
+        self.assertIn("litigii.json", publica.SCOASE_DIN_PUBLIC)
+        self.assertNotIn("buget.json", publica.SCOASE_DIN_PUBLIC)
         self.assertNotIn("urbanism.json", publica.SCOASE_DIN_PUBLIC)
         shutil.rmtree(tmp)
+
+
+class TestConcursuri(unittest.TestCase):
+    """Titluri reale de pe site și din arhivă (noiembrie 2026)."""
+
+    def test_clasificare(self):
+        from monitor_colector import concursuri as K
+        c = K.clasifica("Rezultatul probei interviu la concursul organizat în datele de 21 și 25 octombrie 2024 pentru ocuparea pe durată "
+                        "nedeterminată, a unei funcţii contractuale de execuție vacante de paznic în cadrul Adăpostului")
+        self.assertEqual((c["etapa"], c["procedura"], c["functii"], c["durata"], c["categorie"], c["posturi"]),
+                         ("interviu", "recrutare", ["paznic"], "nedeterminată", "personal contractual", 1))
+        self.assertEqual(c["date_titlu"], ["2024-10-21", "2024-10-25"])
+        self.assertEqual(c["institutie"], "Adăpostul de câini")
+        c = K.clasifica("Anunț 20307 din 18.12.2025 privind rezultatele finale ale concursului organizat pentru ocuparea funcțiilor "
+                        "contractuale vacante pe durata nedeterminată de kinetoterapeut debutant și logoped debutant")
+        self.assertEqual((c["etapa"], c["functii"], c["nr_anunt"]), ("final", ["kinetoterapeut", "logoped"], "20307"))
+        c = K.clasifica("Anunt nr. 21534 din 23.12.2021 privind rezultatul final la proba interviu la concursul organizat in data de 23 decembrie 2021")
+        self.assertEqual(c["etapa"], "interviu")
+        self.assertEqual(K.clasifica("Anunt nr. 21536 din 23.12.2021 privind raportul final cuprinzand rezultatele finale la concursul")["etapa"], "final")
+        c = K.clasifica("Rezultatul probei interviu a examenului de promovare în gradul profesional imediat următor, de inspector de "
+                        "specialitate II, din cadrul Clubului Sportiv Municipal Bucovina Rădăuți")
+        self.assertEqual((c["etapa"], c["procedura"], c["institutie"], c["functii"]),
+                         ("interviu", "promovare", "Clubul Sportiv Municipal Bucovina", ["inspector de specialitate"]))
+        self.assertEqual(K.clasifica("Anunț – Barem Varianta 2 – lucrare scrisă la concursul de recrutare")["etapa"], "barem")
+        self.assertEqual(K.clasifica("Rezultatul soluționării contestației la proba scrisă din data de 21 octombrie 2024")["etapa"], "contestatie")
+        self.assertEqual(K.clasifica("Rezultatul verificării eligibilității candidaților înscriși la examenul de promovare")["etapa"], "selectie")
+        c = K.clasifica("Anunt nr. 14963 din 04.10.2024 privind organizarea unui concurs de proiecte de management, în vederea ocupării "
+                        "funcției contractuale de conducere de manager la Casa de Cultură Rădăuți")
+        self.assertEqual((c["etapa"], c["procedura"], c["institutie"], c["nivel"]), ("anunt", "management", "Casa de Cultură", "conducere"))
+        c = K.clasifica("Anunț privind ocuparea prin transfer la cerere, a unei funcții publice vacante, de consilier juridic, clasa I")
+        self.assertEqual((c["procedura"], c["functii"], c["categorie"]), ("transfer", ["consilier juridic"], "funcție publică"))
+        c = K.clasifica("Anunt nr. 615 din 15.01.2025 privind organizarea unui concurs de recrutare pentru ocuparea functiei publice "
+                        "vacante de referent clasa a III-a grad profesional superior la Compartimentul Evidenta persoanelor")
+        self.assertEqual((c["etapa"], c["institutie"], c["structura"]), ("anunt", K.PRIMARIA, "Compartimentul Evidenta persoanelor"))
+        self.assertEqual(K.clasifica("... pentru ocuparea a doua functii contractuale de muncitor")["posturi"], 2)
+
+    def test_numarare_rezultate(self):
+        from monitor_colector import concursuri as K
+        t = ("Nr. crt. Cod candidat Punctaj Rezultat (admis/respins)\n1 R-01 85,33 ADMIS\n2 R-02 60,00 RESPINS\n3 R-03 - absent\n"
+             "Candidații declarați admiși la proba scrisă vor susține interviul.")
+        self.assertEqual(K.numara_rezultate(t), {"admis": 1, "respins": 1, "absent": 1})
+        self.assertEqual(K.numara_rezultate("Nume Rezultat promovat/nepromovat\nPopescu Ion PROMOVAT"), {"admis": 1, "respins": 0, "absent": 0})
+
+    def _store(self):
+        from monitor_colector.store import Store
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        return Store(os.path.join(tmp, "t.db")), tmp
+
+    def test_grupare_si_export(self):
+        from monitor_colector import concursuri as K
+        store, tmp = self._store()
+
+        def post(i, src, zi, titlu, text=None, ext=".pdf"):
+            store.upsert_post(src, {"id": i, "title": {"rendered": titlu}, "content": {"rendered": ""}, "date": zi + "T10:00:00",
+                                    "modified": zi + "T10:00:00", "link": f"https://x/{i}"})
+            url = f"https://x/{i}{ext}"
+            store.add_document(url, i, "site", "Descarcă")
+            if text is not None:
+                p = os.path.join(tmp, f"{i}.txt")
+                open(p, "w", encoding="utf-8").write(text)
+                store.update_document(url, text_path=p)
+        fn = "a unei funcţii contractuale de execuție vacante de paznic în cadrul Adăpostului"
+        post(1, "angajari_arhiva", "2024-09-30", "Anunț nr. 14400 din 25 septembrie 2024 privind organizarea unui concurs pentru ocuparea pe durată nedeterminată, " + fn)
+        post(2, "angajari_arhiva", "2024-10-15", "Rezultatul selecţiei dosarelor de înscriere la concursul organizat în datele de 21 și 25 octombrie 2024 pentru ocuparea pe durată nedeterminată, " + fn,
+             "1 A.B. ADMIS\n2 C.D. ADMIS\n3 E.F. RESPINS")
+        post(3, "angajari_arhiva", "2024-10-25", "Rezultatul probei interviu la concursul organizat în datele de 21 și 25 octombrie 2024 pentru ocuparea pe durată nedeterminată, " + fn)
+        post(4, "angajari_arhiva", "2024-10-28", "REZULTATELE FINALE ale concursului organizat în datele de 21 și 25 octombrie 2024 pentru ocuparea pe durată nedeterminată, " + fn,
+             "Rezultat final (admis/respins)\n1 A.B. 80 ADMIS\n2 C.D. 55 RESPINS")
+        # aceeași postare și pe site-ul nou: nu se dublează
+        post(5, "angajari", "2024-10-28", "REZULTATELE FINALE ale concursului organizat în datele de 21 și 25 octombrie 2024 pentru ocuparea pe durată nedeterminată, " + fn)
+        # alt concurs, altă instituție, în aceeași perioadă
+        post(6, "angajari", "2024-10-20", "Rezultatul selecției dosarelor de înscriere la examenul de promovare în gradul profesional imediat următor, de inspector de specialitate II, din cadrul Clubului Sportiv Municipal Bucovina")
+        post(7, "angajari", "2024-11-03", "Rezultatele finale ale examenului de promovare în gradul profesional imediat următor, de inspector de specialitate II, din cadrul Clubului Sportiv Municipal Bucovina")
+        store.upsert_hcl({"year": 2026, "number": 64, "adoption_date": "2026-04-28", "title": "privind aprobarea organigramei și a statului de funcții ale aparatului de specialitate al primarului municipiului Rădăuți",
+                          "origin": "site", "wp_id": 50, "pdf_url": "https://x/hcl64.pdf", "posted": "2026-05-02"})
+        store.add_document("https://x/hcl64.pdf", 50, "site", "HCL 64")
+        p = os.path.join(tmp, "hcl64.txt")
+        open(p, "w", encoding="utf-8").write("ANEXA 1 ... Funcții de demnitate publică: 2\nTotal funcții publice: 98\nTotal funcții contractuale 41\nTOTAL POSTURI: 141")
+        store.update_document("https://x/hcl64.pdf", text_path=p)
+        store.db.commit()
+        ex, P, O = K.export(store, azi=date(2026, 11, 22))
+        self.assertEqual(len(P), 6)
+        C = {c["institutie"]: c for c in ex["concursuri"]}
+        self.assertEqual(len(ex["concursuri"]), 2)
+        a = C["Adăpostul de câini"]
+        self.assertEqual([e["etapa"] for e in a["etape"]], ["anunt", "selectie", "interviu", "final"])
+        self.assertEqual((a["candidati"], a["admisi"], a["respinsi"], a["stare"], a["durata_zile"]), (3, 1, 1, "ocupat", 28))
+        self.assertEqual(a["etape"][-1]["link"], "https://x/5")   # linkul de pe site-ul nou, nu din arhivă
+        b = C["Clubul Sportiv Municipal Bucovina"]
+        self.assertEqual((b["procedura"], b["stare"]), ("promovare", "rezultat în document scanat"))
+        self.assertEqual(ex["statistici"]["ocupate_prin_concurs"], 1)
+        self.assertEqual(ex["organigrama"][0]["cifre"], {"total": 141, "demnitate": 2, "publice": 98, "contractuale": 41})
+        self.assertEqual(ex["organigrama"][0]["institutii"], ["Primăria (aparatul de specialitate)"])
+        self.assertIn("Adăpostul de câini", K.raport(P, ex["concursuri"], O))
+
+    def test_colectare_arhiva(self):
+        from monitor_colector import collect, concursuri as K
+        store, tmp = self._store()
+
+        class Fals:
+            base = "https://arhiva.primariaradauti.ro"
+            def category_ids(self, slugs):
+                return {"anunturi-angajare": 3}
+            def posts(self, cid, modified_after=None):
+                yield {"id": 9861, "title": {"rendered": "Anunț concurs paznic"}, "date": "2024-09-30T10:00:00", "modified": "2024-09-30T10:00:00",
+                       "content": {"rendered": '<a href="/wp-content/uploads/anunt.pdf">Anunț</a>'}, "link": "https://arhiva.primariaradauti.ro/anunt/"}
+        st = collect.collect_archive_api(store, client=Fals())
+        self.assertEqual(st["angajari_arhiva"], {"new": 1, "changed": 0, "same": 0})
+        r = store.db.execute("SELECT wp_id, source FROM posts").fetchone()
+        self.assertEqual((r[0], r[1]), (K.ID_ARHIVA + 9861, "angajari_arhiva"))   # nu se suprapune cu postarea 9861 de pe site
+        d = store.db.execute("SELECT url, wp_id, origin FROM documents").fetchone()
+        self.assertEqual(tuple(d), ("https://arhiva.primariaradauti.ro/wp-content/uploads/anunt.pdf", K.ID_ARHIVA + 9861, "arhiva"))

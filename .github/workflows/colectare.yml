@@ -54,12 +54,16 @@ jobs:
           python -m monitor_colector arhiva
 
       - name: Colectare zilnică (postări noi sau modificate)
+        # Dacă site-ul primăriei e căzut, restul (SICAP, litigii, buget, publicare) merge mai departe;
+        # postările se iau la rularea următoare.
         run: python -m monitor_colector colecteaza
+        continue-on-error: true
         env:
           MC_DELAY: "1.0"
 
       - name: Descărcare documente (în tranșe, ca prima rulare să nu fie interminabilă)
         run: python -m monitor_colector descarca --max 1000
+        continue-on-error: true
         env:
           MC_DELAY: "1.0"
 

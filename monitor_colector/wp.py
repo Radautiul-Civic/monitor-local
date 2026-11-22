@@ -13,7 +13,7 @@ POST_FIELDS = "id,date,date_gmt,modified,modified_gmt,slug,link,title,content,ca
 
 class WPClient:
     def __init__(self, base_url=config.BASE_URL, session=None, delay=config.REQUEST_DELAY,
-                 timeout=config.TIMEOUT, retries=4):
+                 timeout=config.TIMEOUT, retries=6):
         self.base = base_url.rstrip("/")
         self.s = session or requests.Session()
         self.s.headers.setdefault("User-Agent", config.USER_AGENT)
@@ -21,6 +21,11 @@ class WPClient:
         self.timeout = timeout
         self.retries = retries
         self._last = 0.0
+
+    def _pauza(self, attempt):
+        """Așteptare crescătoare între reîncercări (5, 10, 20, 40, 80, 90 s): site-ul primăriei are căderi de câteva
+        minute, iar o cădere scurtă nu trebuie să oprească toată rularea."""
+        return 0 if self.delay == 0 else min(90, 5 * 2 ** attempt)
 
     def _get(self, path, params=None):
         url = self.base + path
@@ -35,11 +40,12 @@ class WPClient:
                 if attempt == self.retries:
                     raise
                 log.warning("eroare rețea %s (%s), reîncerc", url, e)
-                time.sleep(2 ** attempt)
+                time.sleep(self._pauza(attempt))
                 continue
-            if r.status_code in (429, 500, 502, 503, 504) and attempt < self.retries:
+            if r.status_code in (403, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524) and attempt < self.retries:
                 log.warning("HTTP %s la %s, reîncerc", r.status_code, url)
-                time.sleep(int(r.headers.get("Retry-After", 2 ** attempt)))
+                ra = r.headers.get("Retry-After", "")
+                time.sleep(min(120, int(ra)) if ra.isdigit() else self._pauza(attempt))
                 continue
             # WordPress întoarce 400 „rest_post_invalid_page_number” după ultima pagină.
             if r.status_code == 400 and "invalid_page_number" in r.text:

@@ -167,6 +167,11 @@ def compute(store, today=None):
                          "voturi": sum(len(x["voturi"]) for x in vx["sedinte"])}
     except Exception:
         out["voturi"] = None
+    try:
+        from . import concursuri
+        out["concursuri"] = concursuri.indicatori(store)
+    except Exception:
+        out["concursuri"] = None
     from . import stadiu
     out["stadiu"] = stadiu.compute(out)
     return out

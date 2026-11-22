@@ -26,6 +26,13 @@ CATEGORIES = {
     "contracte": "contractele-achizitiilor-publice-cu-valoarea-de-peste-5000",  # id 46
     "buget": "buget-pe-surse-financiare",          # id 40
     "bilanturi": "bilanturile-contabile-trimestriale",  # id 51
+    "angajari": "angajari",                        # id 6, 109 postări la 22.11.2026 (concursuri, din noiembrie 2024)
+}
+
+# Categorii din API-ul WordPress al arhivei (site-ul vechi): sursa internă -> slug.
+# ID-urile postărilor din arhivă se salvează mutate (concursuri.ID_ARHIVA + id), ca să nu se suprapună cu cele de pe site.
+ARCHIVE_CATEGORIES = {
+    "angajari_arhiva": "anunturi-angajare",        # id 3, 481 postări (concursuri aprox. 2017-2025)
 }
 
 # Arhiva HCL 2013-2024 de pe site-ul vechi (din registrul HCL, 10.10.2026).

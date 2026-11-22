@@ -623,6 +623,10 @@ R_CONSILIER = re.compile(r"consilier\w*\s+local")
 R_ORGANIZARE = re.compile(r"legal\s+constituit|constituir\w*\s+(?:a\s+)?consiliului\s+local|(?:organizar\w*|constituir\w*|componen\w*|"
                           r"stabilir\w*)\s+(?:a\s+)?comisiilor\s+de\s+specialitate|alegerea\s+viceprimarului")
 
+R_MODIFICARE = re.compile(r"\b(?:modificar|completar|abrogar|rectificar|inlocuir)\w*")
+# alegerea viceprimarului se poate face și la mijlocul mandatului: indiciu slab, folosit doar dacă lipsesc altele
+R_SLAB = re.compile(r"viceprimar")
+
 
 def _nume_majuscule(orig, start):
     m = re.match(r"\s*([A-ZĂÂÎȘŞȚŢ][\wăâîșşțţĂÂÎȘŞȚŢ]+(?:\s*-\s*[A-ZĂÂÎȘŞȚŢ][\wăâîșşțţĂÂÎȘŞȚŢ]+)?"
@@ -656,7 +660,8 @@ def evenimente_mandat(db):
                         if n and not any(e["nume"] == n and e["data"] == ref["data"] for e in out[fel]):
                             out[fel].append(dict(ref, nume=n))
                             gasit = True
-            if orig is titlu and R_ORGANIZARE.search(s):
+            # „pentru modificarea HCL ... privind constituirea comisiilor” nu e un început de mandat
+            if orig is titlu and R_ORGANIZARE.search(s) and not R_MODIFICARE.search(s):
                 out["organizare"].append(dict(ref, titlu=titlu[:160]))
             if gasit or orig is text:
                 break
@@ -687,10 +692,14 @@ def legislaturi(sedinte, evenimente=None, mandate=None):
     if fortat:
         starturi = sorted(fortat)
     else:
-        starturi = []
-        for d, _ in dovezi_legislaturi(sedinte, evenimente):
-            if not starturi or (date.fromisoformat(d) - date.fromisoformat(starturi[-1])).days > 90:
-                starturi.append(d)
+        # după fiecare alegere generală, un singur început: cel mai vechi indiciu puternic (constituire, comisii,
+        # validări în bloc); alegerea viceprimarului contează doar dacă nu există altul
+        pe_alegeri = {}
+        for d, desc in dovezi_legislaturi(sedinte, evenimente):
+            a = max((x for x in getattr(config, "ALEGERI_LOCALE", ()) if x <= d), default=d)
+            slab = bool(R_SLAB.search(normalizeaza(desc))) and "constitu" not in normalizeaza(desc)
+            pe_alegeri.setdefault(a, []).append((slab, d))
+        starturi = sorted(min(l)[1] for l in pe_alegeri.values())
         for v in mandate.values():
             if not any(abs((date.fromisoformat(v) - date.fromisoformat(x)).days) < 200 for x in starturi):
                 starturi.append(v)

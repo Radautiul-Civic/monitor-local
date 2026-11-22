@@ -119,7 +119,17 @@ def compute(ind):
     else:
         add("Litigii", "Dosare în instanță", "planificat", "Dosarele în care sunt parte autoritățile din Rădăuți (portal.just.ro).")
 
-    add("Primărie", "Buget și bilanțuri", "partial",
-        "Documentele sunt colectate; indicatorii de buget nu sunt încă afișați.")
+    cc = ind.get("concursuri") or {}
+    if cc.get("total"):
+        add("Concursuri și angajări", "Concursuri și examene", "complet",
+            f"{cc['total']} concursuri și examene din {cc['primul_an']} ({cc['angajare']} pentru posturi noi), din anunțurile "
+            "primăriei și ale instituțiilor subordonate; rezultatele sunt citite automat din documente.")
+    else:
+        add("Concursuri și angajări", "Concursuri și examene", "planificat",
+            "Anunțurile de concurs și rezultatele lor, de pe site-ul primăriei și din arhivă.")
+    add("Concursuri și angajări", "Organigrama și statul de funcții", "partial",
+        "Hotărârile care aprobă sau modifică organigrama, cu numărul de posturi citit din text (de verificat).")
+    add("Primărie", "Buget și bilanțuri", "complet",
+        "Execuția bugetară pe ani (Transparență bugetară), bugetele aprobate, datoria publică; bilanțurile ca documente.")
     add("Alte surse", "Dispoziții ale primarului", "planificat", "Registrul dispozițiilor publicat pe site.")
     return S

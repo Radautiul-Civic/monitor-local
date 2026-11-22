@@ -59,6 +59,32 @@ def collect_api(store, client=None, sources=None, full=False):
     return stats
 
 
+def collect_archive_api(store, client=None, full=False):
+    """Categoriile din API-ul WordPress al arhivei (ARCHIVE_CATEGORIES), ex. anunțurile de angajare 2017-2025.
+    Postările primesc ID-uri mutate, ca să nu se suprapună cu cele de pe site-ul nou."""
+    from .concursuri import ID_ARHIVA
+    client = client or WPClient(base_url=config.ARCHIVE_URL)
+    ids = client.category_ids(list(config.ARCHIVE_CATEGORIES.values()))
+    stats = {}
+    for src, slug in config.ARCHIVE_CATEGORIES.items():
+        if slug not in ids:
+            stats[src] = "categorie_lipsa"
+            continue
+        last = None if full else store.last_modified(src)
+        since = last[:10] + "T00:00:00" if last else None
+        counts = {"new": 0, "changed": 0, "same": 0}
+        for post in client.posts(ids[slug], modified_after=since):
+            post = dict(post, id=ID_ARHIVA + int(post["id"]))
+            status = store.upsert_post(src, post)
+            content = post["content"]["rendered"] if isinstance(post.get("content"), dict) else post.get("content", "")
+            for d in parse.extract_documents(content, client.base):
+                store.add_document(d["url"], post["id"], "arhiva", d["text"])
+            counts[status] += 1
+        store.db.commit()
+        stats[src] = counts
+    return stats
+
+
 def _save_raw(html_text, name):
     """Păstrează HTML-ul brut al paginilor de arhivă (pentru verificarea parserului)."""
     try:

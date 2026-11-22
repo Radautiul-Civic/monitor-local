@@ -61,6 +61,11 @@ def main(argv=None):
     try:
         if a.comanda in ("colecteaza", "tot"):
             stats["api"] = collect.collect_api(store, sources=a.surse.split(",") if a.surse else None, full=a.tot)
+            if not a.surse:
+                try:   # anunțurile de angajare din arhiva site-ului vechi; o cădere a arhivei nu oprește colectarea
+                    stats["api_arhiva"] = collect.collect_archive_api(store, full=a.tot)
+                except Exception as e:
+                    stats["api_arhiva"] = f"eroare: {e}"
         if a.comanda == "arhiva":
             stats["arhiva"] = collect.collect_archive(store, years=set(a.ani) or None)
             if not a.ani:
@@ -142,6 +147,11 @@ def main(argv=None):
                 with open(os.path.join(config.DATA_DIR, "intern-date", "litigii.json"), "w", encoding="utf-8") as f:
                     json.dump(litigii.export(store, public=False), f, ensure_ascii=False, separators=(",", ":"))
             stats["voturi"] = voturi.scrie(store, config.DATA_DIR)
+            try:   # concursuri și angajări, organigrama
+                from . import concursuri
+                stats["concursuri"] = concursuri.scrie(store, config.DATA_DIR)
+            except Exception as e:
+                stats["concursuri"] = f"eroare: {e}"
             try:   # indexul pentru căutarea în textul documentelor (pagina internă)
                 from . import cautare_text
                 stats["cautare_text"] = cautare_text.construieste(store, config.DATA_DIR)
@@ -177,6 +187,11 @@ def _jurnal(store, comanda, stats):
         if comanda == "buget":
             for t in ("buget_entitate", "buget_an", "buget_rand"):
                 linii.append(f"{t}: {store.db.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0]} rânduri")
+            from . import buget_aprobat
+            ap = buget_aprobat.toate()
+            linii.append(f"bugete aprobate (surse/buget/): {len(ap)} ani")
+            for an, b in sorted(ap.items()):
+                linii.append(f"  {an} | {b['fisier']} | total {b['cheltuieli']:,} | dezvoltare {b['dezvoltare']:,} | credite {b['credite']:,}")
             for r in store.db.execute("SELECT * FROM buget_an ORDER BY 1, 2 LIMIT 60"):
                 linii.append("  " + " | ".join(str(x) for x in tuple(r)))
     except Exception as e:   # tabelele pot lipsi dacă pasul a picat înainte să le creeze

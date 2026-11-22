@@ -106,55 +106,43 @@ def texte_de_urcat(base):
     return files, new
 
 
-# ce fișiere de date sunt publice și ce doar interne
-PUBLIC_INDICATORI = ("calculat_la", "hcl_pe_ani", "hcl_intarziere_publicare", "hcl_cele_mai_intarziate", "hcl_probleme", "sicap",
-                     "registre_urbanism", "urbanism")
-SCOASE_DIN_PUBLIC = ("litigii.json", "buget.json", "sicap.json", "arhiva-stare.json",
-                     "arhiva-manifest.json", "arhiva-manifest.csv", "sicap-de-verificat.txt")
+# Decizie (22.11.2026): versiunea publică are tot ce are cea internă, mai puțin litigiile. Documentele sunt luate
+# de pe site-ul primăriei și se publică așa cum sunt acolo.
+SCOASE_DIN_PUBLIC = ("litigii.json", "arhiva-stare.json", "arhiva-manifest.json", "arhiva-manifest.csv", "sicap-de-verificat.txt")
+
+
+def _fara_litigii_indicatori(ind):
+    ind = dict(ind)
+    ind.pop("litigii", None)
+    # problemele de publicare semnalate automat apar public doar după verificarea manuală (pot fi alarme false)
+    ind["hcl_probleme"] = [p for p in ind.get("hcl_probleme") or [] if p.get("verificare") == "confirmat"]
+    if isinstance(ind.get("stadiu"), list):
+        ind["stadiu"] = [x for x in ind["stadiu"] if not (isinstance(x, dict) and str(x.get("sectiune", "")).startswith("Litigii"))]
+    return ind
 
 
 def public_date():
-    """date/ public: hotărârile, registrele de urbanism (fără coordonatele pentru hartă) și exploratorul SICAP."""
+    """date/ public: toate datele, fără litigii (și fără rapoartele de verificare, care rămân interne)."""
     out = {}
     d = os.path.join(ROOT, "data")
     os.makedirs(os.path.join(d, "_public"), exist_ok=True)
     try:
         with open(os.path.join(d, "indicatori.json"), encoding="utf-8") as f:
-            ind = json.load(f)
-        pub = {k: ind[k] for k in PUBLIC_INDICATORI if k in ind}
-        # problemele de publicare: doar cele verificate manual
-        pub["hcl_probleme"] = [p for p in pub.get("hcl_probleme") or [] if p.get("verificare") == "confirmat"]
+            ind = _fara_litigii_indicatori(json.load(f))
         p = os.path.join(d, "_public", "indicatori.json")
         with open(p, "w", encoding="utf-8") as f:
-            json.dump(pub, f, ensure_ascii=False, separators=(",", ":"))
+            json.dump(ind, f, ensure_ascii=False, separators=(",", ":"))
         out["indicatori.json"] = p
     except (OSError, ValueError) as e:
         print(f"atenție: indicatori: {e}", file=sys.stderr)
-    try:
-        with open(os.path.join(d, "liste.json"), encoding="utf-8") as f:
-            L = json.load(f)
-        p = os.path.join(d, "_public", "liste.json")
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump({"generat_la": L.get("generat_la"), "hcl": L.get("hcl", []), "registre": L.get("registre", [])},
-                      f, ensure_ascii=False, separators=(",", ":"))
-        out["liste.json"] = p
-    except (OSError, ValueError) as e:
-        print(f"atenție: liste: {e}", file=sys.stderr)
-    try:   # registrele de urbanism, așa cum le publică primăria; poziția pe hartă rămâne internă
-        with open(os.path.join(d, "urbanism.json"), encoding="utf-8") as f:
-            U = json.load(f)
-        for k in ("cu", "ac"):
-            for a in U.get(k) or []:
-                for c in ("lat", "lon", "precizie"):
-                    a.pop(c, None)
-        p = os.path.join(d, "_public", "urbanism.json")
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump(U, f, ensure_ascii=False, separators=(",", ":"))
-        out["urbanism.json"] = p
-    except (OSError, ValueError) as e:
-        print(f"atenție: urbanism: {e}", file=sys.stderr)
-    if os.path.exists(os.path.join(d, "sicap-explorer.json")):
-        out["sicap-explorer.json"] = os.path.join(d, "sicap-explorer.json")
+    for name in ("liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json", "buget.json", "concursuri.json"):
+        if os.path.exists(os.path.join(d, name)):
+            out[name] = os.path.join(d, name)
+    di = os.path.join(d, "intern-date")   # voturi, consilieri etc.; litigiile rămân interne
+    if os.path.isdir(di):
+        for n in sorted(os.listdir(di)):
+            if n.endswith(".json") and n != "litigii.json":
+                out[n] = os.path.join(di, n)
     return out
 
 
@@ -162,7 +150,7 @@ def intern_date():
     """intern/date/: toate datele, în forma completă."""
     d = os.path.join(ROOT, "data")
     out = {}
-    for name in ("indicatori.json", "liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json", "buget.json"):
+    for name in ("indicatori.json", "liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json", "buget.json", "concursuri.json"):
         if os.path.exists(os.path.join(d, name)):
             out[name] = os.path.join(d, name)
     di = os.path.join(d, "intern-date")   # litigii cu numele părților, voturi
@@ -183,7 +171,9 @@ def intern_date():
     return out   # arhiva de siguranță se urcă în intern/date/ de fluxul „Arhivare”
 
 
-MANIFEST_CAUTARE = os.path.join(ROOT, "data", "publicat-cautare.json")
+# indicele de căutare stă în zona publică (date/cautare/), iar pagina internă îl citește de acolo;
+# manifest nou, ca la prima rulare să se urce tot în noul loc
+MANIFEST_CAUTARE = os.path.join(ROOT, "data", "publicat-cautare-public.json")
 
 
 def cautare_de_urcat(base):
@@ -207,12 +197,12 @@ def cautare_de_urcat(base):
             key = (rel + "/" + n) if rel != "." else n
             new[key] = h
             if done.get(key) != h:
-                files.append((p, "/".join(x for x in ("intern", "date", "cautare", rel if rel != "." else "") if x), n))
+                files.append((p, "/".join(x for x in ("date", "cautare", rel if rel != "." else "") if x), n))
     return files, new
 
 
 RAPOARTE = ("indicatori.md", "urbanism-registre.txt", "sicap-de-verificat.txt", "sicap-castigatori-proba.json",
-            "voturi-proba.txt", "rulare-geocodare.txt", "rulare-buget.txt", "rulare-litigii.txt", "rulare-sicap.txt")
+            "voturi-proba.txt", "concursuri-proba.txt", "rulare-geocodare.txt", "rulare-buget.txt", "rulare-litigii.txt", "rulare-sicap.txt")
 
 
 def main():
@@ -230,11 +220,14 @@ def main():
             if n.endswith(".html"):
                 local = cu_versiune(local)
             files.append((local, "" if rel == "." else rel, n))
-    # zona publică: doar hotărârile consiliului local și achizițiile din SICAP
+    # zona publică: toate datele, fără litigii
     for name, local in public_date().items():
         files.append((local, "date", name))
+    cf, manifest_cautare = cautare_de_urcat(base)
+    print(f"căutare în text: {len(cf)} fișiere noi sau modificate")
+    files += cf
 
-    manifest = manifest_cautare = None
+    manifest = None
     if intern_protejat():
         tf, manifest = texte_de_urcat(base)
         print(f"intern: {len(tf)} fișiere noi sau modificate")
@@ -242,11 +235,8 @@ def main():
         # zona internă: toate datele (urbanism, litigii cu nume, buget, voturi, contracte...)
         for name, local in intern_date().items():
             files.append((local, "intern/date", name))
-        cf, manifest_cautare = cautare_de_urcat(base)
-        print(f"căutare în text: {len(cf)} fișiere noi sau modificate")
-        files += cf
     else:
-        print("intern: folderul nu cere parolă (sau nu există); textele și datele interne NU se urcă", file=sys.stderr)
+        print("intern: folderul nu cere parolă (sau nu există); litigiile și rapoartele NU se urcă", file=sys.stderr)
 
     ftp = ftplib.FTP_TLS()
     ftp.connect(host, int(os.environ.get("FTP_PORT", "21")), timeout=60)
