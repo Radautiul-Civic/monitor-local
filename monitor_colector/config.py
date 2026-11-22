@@ -27,6 +27,8 @@ CATEGORIES = {
     "buget": "buget-pe-surse-financiare",          # id 40
     "bilanturi": "bilanturile-contabile-trimestriale",  # id 51
     "angajari": "angajari",                        # id 6, 109 postări la 22.11.2026 (concursuri, din noiembrie 2024)
+    # registrul dispozițiilor primarului (id 53, 82 postări), cu dispozițiile de convocare a consiliului
+    "dispozitii": "registrul-pentru-evidenta-dispozitiilor-autoritatii-executive",
 }
 
 # Categorii din API-ul WordPress al arhivei (site-ul vechi): sursa internă -> slug.

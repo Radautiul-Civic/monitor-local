@@ -152,6 +152,16 @@ def main(argv=None):
                 stats["concursuri"] = concursuri.scrie(store, config.DATA_DIR)
             except Exception as e:
                 stats["concursuri"] = f"eroare: {e}"
+            try:   # ședința următoare, proiectele în consultare, fluxul de noutăți (și RSS)
+                from . import cetateni
+                try:
+                    with open(os.path.join(config.DATA_DIR, "concursuri.json"), encoding="utf-8") as f:
+                        cc = json.load(f)["concursuri"]
+                except (OSError, ValueError, KeyError):
+                    cc = []
+                stats["cetateni"] = cetateni.scrie(store, config.DATA_DIR, concursuri=cc)
+            except Exception as e:
+                stats["cetateni"] = f"eroare: {e}"
             try:   # indexul pentru căutarea în textul documentelor (pagina internă)
                 from . import cautare_text
                 stats["cautare_text"] = cautare_text.construieste(store, config.DATA_DIR)

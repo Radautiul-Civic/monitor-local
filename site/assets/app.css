@@ -297,3 +297,30 @@ details.lc-asoc summary{cursor:pointer;color:var(--accent)}
 .ghid-i:hover{border-color:var(--accent)}
 .ghid-i b{color:var(--accent);font-size:1rem}
 .ghid-i span{color:var(--ink-2);font-size:.88rem;line-height:1.4}
+
+/* ședința următoare și participarea */
+ol.odz{margin:10px 0 4px;padding-left:22px;font-size:.92rem;line-height:1.45}
+ol.odz li{margin:5px 0;overflow-wrap:anywhere}
+ol.odz .lnks{margin-left:6px;font-size:.84rem}
+ul.pasi{margin:6px 0 10px;padding-left:20px;line-height:1.5}
+ul.pasi li{margin:6px 0}
+.urm{padding:12px}
+.urm-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.urm-i{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border-radius:10px;background:color-mix(in srgb,var(--accent) 9%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line));color:var(--ink);text-decoration:none}
+.urm-i:hover{border-color:var(--accent)}
+.urm-i .lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--accent);font-weight:650}
+.urm-i b{font-size:1.15rem}
+.urm-i span:last-child{color:var(--ink-2);font-size:.88rem}
+/* fluxul de noutăți */
+a.rss{font-size:.8rem;font-weight:650;color:#fff;background:#e07a00;border-radius:6px;padding:2px 8px;text-decoration:none}
+.nt-seg{margin:4px 0 8px;flex-wrap:wrap}
+.nt-zi{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:650;margin:14px 0 4px}
+.nt{display:grid;grid-template-columns:150px minmax(0,1fr);gap:4px 12px;padding:7px 0;border-top:1px solid var(--line);font-size:.93rem}
+.nt-tip{align-self:start;font-size:.76rem;font-weight:600;color:var(--c);border-left:3px solid var(--c);padding-left:7px;line-height:1.35}
+.nt-t a{color:var(--ink)}
+.nt-x{color:var(--ink-2);font-size:.86rem;margin-top:1px;overflow-wrap:anywhere}
+a.nt-s{font-size:.8rem}
+@media (max-width:640px){.nt{grid-template-columns:minmax(0,1fr)}.nt-seg{display:flex}}
+.seg.nt-seg{display:flex;flex-wrap:wrap;gap:6px;border:0;overflow:visible}
+.seg.nt-seg button{border:1px solid var(--line);border-radius:99px;padding:5px 12px}
+.seg.nt-seg button+button{border-left:1px solid var(--line)}

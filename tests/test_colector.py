@@ -1539,3 +1539,70 @@ class TestPublicareReluata(unittest.TestCase):
             _t.sleep = dorm
             os.environ.pop("PUBLICARE_MINUTE_CAUTARE", None)
             publica.ROOT, publica._conectare, publica.intern_protejat, publica.MANIFEST_CAUTARE, publica.MANIFEST = vechi
+
+
+class TestCetateni(unittest.TestCase):
+    def test_convocare(self):
+        from monitor_colector import cetateni as C
+        self.assertEqual(C.parse_convocare("Dispoziția nr. 794/13.11.2026 privind convocarea Consiliului Local al Municipiului Rădăuți în ședință extraordinară, în data de 18.11.2026 ora 09:00"),
+                         {"data": "2026-11-18", "ora": "09:00", "tip": "extraordinara", "nr_dispozitie": "794"})
+        c = C.parse_convocare("Dispoziția nr. 765/28.10.2026 privind convocarea Consiliului Local al Municipiului Rădăuți în ședință extraordinară, convocată de îndată, în data de 30.10.2026")
+        self.assertEqual((c["data"], c["tip"], c["ora"]), ("2026-10-30", "extraordinara_de_indata", None))
+        c = C.parse_convocare("Dispoziția nr. 497/17.07.2026 privind convocarea Consiliului Local al Municipiului Rădăuți în ședința ordinară din data de 23.07.2026")
+        self.assertEqual((c["data"], c["tip"], c["nr_dispozitie"]), ("2026-07-23", "ordinara", "497"))
+        self.assertEqual(C.parse_convocare("Dispoziția nr. 600/2026 privind numirea comisiei de recepție")["data"] if C.parse_convocare("Dispoziția nr. 600/2026 privind numirea comisiei de recepție") else None, None)
+
+    def test_ordinea_de_zi(self):
+        from monitor_colector import cetateni as C
+        t = ("Art. 1. Se convoacă Consiliul Local ...\nANEXA\nPROIECTUL ORDINII DE ZI\n"
+             "1. Proiect de hotărâre privind stabilirea impozitelor și taxelor locale pentru anul 2027.\n   Inițiator: Primar\n"
+             "2. Proiect de hotărâre privind modificarea suprafeței de teren\nidentificată ca domeniu privat.\n Inițiator: Primar\n"
+             "3. Diverse.\nPRIMAR,\n")
+        o = C.ordinea_de_zi(t)
+        self.assertEqual([p["nr"] for p in o], [1, 2, 3])
+        self.assertEqual(o[1]["text"], "Proiect de hotărâre privind modificarea suprafeței de teren identificată ca domeniu privat.")
+        self.assertEqual(C.ordinea_de_zi("fără nimic"), [])
+
+    def test_proiect_si_termen(self):
+        from monitor_colector import cetateni as C
+        p = C.parse_proiect("Anunț din 20.11.2026 – Proiect de hotărâre înregistrat cu nr. 99582/20.11.2026 privind stabilirea impozitelor și taxelor locale pentru anul 2027")
+        self.assertEqual((p["nr"], p["obiect"]), ("99582", "Privind stabilirea impozitelor și taxelor locale pentru anul 2027"))
+        self.assertEqual(C.termen_propuneri("Propunerile se pot depune până la data de 02.12.2026, la registratură.", "2026-11-20"), ("2026-12-02", "din anunț"))
+        self.assertEqual(C.termen_propuneri("", "2026-11-20"), ("2026-11-30", "10 zile de la publicare"))
+        self.assertEqual(C.termen_propuneri("în termen de 15 zile de la afișare", "2026-11-20")[0], "2026-12-05")
+
+    def test_export_si_rss(self):
+        from monitor_colector import cetateni as C
+        from monitor_colector.store import Store
+        import xml.etree.ElementTree as ET
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        st = Store(os.path.join(tmp, "t.db"))
+
+        def post(i, src, zi, titlu, text=None):
+            st.upsert_post(src, {"id": i, "title": {"rendered": titlu}, "content": {"rendered": ""}, "date": zi + "T10:00:00", "modified": zi + "T10:00:00", "link": f"https://x/{i}/"})
+            st.add_document(f"https://x/{i}.pdf", i, "site", "doc")
+            if text:
+                p = os.path.join(tmp, f"{i}.txt")
+                with open(p, "w", encoding="utf-8") as f:
+                    f.write(text)
+                st.update_document(f"https://x/{i}.pdf", text_path=p)
+        post(1, "proiecte", "2026-11-20", "Anunț din 20.11.2026 – Proiect de hotărâre înregistrat cu nr. 99582/20.11.2026 privind stabilirea impozitelor și taxelor locale pentru anul 2027")
+        post(2, "dispozitii", "2026-11-21", "Dispoziția nr. 800/21.11.2026 privind convocarea Consiliului Local al Municipiului Rădăuți în ședință ordinară, în data de 27.11.2026 ora 10:00",
+             "ORDINEA DE ZI\n1. Proiect de hotărâre nr. 99582/20.11.2026 privind stabilirea impozitelor și taxelor locale pentru anul 2027\nInițiator: Primar\n2. Diverse\n")
+        post(3, "dispozitii", "2026-11-10", "Dispoziția nr. 780/10.11.2026 privind delegarea atribuțiilor")
+        post(4, "contracte", "2026-11-15", "Contract nr. 123 & lucrări de asfaltare <strada Putnei>")
+        st.db.commit()
+        sed, ev = C.export(st, azi=date(2026, 11, 22))
+        self.assertEqual(len(sed["urmatoare"]), 1)
+        u = sed["urmatoare"][0]
+        self.assertEqual((u["data"], u["ora"], u["tip"]), ("2026-11-27", "10:00", "ordinara"))
+        self.assertEqual(u["ordinea_de_zi"][0]["proiect"]["nr"], "99582")
+        self.assertEqual(sed["consultare"][0]["termen"], "2026-11-30")
+        self.assertTrue(sed["consultare"][0]["deschis"])
+        self.assertEqual([e["tip"] for e in ev], ["sedinta", "consultare", "contract"])
+        x = ET.fromstring(C.rss(ev, date(2026, 11, 22)))   # XML valid, cu caracterele speciale escapate
+        self.assertEqual(len(x.findall("./channel/item")), 3)
+        self.assertTrue(x.find("./channel/item/link").text.startswith("https://monitor.radautiulcivic.ro/#consiliu/urmatoare"))
+        ev2 = C.export(st, azi=date(2026, 11, 22))[1]
+        self.assertEqual([e["id"] for e in ev], [e["id"] for e in ev2])   # GUID-uri stabile între rulări
