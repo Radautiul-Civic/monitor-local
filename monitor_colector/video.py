@@ -120,7 +120,9 @@ def refa(intern, maxim=3):
             c["generat_la"] = datetime.now().isoformat(timespec="seconds")
         except Exception as e:
             c["eroare"] = str(e)[:500]
-        facute.append(cid)
+        # în jurnal: dacă a mers și câte puncte are rezumatul (textul rămâne doar în zona internă)
+        facute.append({"id": cid, "eroare": c["eroare"]} if c.get("eroare") else
+                      {"id": cid, "puncte": len((c.get("rezumat") or {}).get("puncte") or []), "tokeni": (c.get("rezumat") or {}).get("_tokeni")})
     if facute:
         intern.scrie(CIORNE, ciorne)
     return {"refacute": facute}
