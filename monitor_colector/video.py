@@ -46,11 +46,21 @@ def plan(intern, fortat=None):
     return None
 
 
+def audio(fisier, rata=16000):
+    """Sunetul ca vector de eșantioane (mono, 16 kHz), decodat cu ffmpeg. Îl dăm direct modelului: decodarea internă
+    a faster-whisper depinde de versiunea bibliotecii PyAV, care se schimbă des."""
+    import subprocess
+    import numpy as np
+    r = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", fisier, "-f", "s16le", "-ac", "1", "-ar", str(rata), "-"],
+                       capture_output=True, check=True)
+    return np.frombuffer(r.stdout, np.int16).astype(np.float32) / 32768.0
+
+
 def transcrie(fisier, model="large-v3", prag=None):
     """Segmentele [start, sfârșit, text] dintr-o bucată de audio (timpii relativi la începutul bucății)."""
     from faster_whisper import WhisperModel
     m = WhisperModel(model, device="cpu", compute_type="int8", cpu_threads=os.cpu_count() or 4)
-    segs, info = m.transcribe(fisier, language="ro", beam_size=5, vad_filter=True, condition_on_previous_text=False,
+    segs, info = m.transcribe(audio(fisier), language="ro", beam_size=5, vad_filter=True, condition_on_previous_text=False,
                               initial_prompt="Ședința Consiliului Local al Municipiului Rădăuți. Proiect de hotărâre, consilier local, primar, viceprimar, vot.")
     return [[round(s.start, 1), round(s.end, 1), s.text.strip()] for s in segs]
 
