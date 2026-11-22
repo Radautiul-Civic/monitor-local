@@ -142,7 +142,7 @@ def public_date():
     except (OSError, ValueError) as e:
         print(f"atenție: indicatori: {e}", file=sys.stderr)
     for name in ("liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json", "buget.json", "concursuri.json",
-                 "sedinte.json", "noutati.json", "noutati.xml"):
+                 "sedinte.json", "noutati.json", "noutati.xml", "acasa.json"):
         if os.path.exists(os.path.join(d, name)):
             out[name] = os.path.join(d, name)
     di = os.path.join(d, "intern-date")   # voturi, consilieri etc.; litigiile rămân interne
@@ -158,7 +158,7 @@ def intern_date():
     d = os.path.join(ROOT, "data")
     out = {}
     for name in ("indicatori.json", "liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json", "buget.json", "concursuri.json",
-                 "sedinte.json", "noutati.json"):
+                 "sedinte.json", "noutati.json", "acasa.json"):
         if os.path.exists(os.path.join(d, name)):
             out[name] = os.path.join(d, name)
     di = os.path.join(d, "intern-date")   # litigii cu numele părților, voturi
@@ -205,6 +205,31 @@ def cautare_de_urcat(base):
                 files.append((p, "/".join(x for x in ("date", "cautare", rel if rel != "." else "") if x), n, key, h))
     ordine = lambda x: 0 if x[3].startswith("idx/") else 1 if x[3] == "docs.json" else 2
     return sorted(files, key=ordine), done
+
+
+# paginile de distribuit (s/<cheie>.html) și imaginile lor (s/img/), doar cele noi sau schimbate
+MANIFEST_DISTRIBUIE = os.path.join(ROOT, "data", "publicat-distribuie.json")
+
+
+def distribuie_de_urcat():
+    import hashlib
+    d = os.path.join(ROOT, "data", "distribuie")
+    if not os.path.isdir(d):
+        return [], None
+    done = _manifest(MANIFEST_DISTRIBUIE)
+    files = []
+    for sub in ("img", ""):   # întâi imaginile, ca pagina să nu trimită spre o imagine încă neurcată
+        p0 = os.path.join(d, sub)
+        for n in sorted(os.listdir(p0)):
+            p = os.path.join(p0, n)
+            if not os.path.isfile(p):
+                continue
+            with open(p, "rb") as f:
+                h = hashlib.sha1(f.read()).hexdigest()
+            key = (sub + "/" + n) if sub else n
+            if done.get(key) != h:
+                files.append((p, "/".join(x for x in ("s", sub) if x), n, key, h))
+    return files, done
 
 
 RAPOARTE = ("indicatori.md", "urbanism-registre.txt", "sicap-de-verificat.txt", "sicap-castigatori-proba.json",
@@ -261,7 +286,10 @@ def main():
     cf, manifeste["cautare"] = cautare_de_urcat(base)
     print(f"căutare în text: {len(cf)} fișiere noi sau modificate")
     files += [(p, r, n, "cautare", k, h) for p, r, n, k, h in cf]
-    cai = {"texte": MANIFEST, "cautare": MANIFEST_CAUTARE}
+    df, manifeste["distribuie"] = distribuie_de_urcat()
+    print(f"distribuie: {len(df)} fișiere noi sau modificate")
+    files = files[:len(files) - len(cf)] + [(p, r, n, "distribuie", k, h) for p, r, n, k, h in df] + files[len(files) - len(cf):]
+    cai = {"texte": MANIFEST, "cautare": MANIFEST_CAUTARE, "distribuie": MANIFEST_DISTRIBUIE}
 
     def salveaza():
         for m, d in manifeste.items():

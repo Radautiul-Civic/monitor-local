@@ -1689,3 +1689,53 @@ class TestRezumate(unittest.TestCase):
         st.db.commit()
         c = R.context(st.db, "2026-11-19")   # data din titlul videoclipului poate fi cu o zi alături
         self.assertEqual((c["data"], c["convocare"]["tip"], [h["nr"] for h in c["hcl"]]), ("2026-11-18", "extraordinara", [181]))
+
+
+class TestDistribuie(unittest.TestCase):
+    def test_elemente_si_pagina(self):
+        from monitor_colector import distribuie as D
+        sed = {"urmatoare": [{"data": "2026-11-26", "ora": "10:00", "tip": "ordinara",
+                              "ordinea_de_zi": [{"nr": 1, "text": "Proiect de hotărâre nr. 99582/20.11.2026 privind stabilirea impozitelor"}]}],
+               "recente": [], "consultare": [{"nr": "99582", "obiect": "Privind stabilirea impozitelor", "postat": "2026-11-20",
+                                              "termen": "2026-11-30", "deschis": True}]}
+        hcl = [{"an": 2026, "nr": 245, "titlu": "privind aprobarea bugetului", "data": "2026-10-30"}]
+        el = D.elemente(sed, hcl, [{"data": "2026-11-26", "rezumat": {"rezumat": "S-au aprobat taxele."}}], date(2026, 11, 22))
+        k = {e["cheie"]: e for e in el}
+        self.assertEqual(set(k), {"sedinta-2026-11-26", "proiect-99582", "hcl-2026-245"})
+        self.assertEqual(k["sedinta-2026-11-26"]["tip"], "rezumat")
+        self.assertEqual(k["sedinta-2026-11-26"]["link"], "#consiliu/sedinte/2026-11-26")
+        self.assertEqual(k["proiect-99582"]["titlu"], "Stabilirea impozitelor")
+        self.assertEqual(k["hcl-2026-245"]["titlu"], "Aprobarea bugetului")
+        h = D.pagina(k["hcl-2026-245"])
+        self.assertIn('og:image" content="https://monitor.radautiulcivic.ro/s/img/hcl-2026-245.png"', h)
+        self.assertIn("location.replace(\"https://monitor.radautiulcivic.ro/#consiliu/hcl/2026/245\")", h)
+
+    def test_imagine(self):
+        import tempfile
+        from PIL import Image
+        from monitor_colector import distribuie as D
+        with tempfile.TemporaryDirectory() as t:
+            p = os.path.join(t, "x.png")
+            D.imagine({"tip": "hcl", "eticheta": "Hotărârea nr. 1/2026", "titlu": "Un titlu foarte lung " * 12, "jos": "Adoptată"}, p)
+            self.assertEqual(Image.open(p).size, (1200, 630))
+
+
+class TestPoveste(unittest.TestCase):
+    def test_anul(self):
+        import sqlite3
+        from monitor_colector import poveste
+        db = sqlite3.connect(":memory:")
+        db.execute("CREATE TABLE hcl (year, number, adoption_date)")
+        db.executemany("INSERT INTO hcl VALUES (?,?,?)", [(2026, 1, "2026-01-10"), (2026, 2, "2026-02-10"), (2025, 9, "2025-12-01")])
+        ind = {"sedinte_pe_tip": {"2026": {"ordinara": 10, "extraordinara": 3}}, "urbanism": {"ac": {"pe_ani": {"2026": 5}}}}
+        expl = {"inst": [[1, "Primăria", "4244148", "Primăria"]], "furn": [["1", "FIRMA SRL"]],
+                "da": [[7, 0, "2026-03-01", 0, 0, 1000.0, 200, "Rechizite", "", 0, 0, 1],
+                       [8, 0, "2026-03-02", 0, 0, 9e9, 0, "Aberant", "", 2, 0, 1],
+                       [9, 0, "2026-03-03", 0, 0, 500.0, 0, "Neîncheiat", "", 0, 0, 0]],
+                "can": [[5, 0, "2026-05-01", 0, 50000.0, 0, "Asfaltare", "", "", "", 0, "", 1],
+                        [6, 0, "2026-05-01", 0, 9e6, 0, "Acord-cadru", "", "", "", 0, "", 2]]}
+        a = poveste.anul(db, ind, expl, [{"an": 2026, "posturi": 2}, {"an": 2025}], {"consultare": [{"postat": "2026-11-01"}]}, date(2026, 11, 22))
+        self.assertEqual((a["hotarari"], a["sedinte"], a["autorizatii"], a["concursuri"], a["posturi_scoase"], a["proiecte_consultare"]), (2, 13, 5, 1, 2, 1))
+        self.assertEqual((a["achizitii_lei"], a["achizitii_nr"]), (51000, 2))
+        self.assertEqual(a["cel_mai_mare"]["obiect"], "Asfaltare")
+        self.assertEqual(a["furnizor_principal"], {"nume": "FIRMA SRL", "lei": 51000})

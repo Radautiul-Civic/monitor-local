@@ -162,6 +162,26 @@ def main(argv=None):
                 stats["cetateni"] = cetateni.scrie(store, config.DATA_DIR, concursuri=cc)
             except Exception as e:
                 stats["cetateni"] = f"eroare: {e}"
+            try:   # pagina de start: „Rădăuți în <anul curent>”
+                from . import poveste
+                def _cit(n, implicit=None):
+                    try:
+                        with open(os.path.join(config.DATA_DIR, n), encoding="utf-8") as f:
+                            return json.load(f)
+                    except (OSError, ValueError):
+                        return implicit
+                acasa = poveste.anul(store.db, ind, expl if rez["autoritati"] else None,
+                                     (_cit("concursuri.json") or {}).get("concursuri"), _cit("sedinte.json"))
+                with open(os.path.join(config.DATA_DIR, "acasa.json"), "w", encoding="utf-8") as f:
+                    json.dump(acasa, f, ensure_ascii=False, separators=(",", ":"))
+                stats["acasa"] = "data/acasa.json"
+            except Exception as e:
+                stats["acasa"] = f"eroare: {e}"
+            try:   # paginile și imaginile de distribuit pe rețelele sociale (s/)
+                from . import distribuie
+                stats["distribuie"] = distribuie.scrie(store, config.DATA_DIR)
+            except Exception as e:
+                stats["distribuie"] = f"eroare: {e}"
             try:   # indexul pentru căutarea în textul documentelor (pagina internă)
                 from . import cautare_text
                 stats["cautare_text"] = cautare_text.construieste(store, config.DATA_DIR)
