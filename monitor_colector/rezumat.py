@@ -134,15 +134,19 @@ def genereaza(ctx, segmente, video, cheie=None, model=MODEL, sesiune=None):
     if not cheie:
         raise RuntimeError("lipsește ANTHROPIC_API_KEY")
     s = sesiune or requests.Session()
-    corp = {"model": model, "max_tokens": 32000, "system": INSTRUCTIUNI,
-            "messages": [{"role": "user", "content": mesaj(ctx, transcriere_text(segmente), video)}],
-            # modelul „gândește” implicit înainte să răspundă; îi lăsăm un buget limitat, ca să rămână loc pentru rezumat
-            "thinking": {"type": "enabled", "budget_tokens": 8000}}
+    corp = {"model": model, "max_tokens": 20000, "system": INSTRUCTIUNI,
+            "messages": [{"role": "user", "content": mesaj(ctx, transcriere_text(segmente), video)}]}
     antet = {"x-api-key": cheie, "anthropic-version": "2023-06-01", "content-type": "application/json"}
-    r = s.post(API, timeout=900, headers=antet, json=corp)
-    if r.status_code == 400 and "thinking" in r.text:   # dacă modelul nu acceptă bugetul, fără pasul de gândire
-        corp["thinking"] = {"type": "disabled"}
+    # Modelul „gândește” implicit înainte să răspundă și poate consuma tot spațiul de răspuns. Pentru un rezumat nu e nevoie:
+    # „between_tools” oprește gândirea dinaintea răspunsului; dacă modelul nu acceptă forma, încercăm un buget limitat.
+    for gandire in ({"type": "between_tools"}, {"type": "enabled", "budget_tokens": 6000}, None):
+        if gandire:
+            corp["thinking"] = gandire
+        else:
+            corp.pop("thinking", None)
         r = s.post(API, timeout=900, headers=antet, json=corp)
+        if not (r.status_code == 400 and "thinking" in r.text):
+            break
     if r.status_code != 200:
         raise RuntimeError(f"API {r.status_code}: {r.text[:300]}")
     d = r.json()
