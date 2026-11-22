@@ -1,0 +1,38 @@
+name: Probă video Facebook (temporar)
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Pagina sau videoclipul de încercat"
+        default: "https://www.facebook.com/watch/61559725245078/"
+
+jobs:
+  proba:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Instalare yt-dlp și ffmpeg
+        run: |
+          pip install -U yt-dlp
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          yt-dlp --version
+      - name: Lista videoclipurilor (mai multe forme de adresă)
+        continue-on-error: true
+        run: |
+          for u in "${{ inputs.url }}" "https://www.facebook.com/61559725245078/videos" "https://www.facebook.com/profile.php?id=61559725245078&sk=videos"; do
+            echo "=== $u"
+            yt-dlp --flat-playlist --playlist-end 15 --print "%(id)s | %(upload_date)s | %(duration)s | %(title).120s | %(url)s" "$u" 2>&1 | tail -25 || true
+          done
+      - name: Descărcare probă (primul minut, doar audio)
+        continue-on-error: true
+        run: |
+          u=$(yt-dlp --flat-playlist --playlist-end 1 --print "%(url)s" "https://www.facebook.com/61559725245078/videos" 2>/dev/null | head -1)
+          [ -z "$u" ] && u=$(yt-dlp --flat-playlist --playlist-end 1 --print "%(url)s" "${{ inputs.url }}" 2>/dev/null | head -1)
+          echo "video: $u"
+          [ -n "$u" ] && yt-dlp -f "bestaudio/best" --download-sections "*0-60" -x --audio-format mp3 -o "proba.%(ext)s" "$u" 2>&1 | tail -20
+          ls -la proba* 2>/dev/null || echo "nimic descărcat"
+          [ -n "$u" ] && yt-dlp -J "$u" 2>/dev/null | python -c "import json,sys; d=json.load(sys.stdin); print({k: d.get(k) for k in ('title','upload_date','timestamp','duration','uploader','description')})" || true
