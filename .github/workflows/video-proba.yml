@@ -27,12 +27,9 @@ jobs:
             echo "=== $u"
             yt-dlp --flat-playlist --playlist-end 15 --print "%(id)s | %(upload_date)s | %(duration)s | %(title).120s | %(url)s" "$u" 2>&1 | tail -25 || true
           done
-      - name: Descărcare probă (primul minut, doar audio)
+      - name: Descărcare probă (doar audio, tot fișierul)
         continue-on-error: true
         run: |
-          u=$(yt-dlp --flat-playlist --playlist-end 1 --print "%(url)s" "https://www.facebook.com/61559725245078/videos" 2>/dev/null | head -1)
-          [ -z "$u" ] && u=$(yt-dlp --flat-playlist --playlist-end 1 --print "%(url)s" "${{ inputs.url }}" 2>/dev/null | head -1)
-          echo "video: $u"
-          [ -n "$u" ] && yt-dlp -f "bestaudio/best" --download-sections "*0-60" -x --audio-format mp3 -o "proba.%(ext)s" "$u" 2>&1 | tail -20
+          time yt-dlp -f "bestaudio/best" -x --audio-format mp3 --audio-quality 9 -o "proba.%(ext)s" "${{ inputs.url }}" 2>&1 | grep -v "\[download\] *[0-9.]*% of" | tail -15
           ls -la proba* 2>/dev/null || echo "nimic descărcat"
-          [ -n "$u" ] && yt-dlp -J "$u" 2>/dev/null | python -c "import json,sys; d=json.load(sys.stdin); print({k: d.get(k) for k in ('title','upload_date','timestamp','duration','uploader','description')})" || true
+          ffprobe -hide_banner proba.mp3 2>&1 | grep -E "Duration|Stream" || true
