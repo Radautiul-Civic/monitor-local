@@ -69,7 +69,8 @@
     return "<p>" + text.slice(0, i + 1) + '</p><details class="info"><summary>Mai mult despre pagină</summary><p>' + text.slice(i + 2) + "</p></details>";
   }
   function head(title, text, r, share) {
-    var h = '<div class="page-head"><div class="ph-t"><h1>' + esc(title) + "</h1>" + (share ? shareBtn(share[0], share[1]) : "") + "</div>" + scurtText(text);
+    var sid = r ? r.s.id : (route().s || {}).id, icn = SEC_IC[sid];
+    var h = '<div class="page-head"><div class="ph-t">' + (icn ? '<span class="ph-ic">' + ic(icn) + "</span>" : "") + "<h1>" + esc(title) + "</h1>" + (share ? shareBtn(share[0], share[1]) : "") + "</div>" + scurtText(text);
     if (r && r.s.sub && r.s.sub.length > 1) h += '<div class="subnav">' + r.s.sub.map(function (x) {
       return '<a href="#' + r.s.id + "/" + x[0] + '"' + (x[0] === r.sub ? ' aria-current="page"' : "") + ">" + esc(x[1]) + "</a>";
     }).join("") + "</div>";
@@ -131,6 +132,22 @@
       var d = document.createElement("details"); d.className = "info";
       d.innerHTML = "<summary>Cum citești datele</summary>";
       p.parentNode.insertBefore(d, p); d.appendChild(p);
+    });
+    // pe telefon, sub-meniul se derulează orizontal: tab-ul activ trebuie să fie la vedere
+    Array.prototype.forEach.call(root.querySelectorAll(".subnav:not([data-s])"), function (n) {
+      n.dataset.s = "1";
+      var a = n.querySelector('a[aria-current="page"]');
+      if (a && n.scrollWidth > n.clientWidth) n.scrollLeft = Math.max(0, a.offsetLeft - n.offsetLeft - 24);
+    });
+    // tabelele foarte lungi: primele 15 rânduri, restul la un click
+    Array.prototype.forEach.call(root.querySelectorAll("table:not([data-s])"), function (t) {
+      t.dataset.s = "1";
+      var rs = t.tBodies[0] ? t.tBodies[0].rows : [];
+      if (rs.length <= 25 || t.closest("details")) return;
+      for (var i = 15; i < rs.length; i++) rs[i].hidden = true;
+      var b = document.createElement("button"); b.type = "button"; b.className = "more"; b.textContent = "Arată toate cele " + nr(rs.length) + " rânduri";
+      b.addEventListener("click", function () { for (var j = 0; j < rs.length; j++) rs[j].hidden = false; b.remove(); });
+      var w = t.closest(".tw") || t; w.parentNode.insertBefore(b, w.nextSibling);
     });
   }
   if (window.MutationObserver) new MutationObserver(function () { var a = $("app"); if (a) strangeNote(a); }).observe(document.getElementById("app"), { childList: true, subtree: true });
@@ -255,10 +272,10 @@
   }
   function linkuri(x) {
     var o = [], p = safeUrl(x.pagina), f = safeUrl(x.pdf);
-    if (p) o.push('<a href="' + esc(p) + '" rel="noopener">pagina</a>');
-    if (f) o.push('<a href="' + esc(f) + '" rel="noopener">PDF</a>');
-    (x.alte_pdf || []).forEach(function (u, i) { if (safeUrl(u)) o.push('<a href="' + esc(u) + '" rel="noopener">PDF ' + (i + 2) + "</a>"); });
-    if (INTERN && f && WORD[f]) o.push('<a href="texte/' + WORD[f].split("/").map(encodeURIComponent).join("/") + '">text (Word)</a>');
+    if (p) o.push('<a class="lk" href="' + esc(p) + '" rel="noopener">pagina</a>');
+    if (f) o.push('<a class="lk" href="' + esc(f) + '" rel="noopener">PDF</a>');
+    (x.alte_pdf || []).forEach(function (u, i) { if (safeUrl(u)) o.push('<a class="lk" href="' + esc(u) + '" rel="noopener">PDF ' + (i + 2) + "</a>"); });
+    if (INTERN && f && WORD[f]) o.push('<a class="lk" href="texte/' + WORD[f].split("/").map(encodeURIComponent).join("/") + '">text (Word)</a>');
     if (x.scanat === 1) o.push('<span class="tag" title="Document scanat: textul nu poate fi căutat și nu e citit de cititoarele de ecran">scanat</span>');
     return o.join("");
   }
@@ -454,6 +471,7 @@
     harta: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
     vorba: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>'
   };
+  var SEC_IC = { acasa: null, strada: "casa", consiliu: "hcl", primarie: "bani", achizitii: "cos", angajari: "munca", litigii: "hcl", cauta: "cauta", texte: "hcl", rezumate: "vorba", arhiva: "hcl" };
   function ic(k) { return '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + (IC[k] || "") + "</svg>"; }
 
   function ghid() {   // pagina de start publică: ce găsește un cetățean, cu linkuri
@@ -1923,16 +1941,17 @@
         text: function (x) { return x.voturi.map(function (v) { return (v.titlu || "") + " " + v.nume_impotriva.join(" ") + " " + v.nume_abtineri.join(" "); }).join(" "); },
         extraFilter: { html: '<select aria-label="Voturi"><option value="">Toate ședințele</option><option value="imp">Cu voturi împotrivă sau abțineri</option></select>', test: function (x) { return x.voturi.some(function (v) { return v.impotriva || v.abtineri; }); } },
         item: function (x) {
-          var u = safeUrl(x.pdf);
-          return '<div class="doc"><div class="h"><span class="id">Ședința ' + esc(TIP[x.tip] || x.tip || "") + " din " + esc(zi(x.data)) + "</span><span class=\"tag\">" + x.voturi.length + " voturi" + (x.prezenti ? ", " + x.prezenti + " prezenți" : "") + "</span>" +
-            (u ? '<a href="' + esc(u) + '" rel="noopener">PDF</a>' : "") + "</div>" +
+          var u = safeUrl(x.pdf), un = x.voturi.filter(function (v) { return !v.impotriva && !v.abtineri; }).length, ne = x.voturi.length - un;
+          return '<details class="doc vt-s"><summary><div class="h"><span class="id">Ședința ' + esc(TIP[x.tip] || x.tip || "") + " din " + esc(zi(x.data)) + "</span>" +
+            '<span class="vt-r"><b>' + x.voturi.length + "</b> " + (x.voturi.length === 1 ? "vot" : "voturi") + (un ? " · " + un + " unanim" + (un === 1 ? "" : "e") : "") + (ne ? ' · <span class="vt-ne">' + ne + " cu împotrivă sau abțineri</span>" : "") + (x.prezenti ? " · " + x.prezenti + " prezenți" : "") + "</span>" +
+            (u ? '<a class="lk" href="' + esc(u) + '" rel="noopener">PDF</a>' : "") + "</div></summary>" +
             ((x.absenti || []).length ? '<div class="m"><span>Absenți: ' + x.absenti.map(function (n) { return linkCons(V, n); }).join(", ") + (x.in_functie ? " (prezenți " + x.prezenti + " din " + x.in_functie + ")" : "") + "</span></div>" : "") +
             x.voturi.map(function (v) {
               return '<div class="m" style="display:block;margin-top:6px"><strong>' + (v.punct ? "Punctul " + v.punct + ": " : "") + "</strong>" + esc((v.titlu || "proiect neidentificat").slice(0, 200)) +
                 (v.hcl ? " " + linkHcl(v.hcl) : "") + "<br>" +
                 votHtml(v) +
                 ' <details class="more-t"><summary>textul</summary><span class="muted">' + esc(v.fragment) + "</span></details></div>";
-            }).join("") + "</div>";
+            }).join("") + "</details>";
         }
       });
     }).catch(function () { el.innerHTML = ""; });
@@ -2352,7 +2371,7 @@
   var PREF_STR = /^(strada|str|str-la|stradela|bulevardul|bd|b-dul|calea|aleea|al|piata|pta|intrarea|intr|fundatura|drumul|soseaua|sos)\b\.?\s*/;
   function strCheie(s) { return norm(s).replace(/[„”"'.]/g, " ").replace(/\s+/g, " ").trim().replace(PREF_STR, "").replace(/\s*(nr|numarul)\b.*$/, "").replace(/\s+\d.*$/, "").trim(); }
   function strada(el, r) {
-    var cap = head("Strada mea", "Scrie numele străzii și vezi tot ce o privește: ce se construiește, ce hotărâri au pomenit-o, ce s-a cumpărat pentru ea și ce scrie despre ea în documentele primăriei.");
+    var cap = head("Strada mea", "Scrie numele străzii și vezi tot ce o privește.");
     var lipsa = [];
     if (!URB) lipsa.push(get(DATA + "urbanism.json").then(function (d) { URB = d; }).catch(function () { URB = { cu: [], ac: [] }; }));
     if (SX === null) lipsa.push(get(DATA + "sicap-explorer.json").then(function (d) { SX = sxPrep(d); }).catch(function () { SX = false; }));
@@ -2364,11 +2383,16 @@
     var q0 = (r.q || {}).s || "";
     el.innerHTML = cap + '<div class="card section sx-bar"><div class="filters"><input id="s-q" type="search" list="s-l" value="' + esc(q0) + '" placeholder="Strada (ex. Putnei, Ștefan cel Mare, Calea Cernăuți)" aria-label="Strada" autocomplete="off">' +
       '<datalist id="s-l">' + chei.slice(0, 600).map(function (k) { return '<option value="' + esc(afis(k)) + '">'; }).join("") + "</datalist></div>" +
-      (q0 ? "" : '<p class="note">Cele mai multe acte de urbanism: ' + chei.slice(0, 8).map(function (k) { return '<a href="#strada?s=' + encodeURIComponent(afis(k)) + '">' + esc(afis(k)) + "</a>"; }).join(", ") + ".</p>") + '</div><div id="s-out"></div>';
+      '<div class="chips" id="s-chips"' + (q0 ? " hidden" : "") + '><span class="muted">Încearcă:</span>' + chei.slice(0, 10).map(function (k) { return '<a class="chipl" href="#strada?s=' + encodeURIComponent(afis(k)) + '">' + esc(afis(k)) + "</a>"; }).join("") + "</div>" +
+      '</div><div id="s-gol"' + (q0 ? " hidden" : "") + '><div class="s-ce">' +
+      [["casa", "Ce se construiește", "autorizațiile de construire și certificatele de urbanism de pe stradă, pe hartă"], ["hcl", "Ce s-a hotărât", "hotărârile consiliului local care pomenesc strada"],
+        ["cos", "Ce s-a cumpărat", "lucrări și achiziții publice pentru strada ta"], ["cauta", "Ce scrie în documente", "procese-verbale și alte documente care o pomenesc"]].map(function (x) {
+        return '<div class="s-ce-i">' + ic(x[0]) + "<b>" + x[1] + "</b><span>" + x[2] + "</span></div>"; }).join("") + '</div></div><div id="s-out"></div>';
     var tq;
     $("s-q").addEventListener("input", function () { clearTimeout(tq); tq = setTimeout(function () { var v = $("s-q").value.trim(); history.replaceState(null, "", "#strada" + (v ? "?s=" + encodeURIComponent(v) : "")); arata(v); }, 400); });
     function arata(v) {
       var o = $("s-out"), k = strCheie(v);
+      if ($("s-gol")) { $("s-gol").hidden = k.length >= 3; $("s-chips").hidden = k.length >= 3; }
       if (k.length < 3) { o.innerHTML = ""; return; }
       var re = new RegExp("(^|[^a-z])" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^a-z]|$)");
       var potr = function (t) { return re.test(norm(t)); };
@@ -2740,6 +2764,7 @@
 
   function render() {
     var r = route(); nav(r);
+    document.body.setAttribute("data-sec", r.s.id);
     var el = $("app");
     if (!IND || !L) return;
     var id = r.s.id;

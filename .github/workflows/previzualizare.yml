@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       cheie:
-        description: "Cheia publică RSA (PEM) cu care se criptează"
+        description: "Cheia publică RSA (PEM) cu care se criptează; „sterge” șterge ramura cu datele"
         required: true
 
 permissions:
@@ -19,16 +19,22 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+      - name: Ștergerea ramurii cu date (după folosire)
+        if: inputs.cheie == 'sterge'
+        run: git push origin --delete previzualizare-date || true
       - uses: actions/setup-python@v6
+        if: inputs.cheie != 'sterge'
         with:
           python-version: "3.12"
       - name: "Datele colectate (doar citire)"
+        if: inputs.cheie != 'sterge'
         uses: actions/cache/restore@v4
         with:
           path: data
           key: date-${{ github.run_id }}
           restore-keys: date-
       - name: Arhivă criptată cu datele publice
+        if: inputs.cheie != 'sterge'
         env:
           CHEIE: ${{ inputs.cheie }}
         run: |

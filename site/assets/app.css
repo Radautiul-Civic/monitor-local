@@ -437,3 +437,105 @@ a.rss{font-size:.8rem;font-weight:650;color:#fff;background:#e07a00;border-radiu
 .rz-ed textarea{resize:vertical;overflow:hidden;min-height:2.6em}
 .rz-c{overflow-wrap:anywhere}
 .rz-c .h-row h2{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+/* ======================================================================
+   Aspect comun al paginilor: culoarea și iconița secțiunii, cifre, liste
+   ====================================================================== */
+body{--sec:var(--accent)}
+body[data-sec="consiliu"],body[data-sec="rezumate"]{--sec:var(--c1)}
+body[data-sec="primarie"]{--sec:var(--c3)}
+body[data-sec="achizitii"]{--sec:var(--c4)}
+body[data-sec="angajari"]{--sec:var(--c5)}
+body[data-sec="strada"]{--sec:var(--c2)}
+body[data-sec="cauta"]{--sec:var(--c7)}
+body[data-sec="litigii"]{--sec:var(--c8)}
+body[data-sec="texte"],body[data-sec="arhiva"]{--sec:var(--plan)}
+/* textul în culoarea secțiunii, destul de închis ca să se citească și pe galben */
+body{--sec-ink:color-mix(in srgb,var(--sec) 62%,var(--ink))}
+
+/* antetul paginii */
+.page-head{padding:26px 0 6px}
+.ph-t{align-items:center;justify-content:flex-start}
+.ph-t h1{margin:0;flex:1 1 auto}
+.ph-ic{flex:none;display:grid;place-items:center;width:44px;height:44px;border-radius:12px;background:color-mix(in srgb,var(--sec) 15%,var(--surface));color:var(--sec-ink)}
+.ph-ic .ic{width:26px;height:26px}
+.page-head>p{margin-top:8px}
+.subnav{margin-top:16px}
+.subnav a{transition:border-color .15s,background .15s}
+.subnav a:hover{border-color:color-mix(in srgb,var(--sec) 60%,var(--line))}
+.subnav a[aria-current="page"]{background:color-mix(in srgb,var(--sec) 16%,var(--surface));border-color:color-mix(in srgb,var(--sec) 70%,var(--line));color:var(--ink);font-weight:600}
+.subnav.sub2 a[aria-current="page"]{background:var(--sec-ink);border-color:var(--sec-ink);color:var(--surface)}
+nav.main a[aria-current="page"]{background:var(--sec-ink);color:#fff}
+
+/* cifrele mari */
+.tile{position:relative;overflow:hidden;padding:16px 16px 14px 18px}
+.tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--sec)}
+.tile .lbl{font-size:.74rem;text-transform:uppercase;letter-spacing:.06em;font-weight:650;color:var(--muted);line-height:1.35}
+.tile .val{font-size:2.1rem;margin:6px 0 2px}
+a.tile:hover{border-color:color-mix(in srgb,var(--sec) 60%,var(--line))}
+a.tile:hover .val{color:var(--sec-ink)}
+
+/* carduri și titluri */
+.card{border-radius:14px}
+.section>h2,.section>.h-row>h2{font-size:1.15rem;letter-spacing:-.005em}
+.h-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+/* filtre și câmpuri de căutare */
+.filters input,.filters select,.sx-bar input,.sx-bar select{min-height:42px;border-radius:10px;transition:border-color .15s,box-shadow .15s}
+.filters input:focus,.filters select:focus{outline:none;border-color:var(--sec);box-shadow:0 0 0 3px color-mix(in srgb,var(--sec) 22%,transparent)}
+input[type="search"]{padding-left:38px!important;background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%238a8f94' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l5 5'/%3E%3C/svg%3E") no-repeat 12px center}
+
+/* listele de documente */
+.doc{padding:14px 10px;margin:0 -10px;border-top:1px solid var(--line);transition:background .15s}
+.items>.doc:hover,#vt-l .doc:hover{background:color-mix(in srgb,var(--sec) 4%,var(--surface))}
+.doc .id{font-size:.95rem}
+.doc .id a{color:var(--sec-ink);text-decoration:none}
+.doc .id a:hover{text-decoration:underline}
+.doc .t{font-size:.97rem;line-height:1.45;color:var(--ink);margin:4px 0 6px}
+.doc .m{font-size:.83rem}
+a.lk{display:inline-flex;align-items:center;gap:4px;padding:1px 9px;border:1px solid var(--line);border-radius:7px;color:var(--ink-2);text-decoration:none;font-weight:500;font-size:.8rem;background:var(--surface)}
+a.lk:hover{border-color:var(--sec);color:var(--sec-ink)}
+.doc .m .tag{font-size:.72rem}
+.count{font-weight:600;color:var(--ink-2)}
+.more{display:block;margin:14px auto 0;border-radius:99px;padding:9px 22px;font-weight:600;color:var(--sec-ink)}
+.more:hover{border-color:var(--sec)}
+
+/* tabele */
+th{text-transform:uppercase;letter-spacing:.04em;font-size:.72rem}
+th a{color:inherit;text-decoration:none}
+tbody tr:hover td{background:color-mix(in srgb,var(--sec) 4%,transparent)}
+
+/* voturile pe ședințe: strânse */
+details.vt-s>summary{list-style:none;cursor:pointer}
+details.vt-s>summary::-webkit-details-marker{display:none}
+details.vt-s>summary .h{align-items:center}
+details.vt-s>summary .id::before{content:"▸";display:inline-block;width:1em;color:var(--muted);transition:transform .15s}
+details.vt-s[open]>summary .id::before{transform:rotate(90deg)}
+.vt-r{color:var(--ink-2);font-size:.85rem}
+.vt-ne{color:var(--warn);font-weight:600}
+details.vt-s[open]{background:color-mix(in srgb,var(--sec) 3%,var(--surface))}
+details.vt-s>.m{padding-left:1em}
+
+/* Strada mea */
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;font-size:.88rem}
+a.chipl{padding:4px 12px;border-radius:99px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);text-decoration:none}
+a.chipl:hover{border-color:var(--sec);background:color-mix(in srgb,var(--sec) 12%,var(--surface))}
+.s-ce{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:16px 0}
+.s-ce-i{display:flex;flex-direction:column;gap:4px;padding:16px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
+.s-ce-i .ic{width:30px;height:30px;color:var(--sec-ink);margin-bottom:4px}
+.s-ce-i span{color:var(--ink-2);font-size:.88rem}
+#s-q{font-size:1.05rem;min-height:50px}
+
+@media (max-width:640px){
+  .grid:not(.two){grid-template-columns:1fr 1fr;gap:8px}
+  .grid:not(.two)>.tile:last-child:nth-child(odd){grid-column:1/-1}
+  .tile{padding:12px 12px 12px 14px}.tile .lbl{font-size:.68rem}.tile .sub{font-size:.78rem}
+  .subnav{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-left:-16px;margin-right:-16px;padding:0 16px}
+  .subnav::-webkit-scrollbar{display:none}.subnav a{white-space:nowrap}
+  .page-head h1{font-size:1.45rem}
+  .ph-ic{width:38px;height:38px;border-radius:10px}.ph-ic .ic{width:22px;height:22px}
+  .tile .val{font-size:1.5rem}
+  .doc{margin:0 -6px;padding:12px 6px}
+}
+.sx-cols{scroll-snap-type:x mandatory}.sx-col{scroll-snap-align:start}
+@media (max-width:640px){.sx-cols{grid-template-columns:repeat(5,78vw)}.sx-col-l{max-height:380px}}
