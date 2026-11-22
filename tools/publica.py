@@ -117,10 +117,11 @@ SCOASE_DIN_PUBLIC = ("litigii.json", "arhiva-stare.json", "arhiva-manifest.json"
 def _fara_litigii_indicatori(ind):
     ind = dict(ind)
     ind.pop("litigii", None)
+    # ce lipsește din sursele noastre (numere de hotărâre lipsă, stadiul monitorului) rămâne intern
+    for k in ("hcl_numere_lipsa", "stadiu"):
+        ind.pop(k, None)
     # problemele de publicare semnalate automat apar public doar după verificarea manuală (pot fi alarme false)
     ind["hcl_probleme"] = [p for p in ind.get("hcl_probleme") or [] if p.get("verificare") == "confirmat"]
-    if isinstance(ind.get("stadiu"), list):
-        ind["stadiu"] = [x for x in ind["stadiu"] if not (isinstance(x, dict) and str(x.get("sectiune", "")).startswith("Litigii"))]
     return ind
 
 

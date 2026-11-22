@@ -366,7 +366,8 @@
       "</div>";
     if (INTERN) h += '<p class="callout">Versiunea internă: aceleași date ca versiunea publică, plus litigiile și arhiva de siguranță. Rapoartele de verificare ale ultimei colectări: <a href="date/rapoarte.zip?v=' + Date.now() + '">rapoarte.zip</a>.</p>';
     h += INTERN ? '<div id="lit-news"></div><div id="arhiva-card"></div>' : "";
-    // stadiul monitorului
+    if (!INTERN) return h + ghid();
+    // stadiul monitorului (intern: ce acoperim, ce lipsește, ce urmează)
     var st = IND.stadiu || [], grupe = {};
     st.forEach(function (x) { (grupe[x.sectiune] = grupe[x.sectiune] || []).push(x); });
     h += '<section class="card section"><h2>Stadiul monitorului</h2><p class="note">Ce acoperim deja, ce e parțial, ce lipsește din sursele publice și ce urmează.</p>' +
@@ -379,6 +380,18 @@
     return h + "</section>";
   }
 
+  function ghid() {   // pagina de start publică: ce găsește un cetățean, cu linkuri
+    var G = [["#consiliu/hcl", "Hotărârile consiliului local", "Toate hotărârile din 2013, cu textul lor și cum s-a votat."],
+      ["#consiliu/consilieri", "Consilierii", "Cine e în consiliu, cât a fost prezent și cum a votat fiecare."],
+      ["#primarie/buget", "Bugetul orașului", "De unde vin banii, pe ce se cheltuiesc, cât se investește și cât se împrumută."],
+      ["#primarie/urbanism/harta", "Ce se construiește", "Certificatele de urbanism și autorizațiile de construire, pe hartă."],
+      ["#achizitii/sicap", "Achizițiile publice", "Ce cumpără primăria și instituțiile din oraș, de la cine și cu cât."],
+      ["#angajari/statistici", "Concursuri și angajări", "Posturile scoase la concurs, câți candidați au fost și cine a câștigat."],
+      ["#cauta", "Caută orice", "O stradă, o firmă, un număr de hotărâre sau un cuvânt din documente."]];
+    return '<section class="card section"><h2>Ce găsești aici</h2><div class="ghid">' + G.map(function (g) {
+      return '<a class="ghid-i" href="' + g[0] + '"><b>' + esc(g[1]) + "</b><span>" + esc(g[2]) + "</span></a>";
+    }).join("") + "</div></section>";
+  }
   function gb(o) { return o >= 1e9 ? dec((o / 1e9).toFixed(1)) + " GB" : o >= 1e6 ? Math.round(o / 1e6) + " MB" : Math.max(1, Math.round(o / 1e3)) + " KB"; }
   function litNewsCard() {   // pagina de start internă: ultimele noutăți din instanțe
     var el = $("lit-news"); if (!el || !INTERN) return;
@@ -497,7 +510,7 @@
   function hcl(el, r) {
     var pe = IND.hcl_pe_ani || {}, lag = IND.hcl_intarziere_publicare || {};
     var ani = Object.keys(pe).map(Number), cats = [];
-    for (var a = Math.min.apply(null, ani); a <= Math.max.apply(null, ani); a++) cats.push(String(a));
+    for (var a = Math.min.apply(null, ani); a <= Math.max.apply(null, ani); a++) if (INTERN || pe[String(a)]) cats.push(String(a));
     var gaps = {}; cats.forEach(function (y) { if (!pe[y]) gaps[y] = "fără sursă"; });
     var total = ani.reduce(function (s, y) { return s + pe[y].gasite; }, 0);
     var scan = ani.reduce(function (s, y) { return s + pe[y].scanate; }, 0);
@@ -506,17 +519,17 @@
       '<div class="grid">' + tile("Hotărâri în monitor", nr(total), "", "din " + cats[0] + " până în " + cats[cats.length - 1]) +
       (ultim ? tile("Durata medie de publicare (" + ultim + ")", dec(lag[ultim].medie_zile), zile(lag[ultim].medie_zile), "de la adoptare la postarea pe site, pentru " + lag[ultim].hcl + " hotărâri") : "") +
       tile("Hotărâri publicate doar ca scanare", nr(scan), "", "din " + nr(total) + " (" + Math.round(100 * scan / Math.max(total, 1)) + "%)") + "</div>" +
-      '<section class="card section"><h2>Hotărâri pe ani</h2><p class="note">Câte hotărâri apar în listele publicate de primărie, față de ultimul număr de hotărâre din an.</p>' +
-      legend([["Hotărâri găsite", "var(--s1)"], ["Ultimul număr din an", "var(--track)"]]) + '<div class="chart" id="ch-hcl"></div>' +
-      '<details class="tbl"><summary>Vezi tabelul</summary><div class="tw"><table><thead><tr><th>An</th><th class="n">Găsite</th><th class="n">Ultimul nr.</th><th class="n">Acoperire</th><th class="n">Scanate</th><th class="n">Durată medie publicare</th><th>Sursa</th></tr></thead><tbody>' +
-      cats.slice().reverse().map(function (y) {
+      '<section class="card section"><h2>Hotărâri pe ani</h2><p class="note">' + (INTERN ? "Câte hotărâri apar în listele publicate de primărie, față de ultimul număr de hotărâre din an." : "Câte hotărâri ale consiliului local a publicat primăria, pe ani.") + "</p>" +
+      (INTERN ? legend([["Hotărâri găsite", "var(--s1)"], ["Ultimul număr din an", "var(--track)"]]) : "") + '<div class="chart" id="ch-hcl"></div>' +
+      '<details class="tbl"><summary>Vezi tabelul</summary><div class="tw"><table><thead><tr><th>An</th><th class="n">Hotărâri</th>' + (INTERN ? '<th class="n">Ultimul nr.</th><th class="n">Acoperire</th>' : "") + '<th class="n">Scanate</th><th class="n">Durată medie publicare</th>' + (INTERN ? "<th>Sursa</th>" : "") + "</tr></thead><tbody>" +
+      cats.slice().reverse().filter(function (y) { return INTERN || pe[y]; }).map(function (y) {
         var v = pe[y];
         if (!v) return "<tr><td>" + y + '</td><td colspan="6">Nicio sursă publică găsită pentru acest an.</td></tr>';
-        return "<tr><td>" + y + '</td><td class="n">' + v.gasite + '</td><td class="n">' + v.ultimul_nr + '</td><td class="n">' + v.acoperire_pct + '%</td><td class="n">' + v.scanate +
-          '</td><td class="n">' + (v.medie_publicare_zile != null ? dec(v.medie_publicare_zile) + " zile" : "-") + "</td><td>" + esc(v.sursa) + "</td></tr>";
+        return "<tr><td>" + y + '</td><td class="n">' + v.gasite + "</td>" + (INTERN ? '<td class="n">' + v.ultimul_nr + '</td><td class="n">' + v.acoperire_pct + "%</td>" : "") + '<td class="n">' + v.scanate +
+          '</td><td class="n">' + (v.medie_publicare_zile != null ? dec(v.medie_publicare_zile) + " zile" : "-") + "</td>" + (INTERN ? "<td>" + esc(v.sursa) + "</td>" : "") + "</tr>";
       }).join("") + "</tbody></table></div></details>" +
-      '<p class="note">Acoperirea sub 100% înseamnă că în lista publicată lipsesc numere de hotărâre. Verificăm alte surse înainte de orice concluzie. Durata de publicare se calculează doar pentru anii în care data postării pe site e credibilă.</p></section>';
-    if (IND.hcl_numere_lipsa) {
+      '<p class="note">' + (INTERN ? "Acoperirea sub 100% înseamnă că în lista publicată lipsesc numere de hotărâre. Verificăm alte surse înainte de orice concluzie. " : "") + "Durata de publicare se calculează doar pentru anii în care data postării pe site e credibilă.</p></section>";
+    if (INTERN && IND.hcl_numere_lipsa) {
       var lipsa = IND.hcl_numere_lipsa || {};
       h += '<section class="card section"><h2>Numere de hotărâre care lipsesc din lista publicată</h2><p class="note">Numerele de hotărâre care nu apar în lista publicată, pe ani. De căutat în procesele-verbale și în alte surse.</p><div class="tw"><table><thead><tr><th>An</th><th class="n">Lipsă</th><th>Numere</th></tr></thead><tbody>' +
         Object.keys(lipsa).sort().reverse().filter(function (y) { return lipsa[y].lipsa_total; }).map(function (y) {
@@ -540,8 +553,8 @@
     chart($("ch-hcl"), {
       cats: cats, label: "Hotărâri găsite pe ani, față de ultimul număr de hotărâre",
       series: [{ name: "Hotărâri găsite", color: "var(--s1)", values: cats.map(function (y) { return pe[y] ? pe[y].gasite : 0; }) }],
-      track: { values: cats.map(function (y) { return pe[y] ? pe[y].ultimul_nr : 0; }) }, gaps: gaps,
-      tooltip: function (i) { var v = pe[cats[i]]; return v ? "<b>" + cats[i] + "</b><br>" + v.gasite + " găsite din " + v.ultimul_nr + " (" + v.acoperire_pct + "%)<br>" + v.scanate + " scanate" : "<b>" + cats[i] + "</b><br>nicio sursă publică"; }
+      track: INTERN ? { values: cats.map(function (y) { return pe[y] ? pe[y].ultimul_nr : 0; }) } : null, gaps: INTERN ? gaps : null,
+      tooltip: function (i) { var v = pe[cats[i]]; return !v ? "<b>" + cats[i] + "</b><br>" + (INTERN ? "nicio sursă publică" : "-") : INTERN ? "<b>" + cats[i] + "</b><br>" + v.gasite + " găsite din " + v.ultimul_nr + " (" + v.acoperire_pct + "%)<br>" + v.scanate + " scanate" : "<b>" + cats[i] + "</b><br>" + v.gasite + " hotărâri<br>" + v.scanate + " publicate doar ca scanare"; }
     });
     lista($("lst"), L.hcl || [], {
       placeholder: "Caută în titluri (ex. buget, teren, strada Ștefan cel Mare)",
@@ -1958,7 +1971,7 @@
   var CON = null, AKEYS = ["q", "inst", "proc", "an", "st"];
   var PROC = [["recrutare", "Concurs de recrutare", "var(--c1)"], ["promovare", "Examen de promovare", "var(--c4)"], ["transfer", "Transfer la cerere", "var(--c3)"], ["management", "Concurs de management", "var(--c7)"]];
   var ASTARE = [["ok", "Ocupat / promovat", "var(--good)"], ["nu", "Neocupat / nepromovat", "var(--bad)"], ["curs", "În desfășurare", "var(--c1)"],
-    ["necitit", "Rezultat necitit încă", "var(--warn)"], ["lipsa", "Fără rezultat final publicat", "var(--plan)"]];
+    ["necitit", INTERN ? "Rezultat necitit încă" : "Rezultatul e în documentul publicat", "var(--warn)"], ["lipsa", "Fără rezultat final publicat", "var(--plan)"]];
   function aStare(c) {
     var s = c.stare;
     return s === "ocupat" || s === "promovat" ? "ok" : s === "neocupat" || s === "nepromovat" ? "nu" : s === "în desfășurare" ? "curs" : s === "fără rezultat final publicat" ? "lipsa" : "necitit";
@@ -2039,7 +2052,7 @@
       (dur.length ? tile("Durata medie a unui concurs", nr(Math.round(dur.reduce(function (a, b) { return a + b; }, 0) / dur.length)), "zile", "de la primul anunț la rezultatele finale") : "") + "</div>" +
       '<section class="card section"><h2>Concursuri pe ani, după procedură</h2><p class="note">După data primului anunț. Apasă pe un an ca să-l filtrezi.</p>' +
       legend(PROC.filter(function (x) { return rows.some(function (c) { return c.procedura === x[0]; }); }).map(function (x) { return [x[1], x[2]]; })) + '<div class="chart" id="ch-a1"></div></section>' +
-      (rec.length ? '<section class="card section"><h2>Concursurile de angajare: s-a ocupat postul?</h2><p class="note">Rezultatul se citește automat din documentul cu rezultatele finale. „Rezultat necitit încă” înseamnă că documentul e scanat și n-a trecut încă prin recunoașterea textului sau nu l-am putut interpreta: deschide documentul din fișa concursului.</p>' +
+      (rec.length ? '<section class="card section"><h2>Concursurile de angajare: s-a ocupat postul?</h2><p class="note">Rezultatul se citește automat din documentul cu rezultatele finale. ' + (INTERN ? "„Rezultat necitit încă” înseamnă că documentul e scanat și n-a trecut încă prin recunoașterea textului sau nu l-am putut interpreta." : "Când rezultatul nu poate fi citit automat, îl găsești în documentul publicat de primărie,") + ' deschide documentul din fișa concursului.</p>' +
         legend(ASTARE.map(function (x) { return [x[1], x[2]]; })) + '<div class="chart" id="ch-a2"></div></section>' : "") +
       '<div class="grid two"><section class="card"><h2>Pe instituții</h2><p class="note">Câte concursuri și examene a organizat fiecare. Apasă ca să vezi doar instituția.</p>' +
       hbl(top(inst, 15).map(function (k) { return { l: k, v: inst[k], href: angLink("statistici", F, { inst: k }) }; }), nr, rows.length) + "</section>" +
@@ -2060,7 +2073,7 @@
   }
   function angFisa(c) {
     var s = aStare(c), sn = { ok: c.procedura === "promovare" ? "Promovat" : "Ocupat", nu: c.procedura === "promovare" ? "Nepromovat" : "Neocupat",
-      curs: "În desfășurare", necitit: c.stare === "rezultat în document scanat" ? "Rezultat în document scanat" : "Rezultat necitit", lipsa: "Fără rezultat final publicat" }[s];
+      curs: "În desfășurare", necitit: INTERN ? (c.stare === "rezultat în document scanat" ? "Rezultat în document scanat" : "Rezultat necitit") : "Rezultatul e în document", lipsa: "Fără rezultat final publicat" }[s];
     var cap = function (x) { return x ? x.charAt(0).toUpperCase() + x.slice(1) : x; };
     var det = [];
     if (c.functii && c.functii.length) det.push("<b>Funcția:</b> " + esc(c.functii.map(cap).join(", ")) + (c.posturi > 1 ? " (" + c.posturi + " posturi)" : ""));
@@ -2113,7 +2126,7 @@
     });
     var G = Object.keys(g).map(function (k) { return g[k]; }).sort(function (a, b) { return b.n - a.n || (b.ultim > a.ultim ? 1 : -1); });
     var curs = rows.filter(function (c) { return aStare(c) === "curs"; });
-    var cifre = function (o) { var c = o.cifre || {}, p = []; if (c.total) p.push("<b>" + c.total + " posturi</b>"); if (c.publice) p.push(c.publice + " funcții publice"); if (c.contractuale) p.push(c.contractuale + " contractuale"); if (c.demnitate) p.push(c.demnitate + " de demnitate"); return p.join(", ") || (o.are_text ? "cifrele nu au putut fi citite" : "document scanat, necitit încă"); };
+    var cifre = function (o) { var c = o.cifre || {}, p = []; if (c.total) p.push("<b>" + c.total + " posturi</b>"); if (c.publice) p.push(c.publice + " funcții publice"); if (c.contractuale) p.push(c.contractuale + " contractuale"); if (c.demnitate) p.push(c.demnitate + " de demnitate"); return p.join(", ") || (INTERN ? (o.are_text ? "cifrele nu au putut fi citite" : "document scanat, necitit încă") : "vezi hotărârea"); };
     el.innerHTML = '<section class="card section"><h2>Organigrama în vigoare</h2><p>Primăria publică organigrama aparatului de specialitate al primarului și statul de funcții pe site: ' +
       (safeUrl(oc.pagina) ? '<a href="' + esc(oc.pagina) + '" rel="noopener">organigrama</a>' : "organigrama") + (safeUrl(oc.stat_de_functii) ? ', <a href="' + esc(oc.stat_de_functii) + '" rel="noopener">pagina „Stat de funcții”</a>' : "") +
       '. Hotărârile de mai jos arată cum s-a schimbat organigrama în timp.</p></section>' +

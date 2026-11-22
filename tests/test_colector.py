@@ -1337,7 +1337,7 @@ class TestPublicare(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         d = os.path.join(tmp, "data")
         os.makedirs(os.path.join(d, "intern-date"))
-        json.dump({"calculat_la": "x", "hcl_pe_ani": {}, "litigii": {"total": 3}, "registre_urbanism": {},
+        json.dump({"calculat_la": "x", "hcl_pe_ani": {}, "litigii": {"total": 3}, "registre_urbanism": {}, "stadiu": [], "hcl_numere_lipsa": {},
                    "hcl_probleme": [{"verificare": "confirmat"}, {"verificare": "neverificat"}]}, open(os.path.join(d, "indicatori.json"), "w"))
         json.dump({"generat_la": "x", "hcl": [1], "pv": [2], "contracte": [3]}, open(os.path.join(d, "liste.json"), "w"))
         for n in ("sicap-explorer.json", "buget.json", "sicap.json"):
@@ -1357,6 +1357,8 @@ class TestPublicare(unittest.TestCase):
         self.assertEqual(json.load(open(pub["urbanism.json"]))["ac"][0]["lat"], 47.8)   # harta e și publică
         ind = json.load(open(pub["indicatori.json"]))
         self.assertNotIn("litigii", ind)
+        self.assertNotIn("stadiu", ind)
+        self.assertNotIn("hcl_numere_lipsa", ind)
         self.assertIn("registre_urbanism", ind)
         self.assertEqual(len(ind["hcl_probleme"]), 1)
         self.assertEqual(sorted(json.load(open(pub["liste.json"]))), ["contracte", "generat_la", "hcl", "pv"])
