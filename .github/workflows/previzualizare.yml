@@ -1,0 +1,57 @@
+name: Date pentru previzualizare (criptate)
+
+# Pentru lucrul la aspectul site-ului cu date reale: împachetează DOAR datele din zona publică (aceleași fișiere care
+# sunt deja publice pe monitor, fără litigii și fără nimic din zona internă), le criptează cu cheia publică primită
+# și le pune pe ramura „previzualizare-date”, de unde se șterg după folosire. Fără cheia privată, fișierul nu poate fi citit.
+on:
+  workflow_dispatch:
+    inputs:
+      cheie:
+        description: "Cheia publică RSA (PEM) cu care se criptează"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  impacheteaza:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: "Datele colectate (doar citire)"
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: date-${{ github.run_id }}
+          restore-keys: date-
+      - name: Arhivă criptată cu datele publice
+        env:
+          CHEIE: ${{ inputs.cheie }}
+        run: |
+          python - <<'PY'
+          import os, sys, tarfile
+          sys.path.insert(0, "tools")
+          import publica
+          with tarfile.open("/tmp/date.tar.gz", "w:gz") as t:
+              for nume, cale in publica.public_date().items():
+                  t.add(cale, arcname="date/" + nume)
+              for d in ("distribuie",):
+                  p = os.path.join("data", d, "index.json")
+                  if os.path.exists(p):
+                      t.add(p, arcname="s/index.json")
+          print(os.path.getsize("/tmp/date.tar.gz"), "octeți")
+          PY
+          printf '%s\n' "$CHEIE" | sed 's/\\n/\n/g' > /tmp/pub.pem
+          openssl rand -out /tmp/k.bin 32
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in /tmp/date.tar.gz -out date.enc -pass file:/tmp/k.bin
+          openssl pkeyutl -encrypt -pubin -inkey /tmp/pub.pem -pkeyopt rsa_padding_mode:oaep -in /tmp/k.bin -out cheie.enc
+          rm -f /tmp/k.bin /tmp/date.tar.gz
+          git config user.name "monitor-local"; git config user.email "monitor-local@users.noreply.github.com"
+          git checkout --orphan previzualizare-date
+          git rm -rfq --cached . && git add -f date.enc cheie.enc
+          git commit -qm "date criptate pentru previzualizare"
+          git push -qf origin previzualizare-date

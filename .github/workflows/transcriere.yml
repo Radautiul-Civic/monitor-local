@@ -21,7 +21,7 @@ concurrency:
 
 permissions:
   contents: read
-  actions: read
+  actions: write   # ca să putem șterge artefactele (audio și transcrieri) la final
 
 env:
   MC_WHISPER: large-v3
@@ -158,3 +158,11 @@ jobs:
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m monitor_colector.video refa
+      - name: Ștergerea artefactelor (depozitul e public; transcrierile rămân doar în zona internă)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for id in $(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts?per_page=100" --jq '.artifacts[].id'); do
+            gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" && echo "șters artefactul $id"
+          done
