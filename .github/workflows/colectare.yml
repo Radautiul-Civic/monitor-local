@@ -132,6 +132,25 @@ jobs:
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
         run: python tools/publica.py
 
+      - name: Golire cache Cloudflare (ca vizitatorii să vadă imediat versiunea nouă)
+        if: always()
+        continue-on-error: true
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        run: |
+          if [ -z "$CF_API_TOKEN" ] || [ -z "$CF_ZONE_ID" ]; then echo "lipsesc CF_API_TOKEN / CF_ZONE_ID; sar peste"; exit 0; fi
+          purge() {
+            curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
+              -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data "$1"
+          }
+          # doar subdomeniul monitorului; dacă planul nu permite golirea pe host, se golește toată zona
+          r=$(purge '{"hosts":["monitor.radautiulcivic.ro"]}')
+          if echo "$r" | grep -q '"success": *true'; then echo "cache golit pentru monitor.radautiulcivic.ro"; exit 0; fi
+          echo "golirea pe host n-a mers: $r"
+          r=$(purge '{"purge_everything":true}')
+          echo "$r" | grep -q '"success": *true' && echo "cache golit pentru toată zona" || { echo "eroare: $r"; exit 1; }
+
       - name: Salvare date pentru rularea următoare
         uses: actions/cache/save@v4
         if: always()
