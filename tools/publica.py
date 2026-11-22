@@ -106,6 +106,8 @@ def texte_de_urcat(base):
                     files.append((p, "/".join(x for x in ("intern", rel.replace(os.sep, "/")) if x), n, key, sig))
     # pagina internă (aceeași aplicație ca site-ul public, cu linkuri la Word)
     files.append((cu_versiune(os.path.join(ROOT, "site_intern", "index.html")), "intern", "index.html", None, None))
+    # panoul de aprobare a rezumatelor (PHP, în folderul cu parolă)
+    files.append((os.path.join(ROOT, "site_intern", "api.php"), "intern", "api.php", None, None))
     return files, done
 
 

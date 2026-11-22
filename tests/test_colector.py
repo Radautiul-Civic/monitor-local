@@ -1606,3 +1606,84 @@ class TestCetateni(unittest.TestCase):
         self.assertTrue(x.find("./channel/item/link").text.startswith("https://monitor.radautiulcivic.ro/#consiliu/urmatoare"))
         ev2 = C.export(st, azi=date(2026, 11, 22))[1]
         self.assertEqual([e["id"] for e in ev], [e["id"] for e in ev2])   # GUID-uri stabile între rulări
+
+
+class TestRezumate(unittest.TestCase):
+    def test_ident_si_unire(self):
+        from monitor_colector import video as V
+        self.assertEqual(V.ident({"data": "2026-11-18", "url": "https://www.facebook.com/61559725245078/videos/1152024740560456/"}), "2026-11-18-1152024740560456")
+        self.assertEqual(V.ident({"data": "2026-11-18", "url": "https://www.youtube.com/watch?v=abcDEF12345"}), "2026-11-18-abcDEF12345")
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        for k, segs in ((0, [[0.0, 4.0, "Bună ziua."]]), (1, [[2.5, 6.0, "Punctul doi."]])):
+            with open(os.path.join(tmp, f"parte{k:03d}.json"), "w", encoding="utf-8") as f:
+                json.dump(segs, f)
+        self.assertEqual(V.uneste([os.path.join(tmp, "parte001.json"), os.path.join(tmp, "parte000.json")]),
+                         [[0.0, 4.0, "Bună ziua."], [1202.5, 1206.0, "Punctul doi."]])
+
+    def test_plan(self):
+        from monitor_colector import video as V
+
+        class I:
+            def json(self, p, implicit=None):
+                return [{"data": "2026-11-18", "url": "https://www.facebook.com/x/videos/111/"}, {"data": "2026-10-30", "url": "https://www.facebook.com/x/videos/222/"}]
+            def lista(self, folder):
+                return ["2026-10-30-222.json"]
+        self.assertEqual(V.plan(I())["id"], "2026-11-18-111")
+        self.assertEqual(V.plan(I(), {"data": "2026-09-01", "url": "https://www.facebook.com/x/videos/333/"})["id"], "2026-09-01-333")
+
+    def test_de_refacut(self):
+        from monitor_colector import video as V
+        c = {"rezumat": {"rezumat": "x"}, "are_pv": False, "generat_la": "2026-11-20T10:00:00"}
+        self.assertFalse(V.de_refacut(c, None, False))
+        self.assertTrue(V.de_refacut(c, None, True))                                   # a apărut procesul-verbal
+        self.assertFalse(V.de_refacut(c, {"stare": "ciorna", "la": "2026-11-21"}, True))  # cineva a umblat deja
+        self.assertTrue(V.de_refacut(c, {"stare": "refa", "la": "2026-11-21T09:00:00"}, False))
+        self.assertFalse(V.de_refacut(c, {"stare": "refa", "la": "2026-11-19T09:00:00"}, False))
+        self.assertTrue(V.de_refacut({}, None, False))
+
+    def test_transcriere_si_apel(self):
+        from monitor_colector import rezumat as R
+        segs = [[0, 5, "Bună ziua, începem ședința."], [12, 20, "Dau cuvântul domnului consilier Popescu."], [31, 40, "Mulțumesc."], [3700, 3705, "Vot: adoptat."]]
+        self.assertEqual(R.transcriere_text(segs).splitlines()[0], "[0:00:00] Bună ziua, începem ședința. Dau cuvântul domnului consilier Popescu. Mulțumesc.")
+        self.assertIn("[1:01:40] Vot: adoptat.", R.transcriere_text(segs))
+        ctx = {"data": "2026-11-18", "convocare": {"tip": "extraordinara", "ordinea_de_zi": [{"nr": 1, "text": "Proiect de hotărâre privind taxele"}]},
+               "hcl": [{"an": 2026, "nr": 180, "titlu": "privind taxele"}], "pv": None, "proiecte": []}
+        trimis = {}
+
+        class Raspuns:
+            status_code = 200
+            def json(self):
+                return {"model": "m", "usage": {"input_tokens": 10}, "content": [{"type": "text", "text": '```json\n{"rezumat": "S-au aprobat taxele.", "puncte": []}\n```'}]}
+
+        class Sesiune:
+            def post(self, url, **kw):
+                trimis.update(kw)
+                return Raspuns()
+        r = R.genereaza(ctx, segs, {"url": "https://fb/v", "titlu": "Ședința"}, cheie="k", sesiune=Sesiune())
+        self.assertEqual(r["rezumat"], "S-au aprobat taxele.")
+        msg = trimis["json"]["messages"][0]["content"]
+        self.assertIn("1. Proiect de hotărâre privind taxele", msg)
+        self.assertIn("HCL 180/2026", msg)
+        self.assertIn("procesul-verbal nu e încă publicat", msg)
+        self.assertEqual(trimis["headers"]["x-api-key"], "k")
+        vechi = os.environ.pop("ANTHROPIC_API_KEY", None)
+        try:
+            with self.assertRaises(RuntimeError):   # fără cheie nu se trimite nimic
+                R.genereaza(ctx, segs, {}, cheie=None)
+        finally:
+            if vechi:
+                os.environ["ANTHROPIC_API_KEY"] = vechi
+
+    def test_context(self):
+        from monitor_colector import rezumat as R
+        from monitor_colector.store import Store
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        st = Store(os.path.join(tmp, "t.db"))
+        st.upsert_post("dispozitii", {"id": 5, "title": {"rendered": "Dispoziția nr. 794/13.11.2026 privind convocarea Consiliului Local în ședință extraordinară, în data de 18.11.2026 ora 09:00"},
+                                      "content": {"rendered": ""}, "date": "2026-11-13T10:00:00", "modified": "2026-11-13T10:00:00", "link": "https://x/5/"})
+        st.upsert_hcl({"year": 2026, "number": 181, "date": date(2026, 11, 18), "title": "privind ceva", "origin": "site", "wp_id": 9, "posted": None, "pdf_url": None})
+        st.db.commit()
+        c = R.context(st.db, "2026-11-19")   # data din titlul videoclipului poate fi cu o zi alături
+        self.assertEqual((c["data"], c["convocare"]["tip"], [h["nr"] for h in c["hcl"]]), ("2026-11-18", "extraordinara", [181]))

@@ -1,0 +1,157 @@
+name: Transcriere ședințe și rezumate
+
+# Ia din panoul intern (intern/date/video.json) următoarea înregistrare netranscrisă, o descarcă (doar sunetul),
+# o taie în bucăți de 20 de minute transcrise în paralel cu Whisper (faster-whisper, model large-v3, limba română),
+# urcă transcrierea în zona internă și scrie ciorna rezumatului (API Anthropic). Ciorna se aprobă din panoul intern.
+on:
+  schedule:
+    - cron: "40 */6 * * *"   # la fiecare 6 ore; dacă nu e nimic nou, se termină în câteva minute
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Link video (opțional; altfel se ia din lista din panou)"
+        default: ""
+      data:
+        description: "Data ședinței, AAAA-LL-ZZ (doar împreună cu linkul)"
+        default: ""
+
+concurrency:
+  group: transcriere
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  MC_WHISPER: large-v3
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    outputs:
+      gasit: ${{ steps.p.outputs.gasit }}
+      id: ${{ steps.p.outputs.id }}
+      url: ${{ steps.p.outputs.url }}
+      data: ${{ steps.p.outputs.data }}
+      bucati: ${{ steps.a.outputs.bucati }}
+      titlu: ${{ steps.a.outputs.titlu }}
+      durata: ${{ steps.a.outputs.durata }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install requests yt-dlp
+      - name: Următoarea înregistrare de transcris
+        id: p
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          IN_URL: ${{ inputs.url }}
+          IN_DATA: ${{ inputs.data }}
+        run: |
+          if [ -n "$IN_URL" ] && [ -n "$IN_DATA" ]; then python -m monitor_colector.video plan --url "$IN_URL" --data "$IN_DATA"
+          else python -m monitor_colector.video plan; fi
+      - name: Descărcarea sunetului și tăierea în bucăți
+        id: a
+        if: steps.p.outputs.gasit == 'da'
+        env:
+          URL: ${{ steps.p.outputs.url }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          titlu=$(yt-dlp --skip-download --print "%(title)s" "$URL" | head -1 | tr -d '\n' | cut -c1-200)
+          durata=$(yt-dlp --skip-download --print "%(duration)s" "$URL" | head -1)
+          yt-dlp -f "bestaudio/best" -o "audio.%(ext)s" "$URL" 2>&1 | grep -v "\[download\] *[0-9.]*% of" | tail -5
+          mkdir -p audio
+          ffmpeg -hide_banner -loglevel error -i audio.* -ac 1 -ar 16000 -f segment -segment_time 1200 -c:a flac audio/parte%03d.flac
+          ls -la audio
+          b=$(ls audio | sed -E 's/parte([0-9]+)\.flac/"\1"/' | paste -sd, -)
+          echo "bucati=[$b]" >> "$GITHUB_OUTPUT"
+          { echo "titlu<<EOF"; echo "$titlu"; echo "EOF"; } >> "$GITHUB_OUTPUT"
+          echo "durata=$durata" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: steps.p.outputs.gasit == 'da'
+        with:
+          name: audio
+          path: audio/
+          retention-days: 2
+
+  transcrie:
+    needs: plan
+    if: needs.plan.outputs.gasit == 'da'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        parte: ${{ fromJSON(needs.plan.outputs.bucati) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install faster-whisper
+      - name: Modelul Whisper (din cache, ca să nu se descarce de fiecare dată)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: whisper-${{ env.MC_WHISPER }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: audio
+          path: audio
+      - name: Transcriere
+        run: python -m monitor_colector.video transcrie audio/parte${{ matrix.parte }}.flac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transcriere-${{ matrix.parte }}
+          path: audio/parte${{ matrix.parte }}.json
+          retention-days: 2
+
+  rezumate:
+    needs: [plan, transcrie]
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Datele monitorului (doar citire: ordinea de zi, proiecte, procese-verbale)
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: date-${{ github.run_id }}
+          restore-keys: date-
+      - uses: actions/download-artifact@v4
+        if: needs.plan.outputs.gasit == 'da' && needs.transcrie.result == 'success'
+        with:
+          pattern: transcriere-*
+          path: bucati
+      - name: Transcrierea întreagă și ciorna rezumatului
+        if: needs.plan.outputs.gasit == 'da' && needs.transcrie.result == 'success'
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          V_ID: ${{ needs.plan.outputs.id }}
+          V_URL: ${{ needs.plan.outputs.url }}
+          V_DATA: ${{ needs.plan.outputs.data }}
+          V_TITLU: ${{ needs.plan.outputs.titlu }}
+          V_DURATA: ${{ needs.plan.outputs.durata }}
+        run: python -m monitor_colector.video finalizeaza --id "$V_ID" --url "$V_URL" --data "$V_DATA" --titlu "$V_TITLU" --durata "${V_DURATA:-0}" --bucati bucati
+      - name: Rezumatele de refăcut (cerute din panou, lipsă sau fără procesul-verbal apărut între timp)
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m monitor_colector.video refa
