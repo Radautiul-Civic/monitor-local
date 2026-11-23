@@ -69,3 +69,8 @@ elif fel == "termo":   # seria prețurilor la termoficare (date publice, data/te
     for h in d.get("hotarari") or []:
         if h.get("pierderi_lei"):
             print("PIERDERI", h["an"], h["nr"], h["pierderi_lei"], h.get("pe_scurt", "")[:120])
+elif fel == "rapoarte":   # titlurile rapoartelor publice (pagina „Rapoarte” a primăriei) și felul dat de monitor
+    import json
+    d = json.load(open("data/teme.json", encoding="utf-8")).get("rapoarte") or {}
+    for x in d.get("lista") or []:
+        print(x.get("fel"), "|", x.get("an"), "|", (x.get("titlu") or "")[:150], "|", (x.get("pagina") or "")[-80:])
