@@ -3251,11 +3251,65 @@
   // ---- Strada mea: tot ce privește o stradă ----
   var PREF_STR = /^(strada|str|str-la|stradela|bulevardul|bd|b-dul|calea|aleea|al|piata|pta|intrarea|intr|fundatura|drumul|soseaua|sos)\b\.?\s*/;
   function strCheie(s) { return norm(s).replace(/[„”"'.]/g, " ").replace(/\s+/g, " ").trim().replace(PREF_STR, "").replace(/\s*(nr|numarul)\b.*$/, "").replace(/\s+\d.*$/, "").trim(); }
+  // ---------- Orașul pe zone: unde se fac investiții, unde se construiește, ce terenuri se dau (pătrate de ~500 m) ----------
+  var Z0 = [47.822, 25.880], ZD = [0.0045, 0.0067];
+  var ZMET = { inv: ["Obiective de investiții", nr], invV: ["Valoarea investițiilor aprobate", lei], ac: ["Autorizații de construire", nr], acV: ["Valoarea lucrărilor autorizate", lei], pat: ["Hotărâri despre terenuri și clădiri", nr] };
+  function zCheie(la, lo) { var i = Math.floor((la - Z0[0]) / ZD[0]), j = Math.floor((lo - Z0[1]) / ZD[1]); return i >= 0 && j >= 0 && i < 12 && j < 13 ? i + "_" + j : null; }
+  function zoneCalc(an) {
+    var Z = {}, cel = function (k) { var p = k.split("_"); return Z[k] = Z[k] || { k: k, la: Z0[0] + p[0] * ZD[0], lo: Z0[1] + p[1] * ZD[1], inv: 0, invV: 0, ac: 0, acV: 0, pat: 0, str: {}, invL: [] }; };
+    var strada_ = function (c, s) { if (!s) return; var k = cheieStr(s), o = c.str[k] = c.str[k] || { n: 0, s: s }; o.n++; if (/[ăâîșşțţ]/i.test(s)) o.s = s; };
+    var G = (TEME || {}).strazi_geo || {};
+    ((TEME || {}).investitii || []).forEach(function (x) {
+      if (an && !x.pasi.some(function (p) { return (p.data || "").slice(0, 4) === an; })) return;
+      var ks = {};
+      (x.chei || []).forEach(function (ch) { var o = G[ch]; if (!o) return; (o.linii || []).forEach(function (ln) { ln.forEach(function (pt) { var k = zCheie(pt[0], pt[1]); if (k) ks[k] = 1; }); }); if (o.punct) { var k = zCheie(o.punct[0], o.punct[1]); if (k) ks[k] = 1; } });
+      var L = Object.keys(ks); L.forEach(function (k) { var c = cel(k); c.inv++; c.invV += (x.valoare || 0) / L.length; c.invL.push(x); (x.strazi || []).forEach(function (s) { strada_(c, s); }); });
+    });
+    ((URB || {}).ac || []).forEach(function (a) { if (!a.lat || (an && (a.data || "").slice(0, 4) !== an)) return; var k = zCheie(a.lat, a.lon); if (!k) return; var c = cel(k); c.ac++; c.acV += a.valoare || 0; strada_(c, a.strada); });
+    ((TEME || {}).patrimoniu || []).forEach(function (p) { if (!p.lat || (an && String(p.an) !== an)) return; var k = zCheie(p.lat, p.lon); if (!k) return; var c = cel(k); c.pat++; strada_(c, p.strada); });
+    Object.keys(Z).forEach(function (k) { var s = Z[k].str; Z[k].nume = Object.keys(s).sort(function (a, b) { return s[b].n - s[a].n; }).slice(0, 3).map(function (x) { return s[x].s; }); });
+    return Z;
+  }
+  function zoneHtml() {
+    var ani = {}; ((URB || {}).ac || []).forEach(function (a) { if (a.data) ani[a.data.slice(0, 4)] = 1; }); ((TEME || {}).investitii || []).forEach(function (x) { x.pasi.forEach(function (p) { if (p.data) ani[p.data.slice(0, 4)] = 1; }); });
+    return '<section class="card section" id="zone"><h2>Orașul pe zone</h2><p class="note">Rădăuțiul împărțit în pătrate de aproximativ 500 de metri. Alege ce vrei să compari: unde au mers investițiile, unde se construiește, unde s-au dat terenuri și clădiri. Pozițiile vin din străzile pomenite în documente, deci sunt aproximative; o investiție pe o stradă lungă intră în toate pătratele străzii, cu valoarea împărțită între ele.</p>' +
+      '<div class="filters"><select id="z-m" aria-label="Ce arată harta">' + Object.keys(ZMET).map(function (k) { return '<option value="' + k + '">' + ZMET[k][0] + "</option>"; }).join("") + '</select><select id="z-an" aria-label="Anul"><option value="">Toți anii</option>' +
+      Object.keys(ani).sort().reverse().map(function (a) { return "<option>" + a + "</option>"; }).join("") + '</select></div><div class="map" id="z-map"></div><h3 class="an-h">Zonele cu cele mai multe</h3><div id="z-top"></div></section>';
+  }
+  function zoneLeaga() {
+    if (!$("z-map")) return;
+    var harta = null, strat = null;
+    function desen() {
+      var m = $("z-m").value, an = $("z-an").value, Z = zoneCalc(an), L = Object.keys(Z).map(function (k) { return Z[k]; }).filter(function (c) { return c[m]; }).sort(function (a, b) { return b[m] - a[m]; });
+      var max = L.length ? L[0][m] : 1, tot = L.reduce(function (s, c) { return s + c[m]; }, 0);
+      var nm = function (c) { return c.nume.length ? "zona " + c.nume.slice(0, 2).join(" / ") : "zonă fără nume de stradă"; };
+      $("z-top").innerHTML = L.length ? hbl(L.slice(0, 12).map(function (c) { return { l: nm(c), v: c[m], href: c.nume[0] ? "#strada?s=" + encodeURIComponent(c.nume[0]) : "" }; }), ZMET[m][1], tot) : '<p class="empty">Nimic de arătat pentru alegerea asta.</p>';
+      if (!harta) return;
+      if (strat) harta.removeLayer(strat);
+      strat = window.L.layerGroup().addTo(harta);
+      L.forEach(function (c) {
+        var f = Math.sqrt(c[m] / max);
+        window.L.rectangle([[c.la, c.lo], [c.la + ZD[0], c.lo + ZD[1]]], { color: "#2a78d6", weight: 1, opacity: 0.5, fillColor: "#2a78d6", fillOpacity: 0.08 + 0.6 * f })
+          .bindPopup('<div class="pop-act"><b>' + esc(nm(c)) + "</b><br>" + Object.keys(ZMET).filter(function (k) { return c[k]; }).map(function (k) { return esc(ZMET[k][0]) + ": " + ZMET[k][1](Math.round(c[k])); }).join("<br>") +
+            (c.invL.length ? '<br><span class="muted">' + c.invL.slice(0, 4).map(function (x) { return esc(x.nume.slice(0, 70)); }).join("; ") + (c.invL.length > 4 ? "..." : "") + "</span>" : "") +
+            (c.nume[0] ? '<br><a href="#strada?s=' + encodeURIComponent(c.nume[0]) + '">strada ' + esc(c.nume[0]) + "</a>" : "") + "</div>", popOpt(harta)).addTo(strat);
+      });
+    }
+    $("z-m").addEventListener("change", desen); $("z-an").addEventListener("change", desen);
+    desen();
+    incarcaLeaflet().then(function () {
+      if (!$("z-map")) return;
+      harta = window.L.map("z-map", { scrollWheelZoom: false }).setView([47.8445, 25.9195], 13);
+      window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(harta);
+      desen();
+    }).catch(function () { $("z-map").innerHTML = '<p class="empty">Harta nu s-a putut încărca.</p>'; });
+  }
   function strada(el, r) {
     var cap = head("Strada mea", "Scrie numele străzii și vezi tot ce o privește.");
     var lipsa = [];
     if (!URB) lipsa.push(get(DATA + "urbanism.json").then(function (d) { URB = d; }).catch(function () { URB = { cu: [], ac: [] }; }));
     if (SX === null) lipsa.push(get(DATA + "sicap-explorer.json").then(function (d) { SX = sxPrep(d); }).catch(function () { SX = false; }));
+    if (!TEME) lipsa.push(incarcaTeme());
     if (lipsa.length) { el.innerHTML = cap + '<p class="updated">Se încarcă registrele...</p>'; Promise.all(lipsa).then(render); return; }
     var nume = {};
     ["ac", "cu"].forEach(function (t) { (URB[t] || []).forEach(function (a) { var k = a.strada && strCheie(a.strada); if (k && k.length > 2) { var x = nume[k] = nume[k] || { n: 0, f: {} }; x.n++; x.f[a.strada] = (x.f[a.strada] || 0) + 1; } }); });
@@ -3268,7 +3322,8 @@
       '</div><div id="s-gol"' + (q0 ? " hidden" : "") + '><div class="s-ce">' +
       [["casa", "Ce se construiește", "autorizațiile de construire și certificatele de urbanism de pe stradă, pe hartă"], ["hcl", "Ce s-a hotărât", "hotărârile consiliului local care pomenesc strada"],
         ["cos", "Ce s-a cumpărat", "lucrări și achiziții publice pentru strada ta"], ["cauta", "Ce scrie în documente", "procese-verbale și alte documente care o pomenesc"]].map(function (x) {
-        return '<div class="s-ce-i">' + ic(x[0]) + "<b>" + x[1] + "</b><span>" + x[2] + "</span></div>"; }).join("") + '</div></div><div id="s-out"></div>';
+        return '<div class="s-ce-i">' + ic(x[0]) + "<b>" + x[1] + "</b><span>" + x[2] + "</span></div>"; }).join("") + '</div>' + zoneHtml() + '</div><div id="s-out"></div>';
+    zoneLeaga();
     var tq;
     $("s-q").addEventListener("input", function () { clearTimeout(tq); tq = setTimeout(function () { var v = $("s-q").value.trim(); history.replaceState(null, "", "#strada" + (v ? "?s=" + encodeURIComponent(v) : "")); arata(v); }, 400); });
     function arata(v) {
