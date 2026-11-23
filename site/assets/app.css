@@ -787,3 +787,6 @@ details.alerte .al-f{margin-top:8px;max-width:640px}
 .al-s label{font-size:.88rem;display:inline-flex;gap:5px;align-items:center}
 .alerte .btn{margin-top:12px}
 .hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+.cl-comp figure{margin:0}
+.cl-comp img{display:block;width:100%;height:auto;border-radius:10px}
+.cl-comp figcaption{margin-top:6px}
