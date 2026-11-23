@@ -11,6 +11,7 @@ import html
 import io
 import json
 import os
+import shutil
 import re
 
 from .voturi import _tok
@@ -170,6 +171,15 @@ def scrie(data_dir, client=None, slug="componenta"):
                 x[camp] = None
         out.append(x)
     out = corecteaza(out, cons)
+    # fotografiile lipsă de pe pagina primăriei, din surse/componenta/foto/<id>.jpg (primite de la echipă)
+    manual = os.path.join(os.path.dirname(CORECTII), "foto")
+    for x in out:
+        cheie = x.get("id") or "-".join(sorted(_tok(x["nume"])))
+        f = os.path.join(manual, cheie + ".jpg")
+        if not x.get("foto") and os.path.exists(f):
+            os.makedirs(folder, exist_ok=True)
+            shutil.copyfile(f, os.path.join(folder, cheie + ".jpg"))
+            x["foto"] = "consilieri/" + cheie + ".jpg"
     rez = {"sursa": d[0]["link"], "actualizat": d[0]["modified"][:10], "consilieri": out, "performanta": _performanta_manual()}
     with open(os.path.join(data_dir, "componenta.json"), "w", encoding="utf-8") as f:
         json.dump(rez, f, ensure_ascii=False, separators=(",", ":"))

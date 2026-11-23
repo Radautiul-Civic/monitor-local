@@ -2688,6 +2688,21 @@
         tile("Voturi împotrivă", nr(tImp), "", "date de consilieri numiți") + tile("Abțineri", nr(tAbt), "", "ale consilierilor numiți") + "</div>" +
         (curent ? '<section class="card section cl-comp"><h2>Componența pe partide</h2><figure><img src="' + BASE + 'assets/img/componenta-cl.webp" width="1600" height="1100" loading="lazy" ' +
           'alt="Componența Consiliului Local Rădăuți: 19 consilieri, 8 PSD, 9 PNL și 2 AUR, așezați în jurul mesei de ședință"><figcaption class="note">19 consilieri: 9 PNL, 8 PSD, 2 AUR (situația din noiembrie 2026). Fiecare siluetă e un consilier.</figcaption></figure></section>' : "") +
+        (curent ? (function () {   // fețele consilierilor, pe partide
+          var pe = {}; activi.forEach(function (o) { var k = o.k || compDe(o.c.id), p_ = (k && k.partid) || "Partid necompletat"; (pe[p_] = pe[p_] || []).push({ o: o, k: k }); });
+          var ord = Object.keys(pe).sort(function (a, b) { return a === "Partid necompletat" ? 1 : b === "Partid necompletat" ? -1 : pe[b].length - pe[a].length; });
+          return '<section class="card section cs-fete"><h2>Cine sunt consilierii</h2><p class="note">Apasă pe un consilier ca să vezi cum a votat, prezența, scorul de activitate și rapoartele lui.</p>' +
+            ord.map(function (p_) {
+              var sig = (pe[p_].filter(function (x) { return x.k && x.k.sigla; })[0] || {}).k;
+              return '<h3 class="cs-fh">' + (sig ? '<img src="' + FTDATA + esc(sig.sigla) + '" alt="" loading="lazy" onerror="this.remove()">' : "") + esc(p_) + ' <span class="nr-b n">' + pe[p_].length + "</span></h3>" +
+                '<div class="cs-fg">' + pe[p_].sort(function (a, b) { return a.o.c.nume.localeCompare(b.o.c.nume); }).map(function (x) {
+                  var nt = x.o.s && areNota(V) ? notaCons(V, x.o.c, mm[1], mm[2]) : null, nume = x.k ? x.k.nume : x.o.c.nume;
+                  var foto = x.k && x.k.foto ? '<img src="' + FTDATA + esc(x.k.foto) + '" alt="" loading="lazy" onerror="this.outerHTML=\'<i>' + esc(initiale(nume)) + '</i>\'">' : "<i>" + esc(initiale(nume)) + "</i>";
+                  return '<a class="cs-fc" href="#consiliu/consilieri/' + encodeURIComponent(x.o.c.id || "") + '"' + (x.o.s ? "" : ' aria-disabled="true"') + '><span class="cs-ff">' + foto + "</span><b>" + esc(nume) + "</b>" +
+                    '<span class="cs-fm">' + (nt ? '<span class="nota-p" style="background:' + culoareNota(nt.nota) + '" title="Scor activitate">' + dec(nt.nota.toFixed(1)) + "</span> " : "") + (x.o.s ? "prezență " + pctPrez(x.o.s) : "din " + esc(zi((x.k && x.k.nou && x.k.nou.din) || ""))) + "</span></a>";
+                }).join("") + "</div>";
+            }).join("") + "</section>";
+        })() : "") +
         '<section class="card section"><div class="h-row"><h2>' + (curent ? "Consilierii în funcție" : "Consilierii din mandatul " + esc(ales)) + ' <span class="nr-b">' + activi.length + "</span></h2>" +
         (curent && safeUrl(COMP.sursa) ? '<a href="' + esc(COMP.sursa) + '" rel="noopener">componența pe site-ul primăriei</a>' : "") + "</div>" +
         '<p class="note">Lista e reconstruită din procesele-verbale (președinții de ședință, absenții, cei prezenți online și cei care au votat împotrivă, s-au abținut sau nu au votat), din hotărârile despre mandate și, pentru mandatul actual, din pagina „Componența” a primăriei (fotografii, partide, declarații). ' +
