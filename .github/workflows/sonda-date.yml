@@ -1,0 +1,33 @@
+name: Sondă în date (fragmente din documentele publice colectate)
+
+# Pentru dezvoltare: restaurează datele colectării (fără să le salveze înapoi) și afișează în jurnal fragmente din
+# textele documentelor publice ale primăriei (procese-verbale, hotărâri), ca să se poată scrie extragerile. Nu
+# afișează nimic din zona internă.
+on:
+  workflow_dispatch:
+    inputs:
+      cerere:
+        description: "pv-text <AAAA-LL-ZZ> | pv-grep <regex> | hcl-grep <regex>"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  sonda:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Restaurare date (doar citire)
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: date-sonda-${{ github.run_id }}
+          restore-keys: date-
+      - env:
+          CERERE: ${{ inputs.cerere }}
+        run: python tools/sonda_date.py "$CERERE"
