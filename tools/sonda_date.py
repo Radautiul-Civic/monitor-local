@@ -74,3 +74,15 @@ elif fel == "rapoarte":   # titlurile rapoartelor publice (pagina „Rapoarte”
     d = json.load(open("data/teme.json", encoding="utf-8")).get("rapoarte") or {}
     for x in d.get("lista") or []:
         print(x.get("fel"), "|", x.get("an"), "|", (x.get("titlu") or "")[:150], "|", (x.get("pagina") or "")[-80:])
+elif fel == "rapoarte-text":   # rapoartele fără an în titlu: are text? ce scrie la început?
+    rows = c.execute("SELECT d.url, d.link_text, d.text_path, d.pages FROM documents d JOIN posts p ON p.wp_id=d.wp_id WHERE p.source='rapoarte'").fetchall()
+    fara, cu_text = 0, 0
+    for url, lt, tp, pg in rows:
+        if re.search(r"\b20[0-3]\d\b", lt or ""):
+            continue
+        fara += 1
+        t = open(tp, encoding="utf-8", errors="replace").read() if tp and os.path.exists(tp) else ""
+        cu_text += bool(t.strip())
+        print("#####", (lt or "")[:90], "|", url.rsplit("/", 1)[-1][:60], "| pagini", pg, "| text", len(t))
+        print("   ", re.sub(r"\s+", " ", t[:500]))
+    print("fara an in titlu:", fara, "cu text:", cu_text, "din", len(rows))
