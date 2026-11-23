@@ -188,6 +188,80 @@ def _strazi_api_osm(requests, s=47.805, v=25.855, n=47.885, e=25.985, pasi=4):
     return out
 
 
+# orașul (fără satele și comunele vecine, care au și ele străzi cu aceleași nume): lat. și long. minime și maxime
+ORAS = (47.822, 25.880, 47.870, 25.962)
+
+
+def _in_oras(pt, b=ORAS):
+    return b[0] <= pt[0] <= b[2] and b[1] <= pt[1] <= b[3]
+
+
+def taie_in_oras(linii, b=ORAS):
+    """Păstrează din fiecare linie doar bucățile din oraș."""
+    out = []
+    for ln in linii:
+        cur = []
+        for pt in ln:
+            if _in_oras(pt, b):
+                cur.append(pt)
+            else:
+                if len(cur) >= 2:
+                    out.append(cur)
+                cur = []
+        if len(cur) >= 2:
+            out.append(cur)
+    return out
+
+
+def lungime_km(linii):
+    import math
+    t = 0.0
+    for ln in linii:
+        for (a, b), (c, d) in zip(ln, ln[1:]):
+            x = math.radians(d - b) * math.cos(math.radians((a + c) / 2))
+            y = math.radians(c - a)
+            t += 6371.0 * math.hypot(x, y)
+    return t
+
+
+def asfaltari(investitii, geo):
+    """Km de străzi din obiectivele de modernizare a străzilor, pe ani: după anul aprobării (prima hotărâre cu indicatori,
+    altfel prima hotărâre) și după anul finalizării. Lungimea e a întregii străzi din OpenStreetMap (în oraș), nu a
+    tronsonului lucrat; o stradă se numără o dată pe an."""
+    ani = {}
+    for x in investitii:
+        if x.get("categorie") != "strazi":
+            continue
+        pasi = x.get("pasi") or []
+        ind = [p for p in pasi if p.get("pas") == "indicatori"]
+        fin = [p for p in pasi if p.get("pas") in ("finalizat", "inventar")]
+        a_apr = ((ind[0] if ind else pasi[0]).get("data") or "")[:4] if pasi else ""
+        a_fin = (fin[0].get("data") or "")[:4] if fin else ""
+        for fel, an in (("aprobat", a_apr), ("finalizat", a_fin)):
+            if not an:
+                continue
+            g = ani.setdefault(an, {})
+            g.setdefault(fel + "_obiective", 0)
+            g[fel + "_obiective"] += 1
+            st = g.setdefault(fel + "_strazi", {})
+            if not x.get("chei"):
+                g[fel + "_fara_strazi"] = g.get(fel + "_fara_strazi", 0) + 1
+            nume = {_cheie_strada(n): n for n in x.get("strazi") or []}
+            for k in x.get("chei") or []:
+                if k in geo and geo[k].get("km"):
+                    st[k] = (geo[k]["km"], nume.get(k, k))
+    out = {}
+    for an, g in sorted(ani.items()):
+        o = {}
+        for fel in ("aprobat", "finalizat"):
+            st = g.get(fel + "_strazi") or {}
+            o[fel] = {"obiective": g.get(fel + "_obiective", 0), "km": round(sum(v[0] for v in st.values()), 2), "strazi": len(st),
+                      "fara_strazi": g.get(fel + "_fara_strazi", 0),
+                      "lista": sorted(([v[1], v[0]] for v in st.values()), key=lambda t: -t[1])}
+        out[an] = o
+    return out
+
+
 def nume_obiectiv(titlu):
     """Numele obiectivului din titlul hotărârii (textul dintre ghilimele de după „obiectivul de investiții” / „proiectul”)."""
     for kw in (r"obiectiv\w*(\s+de\s+investi\w+)?", r"proiect\w*", r"investi\w+"):
@@ -484,7 +558,8 @@ def rapoarte(db):
     for url, lt, pagina, ptitlu, d in rows:
         t = norm((lt or "") + " " + (ptitlu or ""))
         fel = next(k for k, _, rx in TIP_RAPORT if re.search(rx, t))
-        an = re.findall(r"\b(20[0-3]\d)\b", norm(lt or "") + " " + url)
+        # anul raportului: din titlu, altfel din numele fișierului (nu din „uploads/2025/06”, care e data publicării)
+        an = re.findall(r"\b(20[0-3]\d)\b", norm(lt or "")) or re.findall(r"(?<!\d)(20[0-3]\d)(?!\d)", url.rsplit("/", 1)[-1])
         out.append({"fel": fel, "titlu": (lt or ptitlu or "").strip()[:300], "url": url, "pagina": pagina, "an": max(an) if an else None})
     return {"lista": out, "feluri": {k: n for k, n, _ in TIP_RAPORT}}
 
@@ -526,8 +601,9 @@ def scrie(store, data_dir, azi=None):
                 if k in geo:
                     x["chei"].append(k)
                     continue
-                if k in osm:
-                    geo[k] = {"linii": osm[k]}
+                linii = taie_in_oras(osm.get(k) or [])
+                if linii:
+                    geo[k] = {"linii": linii, "km": round(lungime_km(linii), 2)}
                 else:
                     p = geocod.pentru(coord, st, "Rădăuți")
                     if p:
@@ -535,6 +611,7 @@ def scrie(store, data_dir, azi=None):
                 if k in geo:
                     x["chei"].append(k)
         rez["strazi_geo"] = geo
+        rez["asfaltari"] = asfaltari(rez.get("investitii") or [], geo)
         stats["strazi_geo"] = {"osm_strazi": len(osm), "linii": sum(1 for g in geo.values() if "linii" in g),
                                "puncte": sum(1 for g in geo.values() if "punct" in g)}
     except Exception as e:

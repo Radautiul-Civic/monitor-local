@@ -98,21 +98,20 @@ def consilieri(vot, comp):
         c = V.get(x.get("id"))
         if not c or x.get("iesit"):
             continue
-        st = {"prezent": 0, "absent": 0, "I": 0, "A": 0, "N": 0}
+        st = {"sedinte": 0, "absent": 0, "I": 0, "A": 0, "N": 0}
         for d, cod in c.get("cod", {}).items():
             if d < start or not cod:
                 continue
-            if cod[0] == "p":
-                st["prezent"] += 1
-            elif cod[0] == "X":
+            st["sedinte"] += 1
+            if cod[0] == "X":   # prezența: ședințele în care nu e numit printre absenți, ca pe site
                 st["absent"] += 1
             for k in cod[1:]:
                 if k in ("I", "A", "N"):
                     st[k] += 1
-        t = st["prezent"] + st["absent"]
+        t = st["sedinte"]
         if not t:
             continue
-        prez = round(100 * st["prezent"] / t)
+        prez = round(100 * (t - st["absent"]) / t)
         out.append({"cheie": f"consilier-{x['id']}", "tip": "consilier", "eticheta": "Consilier local" + (f" · {x['partid']}" if x.get("partid") else ""),
                     "titlu": x["nume"], "foto": x.get("foto"),
                     "cifre": [(f"{prez}%", "prezență"), (str(st["absent"]), "absențe"), (str(st["I"]), "voturi împotrivă"), (str(st["A"]), "abțineri")],

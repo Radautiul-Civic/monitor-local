@@ -310,14 +310,14 @@
     items.forEach(function (x) { var a = opt.an(x); if (a) ani[a] = 1; });
     var extra = opt.extraFilter ? opt.extraFilter.html : "";
     el.innerHTML = '<div class="filters"><input type="search" placeholder="' + esc(opt.placeholder || "Caută în titluri") + '" aria-label="Caută">' +
-      '<select aria-label="Anul"><option value="">Toți anii</option>' + Object.keys(ani).sort().reverse().map(function (a) { return "<option>" + esc(a) + "</option>"; }).join("") + "</select>" + extra +
+      (opt.faraAn ? "" : '<select aria-label="Anul"><option value="">Toți anii</option>' + Object.keys(ani).sort().reverse().map(function (a) { return "<option>" + esc(a) + "</option>"; }).join("") + "</select>") + extra +
       '</div><p class="count" aria-live="polite"></p><div class="items"></div><button class="more" hidden>Arată mai multe</button>';
-    var q = el.querySelector("input"), sel = el.querySelector("select"), exs = Array.prototype.slice.call(el.querySelectorAll("select"), 1);
+    var q = el.querySelector("input"), toateSel = Array.prototype.slice.call(el.querySelectorAll("select")), sel = opt.faraAn ? null : toateSel[0], exs = opt.faraAn ? toateSel : toateSel.slice(1);
     function filt() {
-      var t = norm(q.value).trim(), a = sel.value, vals = exs.map(function (s) { return s.value; }), e = vals.join("");
+      var t = norm(q.value).trim(), a = sel ? sel.value : "", vals = exs.map(function (s) { return s.value; }), e = vals.join("");
       if (exs.length === 1) e = vals[0];
       return items.filter(function (x) {
-        return (!a || opt.an(x) === a) && (!e || opt.extraFilter.test(x, e, vals)) && (!t || norm(opt.text(x)).indexOf(t) >= 0);
+        return (!a || opt.an(x) === a) && (!e || opt.extraFilter.test(x, e, vals)) && (!opt.extern || opt.extern(x)) && (!t || norm(opt.text(x)).indexOf(t) >= 0);
       });
     }
     function draw() {
@@ -328,10 +328,11 @@
       el.querySelector(".more").hidden = f.length <= shown;
     }
     q.addEventListener("input", function () { shown = 25; draw(); });
-    sel.addEventListener("change", function () { shown = 25; draw(); });
+    if (sel) sel.addEventListener("change", function () { shown = 25; draw(); });
     exs.forEach(function (ex) { ex.addEventListener("change", function () { shown = 25; draw(); }); });
     el.querySelector(".more").addEventListener("click", function () { shown += 50; draw(); });
     draw();
+    return { draw: function () { shown = 25; draw(); } };
   }
   function linkuri(x) {
     var o = [], p = safeUrl(x.pagina), f = safeUrl(x.pdf);
@@ -1795,6 +1796,7 @@
   var CAT_INV = { strazi: "var(--c2)", trotuare: "#8b5e3c", apa: "var(--c1)", energie: "var(--c4)", scoli: "var(--c3)", parcuri: "var(--c6)", cladiri: "var(--plan)",
     social: "var(--c5)", sanatate: "var(--c8)", cultura: "var(--c7)", digital: "#5b6b7a", mediu: "#4f8a3c", alta: "#9aa3ab" };
   function numeCat(k) { return ((TEME || {}).categorii_investitii || {})[k] || k; }
+  function cheieStr(n) { var t = norm(n).replace(/[^a-z0-9 ]+/g, " ").trim().replace(/^(strada|str|bulevardul|b dul|piata)\s+/, ""); return t.replace(/\s+/g, " ").trim(); }
   function pagInvestitii(el, cap, D) {
     var tot = D.reduce(function (a, x) { return a + (x.valoare || 0); }, 0), cuV = D.filter(function (x) { return x.valoare; }).length;
     var nr_ = function (s) { return D.filter(function (x) { return x.stare === s; }).length; };
@@ -1804,6 +1806,24 @@
     var str = D.filter(function (x) { return x.categorie === "strazi"; }), nStr = {}; str.forEach(function (x) { (x.strazi || []).forEach(function (s) { nStr[norm(s)] = 1; }); });
     // pe ani: câte obiective noi (după prima hotărâre), pe categorii
     var ani = []; D.forEach(function (x) { var a = (x.prima || "").slice(0, 4); if (a && ani.indexOf(a) < 0) ani.push(a); }); ani.sort();
+    var aniDe = function (x) { if (!x._ani) { var o = []; x.pasi.forEach(function (p) { var a = (p.data || "").slice(0, 4); if (a && o.indexOf(a) < 0) o.push(a); }); x._ani = o; } return x._ani; };
+    var aniHcl = []; D.forEach(function (x) { aniDe(x).forEach(function (a) { if (aniHcl.indexOf(a) < 0) aniHcl.push(a); }); }); aniHcl.sort();
+    var ASF = (TEME || {}).asfaltari || {}, aniAsf = Object.keys(ASF).filter(function (a) { return ASF[a].aprobat.km || ASF[a].finalizat.km; }).sort();
+    function asfSectiune() {
+      if (!aniAsf.length) return "";
+      var tA = 0, tF = 0; aniAsf.forEach(function (a) { tA += ASF[a].aprobat.km; tF += ASF[a].finalizat.km; });
+      var ult = aniAsf[aniAsf.length - 1];
+      return '<section class="card section"><h2>Asfaltări și modernizări de străzi, pe ani</h2>' +
+        '<div class="grid">' + tile("Km în obiective aprobate", dec(tA.toFixed(1)), "km", "în " + aniAsf[0] + "-" + ult + ", după anul hotărârii de aprobare") + tile("Km în obiective finalizate", dec(tF.toFixed(1)), "km", "după hotărârile de finalizare sau trecere în inventar") +
+        tile("În " + ult, dec(ASF[ult].aprobat.km.toFixed(1)), "km", ASF[ult].aprobat.strazi + " străzi în " + ASF[ult].aprobat.obiective + " obiective aprobate") + "</div>" +
+        '<p class="note">Lungimile sunt ale străzilor întregi din OpenStreetMap, în oraș, pentru străzile numite în obiectivele din categoria „Străzi și asfaltări”; dacă s-a lucrat doar pe un tronson, cifra e mai mare decât lucrarea. Obiectivele fără străzi numite (de exemplu „modernizare străzi balastate”) nu intră în kilometri. E o estimare: verifică în documentația fiecărui obiectiv.</p>' +
+        legend([["în obiective aprobate", "var(--c1)"], ["în obiective finalizate", "var(--ok, #1baf7a)"]]) + '<div class="chart" id="ch-asf"></div>' +
+        '<div class="tw"><table class="asf-t"><thead><tr><th>Anul</th><th class="n">Km aprobați</th><th class="n">Străzi</th><th class="n">Obiective</th><th class="n">Km finalizați</th><th>Străzile (aprobate în anul acela)</th></tr></thead><tbody>' +
+        aniAsf.slice().reverse().map(function (a) { var o = ASF[a];
+          return '<tr><td><a href="#" data-asf="' + a + '">' + a + '</a></td><td class="n">' + dec(o.aprobat.km.toFixed(1)) + '</td><td class="n">' + o.aprobat.strazi + '</td><td class="n">' + o.aprobat.obiective + (o.aprobat.fara_strazi ? ' <small class="muted" title="obiective fără străzi numite">(' + o.aprobat.fara_strazi + " fără străzi)</small>" : "") + '</td><td class="n">' + (o.finalizat.km ? dec(o.finalizat.km.toFixed(1)) : '<span class="muted">-</span>') + "</td><td>" +
+            (o.aprobat.lista || []).map(function (t) { return '<a href="#strada?s=' + encodeURIComponent(t[0]) + '">' + esc(t[0]) + "</a> <small class=\"muted\">" + dec((+t[1]).toFixed(1)) + "</small>"; }).join(", ") + "</td></tr>"; }).join("") +
+        '</tbody></table></div><p class="note">Apasă pe un an ca să vezi pe hartă străzile din anul acela.</p></section>';
+    }
     el.innerHTML = cap + '<div class="grid">' + tile("Obiective de investiții", nr(D.length), "", "din hotărârile consiliului local") +
       tile("Valoarea aprobată", lei(tot), "", "la " + cuV + " obiective cu valoarea citită din hotărâre") +
       tile("Străzi și asfaltări", nr(str.length), "", nr(Object.keys(nStr).length) + " străzi numite în obiective") + tile("Finalizate", nr(nr_("finalizat")), "", "după hotărârile de finalizare sau de trecere în inventar") + "</div>" +
@@ -1811,51 +1831,79 @@
       '<div class="sx-2"><div><h3 class="an-h">Câte obiective</h3>' + hbl(cats.map(function (k) { return { l: numeCat(k), v: pc[k].n, href: "javascript:void(0)", k: k }; }), nr, D.length).replace(/href="javascript:void\(0\)"/g, 'href="#" data-cat') + "</div>" +
       '<div><h3 class="an-h">Valoarea aprobată</h3>' + hbl(cats.filter(function (k) { return pc[k].v; }).sort(function (a, b) { return pc[b].v - pc[a].v; }).map(function (k) { return { l: numeCat(k), v: pc[k].v }; }), lei, tot) + "</div></div>" +
       (ani.length > 2 ? '<h3 class="an-h">Obiective noi pe ani, după prima hotărâre</h3>' + legend(cats.map(function (k) { return [numeCat(k), CAT_INV[k]]; })) + '<div class="chart" id="ch-inv"></div>' : "") + "</section>") +
-      (peHarta.length ? '<section class="card section"><h2>Pe hartă</h2><p class="note">Străzile pomenite în numele obiectivelor, desenate după OpenStreetMap (sau, unde strada nu a fost găsită acolo, un punct pe stradă). Arată unde s-a lucrat, nu exact tronsonul. Apasă pe categoriile de mai jos ca să le ascunzi sau să le arăți.</p>' +
-        '<div class="legend inv-lg">' + cats.filter(function (k) { return peHarta.some(function (x) { return x.categorie === k; }); }).map(function (k) { return '<button type="button" class="on" data-k="' + k + '"><i style="background:' + CAT_INV[k] + '"></i>' + esc(numeCat(k)) + "</button>"; }).join("") + "</div>" +
-        '<div class="map" id="inv-map"></div></section>' : "") +
+      asfSectiune() +
+      '<section class="card section" id="inv-hl"><h2>Pe hartă și în listă</h2><p class="note">Alege anul și categoriile; harta și lista de mai jos arată doar obiectivele alese. Un obiectiv e „din anul X” dacă are în anul acela cel puțin o hotărâre (aprobare, modificare, finanțare, finalizare).</p>' +
+      '<div class="filters inv-fl"><select id="inv-an" aria-label="Anul"><option value="">Toți anii</option>' + aniHcl.slice().reverse().map(function (a) { return "<option>" + a + "</option>"; }).join("") + "</select>" +
+      '<button type="button" class="btn-s" data-toate="1">Toate categoriile</button><button type="button" class="btn-s" data-toate="0">Nicio categorie</button></div>' +
+      '<div class="legend inv-lg">' + cats.map(function (k) { return '<button type="button" class="on" data-k="' + k + '" aria-pressed="true"><i style="background:' + CAT_INV[k] + '"></i>' + esc(numeCat(k)) + ' <small class="muted" data-n="' + k + '"></small></button>'; }).join("") + "</div>" +
+      '<p class="count inv-cnt" aria-live="polite"></p>' +
+      (peHarta.length ? '<div class="map" id="inv-map"></div><p class="note">Străzile pomenite în numele obiectivelor, desenate după OpenStreetMap (sau, unde strada nu a fost găsită acolo, un punct pe stradă). Linia arată strada întreagă, nu exact tronsonul lucrat.</p>' : "") +
+      "</section>" +
       '<section class="card section" id="inv-sec"><h2>Obiectivele</h2><p class="note">Hotărârile sunt grupate după numele obiectivului, citit din titlu. Valoarea e cea din ultima hotărâre cu indicatori; achizițiile din SICAP sunt cele cu titlu asemănător, publicate după prima hotărâre, deci pot fi și altele legate de obiectiv sau, rar, unele nelegate. Verifică în documente.</p><div id="inv-l"></div></section>';
-    lista($("inv-l"), D, { placeholder: "Caută: stradă, școală, lucrare", unitate: ["obiectiv", "obiective"], an: function (x) { return (x.ultima || "").slice(0, 4); }, text: function (x) { return x.nume + " " + x.pasi.map(function (p) { return p.titlu; }).join(" "); },
-      extraFilter: { html: '<select aria-label="Categoria"><option value="">Toate categoriile</option>' + cats.map(function (k) { return '<option value="' + k + '">' + esc(numeCat(k)) + " (" + pc[k].n + ")</option>"; }).join("") + "</select>" +
-        '<select aria-label="Stadiul"><option value="">Orice stadiu</option>' + Object.keys(STARE_INV).map(function (k) { return '<option value="' + k + '">' + STARE_INV[k][0] + "</option>"; }).join("") + "</select>",
-        test: function (x, e, v) { return (!v[0] || (x.categorie || "alta") === v[0]) && (!v[1] || x.stare === v[1]); } },
+    var act = {}; cats.forEach(function (k) { act[k] = true; });
+    var anSel = "", inFiltru = function (x) { return act[x.categorie || "alta"] && (!anSel || aniDe(x).indexOf(anSel) >= 0); };
+    var L = lista($("inv-l"), D, { placeholder: "Caută: stradă, școală, lucrare", unitate: ["obiectiv", "obiective"], faraAn: true, an: function (x) { return (x.ultima || "").slice(0, 4); }, extern: inFiltru,
+      text: function (x) { return x.nume + " " + (x.strazi || []).join(" ") + " " + x.pasi.map(function (p) { return p.titlu; }).join(" "); },
+      extraFilter: { html: '<select aria-label="Stadiul"><option value="">Orice stadiu</option>' + Object.keys(STARE_INV).map(function (k) { return '<option value="' + k + '">' + STARE_INV[k][0] + "</option>"; }).join("") + "</select>",
+        test: function (x, e) { return x.stare === e; } },
       item: function (x) {
         var st = STARE_INV[x.stare] || ["", "n"];
         return '<div class="doc inv"><div class="h"><span class="rz ' + st[1] + '">' + st[0] + '</span><span class="tag" style="border-color:' + CAT_INV[x.categorie || "alta"] + '">' + esc(numeCat(x.categorie || "alta")) + "</span>" + (x.valoare ? '<span class="inv-v">' + lei(x.valoare) + (x.tva ? ' <small class="muted">' + esc(x.tva) + "</small>" : "") + "</span>" : "") + "</div>" +
           '<div class="t"><b>' + esc(x.nume) + "</b></div>" +
-          ((x.strazi || []).length ? '<div class="muted inv-st">Străzi: ' + x.strazi.map(function (s) { return '<a href="#strada?s=' + encodeURIComponent(s) + '">' + esc(s) + "</a>"; }).join(", ") + "</div>" : "") +
+          ((x.strazi || []).length ? '<div class="muted inv-st">Străzi: ' + x.strazi.map(function (s) { var g = G[cheieStr(s)]; return '<a href="#strada?s=' + encodeURIComponent(s) + '">' + esc(s) + "</a>" + (g && g.km ? ' <small>(' + dec(g.km.toFixed(1)) + " km)</small>" : ""); }).join(", ") + "</div>" : "") +
           '<ol class="inv-p">' + x.pasi.map(function (p) { return "<li><span>" + esc(zi(p.data)) + "</span> " + linkHcl(p) + " · " + esc(NUME_PAS[p.pas] || p.pas) + (p.valoare ? " · " + lei(p.valoare) : "") + "</li>"; }).join("") + "</ol>" +
           ((x.sicap || []).length ? '<div class="inv-s"><span class="muted">În SICAP:</span> ' + x.sicap.map(function (q) {
             return '<a href="' + SICAP_URL + (q.fel === "directa" ? "direct-acquisition/view/" : q.fel === "licitatie" ? "notices/c-notice/v2/view/" : "notices/ca-notices/view-c/") + q.id + '" rel="noopener">' +
               esc({ directa: "achiziție directă", licitatie: "licitație", contract: "contract" }[q.fel]) + " " + esc(zi(q.data)) + (q.lei ? ", " + lei(q.lei) : "") + "</a>"; }).join(" · ") + "</div>" : "") + "</div>";
       } });
-    // click pe o categorie din grafic -> filtrează lista
+    var straturi = [], harta = null;
+    function aplica() {
+      var f = D.filter(inFiltru), pm = f.filter(function (x) { return (x.chei || []).length; }).length;
+      $("inv-hl").querySelector(".inv-cnt").textContent = nr(f.length) + (f.length === 1 ? " obiectiv" : " obiective") + (anSel ? " cu hotărâri în " + anSel : "") + (peHarta.length ? ", din care " + nr(pm) + " pe hartă" : "");
+      cats.forEach(function (k) { var n = D.filter(function (x) { return (x.categorie || "alta") === k && (!anSel || aniDe(x).indexOf(anSel) >= 0); }).length, e = el.querySelector('[data-n="' + k + '"]'); if (e) e.textContent = n; });
+      Array.prototype.forEach.call(el.querySelectorAll(".inv-lg button"), function (b) { var on = !!act[b.getAttribute("data-k")]; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
+      L.draw();
+      if (harta) {
+        var vis = [];
+        straturi.forEach(function (o) { var v = inFiltru(o.x); if (v && !harta.hasLayer(o.g)) o.g.addTo(harta); if (!v && harta.hasLayer(o.g)) harta.removeLayer(o.g); if (v) vis.push(o.g); });
+        if (vis.length) { try { harta.fitBounds(window.L.featureGroup(vis).getBounds().pad(0.08), { maxZoom: 15 }); } catch (e) { /* */ } }
+      }
+    }
+    $("inv-an").addEventListener("change", function () { anSel = this.value; aplica(); });
+    Array.prototype.forEach.call(el.querySelectorAll(".inv-lg button"), function (b) { b.addEventListener("click", function () { var k = b.getAttribute("data-k"); act[k] = !act[k]; aplica(); }); });
+    Array.prototype.forEach.call(el.querySelectorAll("[data-toate]"), function (b) { b.addEventListener("click", function () { var v = b.getAttribute("data-toate") === "1"; cats.forEach(function (k) { act[k] = v; }); aplica(); }); });
+    // click pe o categorie din grafic -> doar categoria aceea, pe hartă și în listă
     Array.prototype.forEach.call(el.querySelectorAll("[data-cat]"), function (a, i) {
-      a.addEventListener("click", function (e) { e.preventDefault(); var sel = $("inv-l").querySelector('select[aria-label="Categoria"]'); if (sel) { sel.value = cats[i]; sel.dispatchEvent(new Event("change", { bubbles: true })); } $("inv-sec").scrollIntoView({ behavior: "smooth" }); });
+      a.addEventListener("click", function (e) { e.preventDefault(); cats.forEach(function (k) { act[k] = k === cats[i]; }); aplica(); $("inv-hl").scrollIntoView({ behavior: "smooth" }); });
     });
+    // asfaltări: un an din grafic sau din tabel -> harta cu străzile și asfaltările din anul acela
+    Array.prototype.forEach.call(el.querySelectorAll("[data-asf]"), function (a) {
+      a.addEventListener("click", function (e) { e.preventDefault(); cats.forEach(function (k) { act[k] = k === "strazi"; }); anSel = a.getAttribute("data-asf"); $("inv-an").value = anSel; aplica(); $("inv-hl").scrollIntoView({ behavior: "smooth" }); });
+    });
+    aplica();
     if (ani.length > 2 && $("ch-inv")) chart($("ch-inv"), { cats: ani, stacked: true, label: "Obiective de investiții noi pe ani, pe categorii",
       series: cats.map(function (k) { return { name: numeCat(k), color: CAT_INV[k], values: ani.map(function (a) { return D.filter(function (x) { return (x.categorie || "alta") === k && (x.prima || "").slice(0, 4) === a; }).length; }) }; }),
       tooltip: function (i) { var a = ani[i]; return "<b>" + a + "</b><br>" + cats.map(function (k) { var n = D.filter(function (x) { return (x.categorie || "alta") === k && (x.prima || "").slice(0, 4) === a; }).length; return n ? numeCat(k) + ": " + n : ""; }).filter(Boolean).join("<br>"); } });
+    if (aniAsf.length && $("ch-asf")) chart($("ch-asf"), { cats: aniAsf, grouped: true, label: "Kilometri de străzi în obiectivele de modernizare, pe ani",
+      series: [{ name: "în obiective aprobate", color: "var(--c1)", values: aniAsf.map(function (a) { return ASF[a].aprobat.km; }) }, { name: "în obiective finalizate", color: "var(--ok, #1baf7a)", values: aniAsf.map(function (a) { return ASF[a].finalizat.km; }) }],
+      tooltip: function (i) { var a = ASF[aniAsf[i]]; return "<b>" + aniAsf[i] + "</b><br>aprobate: " + dec(a.aprobat.km.toFixed(1)) + " km (" + a.aprobat.strazi + " străzi, " + a.aprobat.obiective + " obiective)<br>finalizate: " + dec(a.finalizat.km.toFixed(1)) + " km (" + a.finalizat.strazi + " străzi)"; } });
     if (!peHarta.length) return;
     incarcaLeaflet().then(function () {
-      var Lf = window.L, m = Lf.map("inv-map", { scrollWheelZoom: false }).setView([47.8445, 25.9195], 14);
+      var Lf = window.L, m = harta = Lf.map("inv-map", { scrollWheelZoom: false }).setView([47.8445, 25.9195], 14);
       Lf.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(m);
-      var cs = getComputedStyle(document.documentElement), straturi = {}, toate = [];
+      var cs = getComputedStyle(document.documentElement);
       var culoare = function (k) { var c = CAT_INV[k]; return c.indexOf("var(") === 0 ? (cs.getPropertyValue(c.slice(4, -1)).trim() || "#2a78d6") : c; };
       peHarta.forEach(function (x) {
-        var k = x.categorie || "alta", c = culoare(k), st = STARE_INV[x.stare] || [""];
+        var k = x.categorie || "alta", c = culoare(k), st = STARE_INV[x.stare] || [""], g = Lf.featureGroup();
         var pop = '<div class="pop-act"><b>' + esc(x.nume.slice(0, 200)) + "</b><br>" + esc(numeCat(k)) + " · " + esc(st[0]) + (x.valoare ? " · " + lei(x.valoare) : "") + "<br>" + x.pasi.slice(-3).map(function (p) { return linkHcl(p) + " (" + esc(zi(p.data)) + ")"; }).join(", ") + "</div>";
-        var g = straturi[k] = straturi[k] || Lf.layerGroup().addTo(m);
         x.chei.forEach(function (ch) {
           var o = G[ch]; if (!o) return;
-          if (o.linii) o.linii.forEach(function (ln) { var pl = Lf.polyline(ln, { color: c, weight: k === "strazi" ? 6 : 5, opacity: 0.85 }).bindPopup(pop, popOpt(m)); g.addLayer(pl); toate.push(pl); });
-          else if (o.punct) { var cm = Lf.circleMarker(o.punct, { radius: 7, color: "#fff", weight: 2, fillColor: c, fillOpacity: 0.95 }).bindPopup(pop, popOpt(m)); g.addLayer(cm); toate.push(cm); }
+          if (o.linii) o.linii.forEach(function (ln) { g.addLayer(Lf.polyline(ln, { color: c, weight: k === "strazi" ? 6 : 5, opacity: 0.85 }).bindPopup(pop, popOpt(m))); });
+          else if (o.punct) g.addLayer(Lf.circleMarker(o.punct, { radius: 7, color: "#fff", weight: 2, fillColor: c, fillOpacity: 0.95 }).bindPopup(pop, popOpt(m)));
         });
+        straturi.push({ x: x, g: g });
       });
-      if (toate.length) { try { m.fitBounds(Lf.featureGroup(toate).getBounds().pad(0.08), { maxZoom: 15 }); } catch (e) { /* */ } }
-      Array.prototype.forEach.call(el.querySelectorAll(".inv-lg button"), function (b) {
-        b.addEventListener("click", function () { var k = b.getAttribute("data-k"), on = b.classList.toggle("on"); if (straturi[k]) { if (on) straturi[k].addTo(m); else m.removeLayer(straturi[k]); } });
-      });
+      aplica();
     }).catch(function () { $("inv-map").innerHTML = '<p class="empty">Harta nu s-a putut încărca.</p>'; });
   }
   var NUME_PAS = { indicatori: "documentație și indicatori", modificare: "indicatori modificați", finantare: "finanțare sau cofinanțare", credite: "credite de angajament",
@@ -2384,6 +2432,47 @@
     });
     return st;
   }
+  // ---------- Nota de activitate a consilierilor (metodologia Rădăuțiul Civic, 2022-2023) ----------
+  // nota = 1 (din oficiu) + 2,5 × prezența + 2,5 × inițiativele + 2,5 × intervențiile + 1 × raportul/2 + 0,5 × fără traseism + 0,25 × președinte de comisie
+  var AN_CURENT = String(new Date().getFullYear());
+  function perfManual() { return (COMP || {}).performanta || {}; }
+  function notaCons(V, c, d0, d1) {
+    var prez = 0, abs = 0, neAbs = 0, cuInt = 0, nInt = 0, aniS = {};
+    Object.keys(c.cod).forEach(function (d) {
+      if (d < d0 || d >= d1) return;
+      var ch = c.cod[d][0], ni = (c.interventii || {})[d] || 0; aniS[d.slice(0, 4)] = 1; nInt += ni;
+      if (ch === "X") { abs++; return; }
+      if (ch === "p") prez++;
+      neAbs++; if (ni) cuInt++;
+    });
+    var hcl = 0, nf = 0, nnf = 0;
+    (V.sedinte || []).forEach(function (s) { if (s.data < d0 || s.data >= d1) return; hcl += s.hcl_in_sedinta || 0; if (s.in_functie) { nf += s.in_functie; nnf++; } });
+    var norma = hcl / Math.max(1, (nnf ? nf / nnf : 19) - 1) || 0, init = (c.initiative || []).filter(function (x) { return x[0] >= d0 && x[0] < d1; });
+    var M = perfManual(), ani = Object.keys(aniS).sort(), RA = rapoarteCons(c), calit = (M.calitate_rapoarte || {})[c.id] || {};
+    var crAn = function (a) { if (calit[a] != null) return +calit[a]; if (a >= AN_CURENT) return null; return RA.some(function (x) { return x.an === a; }) ? 1 : 0; };
+    var crs = ani.map(crAn).filter(function (v) { return v != null; }), CR = crs.length ? crs.reduce(function (a, b) { return a + b; }, 0) / crs.length : 1;
+    var trase = (M.traseism || {})[c.id], pres = ((M.presedinti_comisii || {})[c.id] || []).some(function (a) { return ani.indexOf(String(a)) >= 0; });
+    // prezența: ședințele fără absență numită în procesul-verbal (PV-urile numesc absenții; ceilalți erau în sală)
+    var P = abs + neAbs ? 1 - abs / (abs + neAbs) : null, INT = neAbs ? Math.min(1, cuInt / neAbs) : null, IP = norma ? Math.min(1, init.length / norma) : 0;
+    var nota = 1 + 2.5 * (P || 0) + 2.5 * IP + 2.5 * (INT || 0) + CR / 2 + (trase ? 0 : 0.5) + (pres ? 0.25 : 0);
+    return { nota: Math.min(10, Math.round(nota * 100) / 100), P: P, IP: IP, INT: INT, CR: CR, crEstimat: !crs.length, SP: !trase, trase: trase, PRC: pres, prez: prez, abs: abs, neAbs: neAbs, cuInt: cuInt, nInt: nInt,
+      init: init, norma: hcl ? norma : null, sedinte: abs + neAbs, ani: ani };
+  }
+  function culoareNota(n) { return n >= 8 ? "#1baf7a" : n >= 6.5 ? "#8bbf3c" : n >= 5 ? "#e5a823" : n >= 3.5 ? "#ec7a2c" : "#d64545"; }
+  function scalaNota(n) {
+    return '<div class="nota-sc" role="img" aria-label="Nota ' + dec(n.toFixed(2)) + ' din 10"><div class="nota-bar"><i style="left:' + (n * 10) + '%"><b style="background:' + culoareNota(n) + '">' + dec(n.toFixed(1)) + "</b></i></div>" +
+      '<div class="nota-ax">' + [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (x) { return "<span>" + x + "</span>"; }).join("") + "</div></div>";
+  }
+  function pctN(v) { return v == null ? "-" : Math.round(100 * v) + "%"; }
+  var METODA_NOTA = '<details class="metoda"><summary>Cum se calculează nota</summary><div class="note">' +
+    "<p>Folosim metodologia cu care Asociația Rădăuțiul Civic a evaluat consilierii locali în 2022 și 2023 (<a href=\"https://www.radautiulcivic.ro/arhive/7385\" rel=\"noopener\">metodologia</a>, <a href=\"https://www.radautiulcivic.ro/arhive/7981\" rel=\"noopener\">evaluarea 2021-2023</a>). Nota e de la 1 la 10:</p>" +
+    "<ul><li><b>1 punct din oficiu</b>, ca rezervă pentru eventualele noastre erori;</li>" +
+    "<li><b>până la 2,5 puncte pentru prezență</b>: ședințele în care nu e numit printre absenți în procesul-verbal;</li>" +
+    "<li><b>până la 2,5 puncte pentru inițiative</b>: proiectele de hotărâre inițiate (din ordinea de zi din procesele-verbale), față de o normă: câte proiecte au venit pe consilier, adică hotărârile adoptate în perioadă împărțite la numărul consilierilor (fără viceprimar). În 2022 norma a fost 17 (308 proiecte, 18 consilieri);</li>" +
+    "<li><b>până la 2,5 puncte pentru intervenții</b>: în câte dintre ședințele la care a fost prezent a luat cuvântul (după procesul-verbal; nu socotim anunțul că nu participă la vot);</li>" +
+    "<li><b>până la 1 punct pentru raportul de activitate</b>: 0 dacă lipsește sau e copiat, 1 dacă e general, 2 dacă e detaliat, împărțit la 2. Automat socotim 1 pentru un raport publicat; calitatea o stabilește echipa. Pentru anul în curs raportul nu e încă scadent;</li>" +
+    "<li><b>0,5 puncte dacă nu a schimbat partidul</b> în mandat și <b>0,25 puncte (bonus) pentru președinția unei comisii</b>; le completează echipa din documente.</li></ul>" +
+    "<p>Nota e strict cantitativă: nu măsoară cât de bune sunt intervențiile sau proiectele, întâlnirile cu cetățenii sau munca din comisii. Prezența, intervențiile și inițiativele sunt citite automat din procesele-verbale scanate și pot avea erori; spune-ne dacă găsești una.</p></div></details>";
   // tabel sortabil: click pe capul unei coloane (data-ns="1" = nesortabilă); valoarea din data-v, altfel textul celulei
   function sortabil(tb) {
     var ths = tb.querySelectorAll("thead th"), body = tb.tBodies[0]; if (!body) return;
@@ -2412,7 +2501,9 @@
       th.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
     });
   }
-  function pctPrez(st) { var t = st.prezent + st.absent; return t ? Math.round(100 * st.prezent / t) + "%" : "-"; }
+  // prezența: ședințele în care consilierul nu e numit printre absenți (procesele-verbale numesc absenții)
+  function ratPrez(st) { return st.sedinte ? 1 - st.absent / st.sedinte : null; }
+  function pctPrez(st) { var r = ratPrez(st); return r == null ? "-" : Math.round(100 * r) + "%"; }
   function linkCons(V, nume) {   // numele unui consilier din PV, cu link la profil (dacă îl recunoaștem)
     var k = norm(nume).replace(/-/g, " ").split(/\s+/).filter(function (w) { return w.length > 1; }).sort().join(" ");
     var c = (V.consilieri || []).filter(function (x) { return x.id.replace(/-/g, " ") === k; })[0];
@@ -2429,7 +2520,7 @@
       var mm = M.filter(function (x) { return x[0] === ales; })[0] || ["", "0000", "9999"];
       var rows = C.map(function (c) { return { c: c, s: statCons(c, mm[1], mm[2]) }; }).filter(function (o) { return o.s.sedinte; });
       var ord = (r.q || {}).o || "nume";
-      var cheie = { nume: function (o) { return o.c.nume; }, absente: function (o) { return -o.s.absent; }, imp: function (o) { return -(o.s.I + o.s.A); }, prez: function (o) { var t = o.s.prezent + o.s.absent; return t ? o.s.prezent / t : 2; } }[ord] || function (o) { return o.c.nume; };
+      var cheie = { nume: function (o) { return o.c.nume; }, absente: function (o) { return -o.s.absent; }, imp: function (o) { return -(o.s.I + o.s.A); }, prez: function (o) { var r = ratPrez(o.s); return r == null ? 2 : r; } }[ord] || function (o) { return o.c.nume; };
       rows.sort(function (a, b) { var x = cheie(a), y = cheie(b); return x < y ? -1 : x > y ? 1 : a.c.nume.localeCompare(b.c.nume); });
       var tAbs = rows.reduce(function (a, o) { return a + o.s.absent; }, 0), tImp = rows.reduce(function (a, o) { return a + o.s.I; }, 0), tAbt = rows.reduce(function (a, o) { return a + o.s.A; }, 0);
       var th = function (k, t) { return "<th" + (k === "nume" ? "" : ' class="n"') + ">" + t + "</th>"; };
@@ -2448,7 +2539,7 @@
       });
       incetati.sort(function (a, b) { return a.inc.d < b.inc.d ? -1 : 1; });
       var tabel = function (L2, inc) {
-        return '<div class="tw"><table class="cs-t srt-t"><thead><tr>' + (inc ? "" : '<th class="n" data-ns="1">Nr.</th>') + th("nume", "Consilier") + "<th>Partid</th>" + (inc ? "<th>În consiliu</th><th>Mandat încetat</th>" : "") +
+        return '<div class="tw"><table class="cs-t srt-t"><thead><tr>' + (inc ? "" : '<th class="n" data-ns="1">Nr.</th>') + th("nume", "Consilier") + "<th>Partid</th>" + (inc ? "<th>În consiliu</th><th>Mandat încetat</th>" : "") + '<th class="n" title="Nota de activitate, de la 1 la 10 (vezi mai jos cum se calculează)">Nota</th>' +
           th("prez", "Prezență") + th("absente", "Absențe") + th("imp", "Împotrivă / abțineri") + '<th class="n">Nu a votat</th><th class="n">Pentru (dedus)</th><th class="n">Necunoscut</th><th class="n">Rapoarte de activitate</th></tr></thead><tbody>' +
           L2.map(function (o, i) {
             var s = o.s, k = o.k || (curent ? compDe(o.c.id) : null), val = evMand(o.c).filter(function (e) { return e.fel === "validare"; })[0];
@@ -2458,12 +2549,13 @@
             var nume = k && tk(k.nume) !== tk(o.c.nume) && tk(k.nume).length === tk(o.c.nume).length ? k.nume : o.c.nume;
             var link = o.c.id && s ? '<a href="#consiliu/consilieri/' + encodeURIComponent(o.c.id) + '"><strong>' + esc(nume) + "</strong></a>" : "<strong>" + esc(nume) + "</strong>";
             var nou = val ? '<span class="tag">validat ' + esc(zi(val.data)) + "</span>" : k && k.nou ? '<span class="tag">din ' + esc(zi(k.nou.din)) + "</span>" : "";
-            var tot = s ? s.prezent + s.absent : 0, nRap = rapoarteCons(o.c).length;
+            var tot = s ? s.prezent + s.absent : 0, nRap = rapoarteCons(o.c).length, nt = s ? notaCons(V, o.c, mm[1], mm[2]) : null;
             return '<tr data-n="' + esc(norm(nume)) + '" data-p="' + esc((k && k.partid) || "") + '">' + (inc ? "" : '<td class="n nrc">' + (i + 1) + "</td>") + '<td class="cs-n" data-v="' + esc(nume) + '"><span class="cs-nm">' + avatar(k, o.c.nume, false, true) + "<span>" + link + (nou ? "<br>" + nou : "") + "</span></span></td>" +
               '<td class="cs-p">' + (k && k.sigla ? '<img src="' + FTDATA + esc(k.sigla) + '" alt="" loading="lazy" onerror="this.remove()">' : "") + esc((k && k.partid) || "") + "</td>" +
               (inc ? '<td class="nw" data-v="' + esc((p[0] || [""])[0]) + '">' + p.map(function (x) { return esc(zi(x[0])) + " - " + esc(zi(x[1])); }).join("<br>") + '</td><td class="inc" data-v="' + esc(o.inc.d || "") + '">' + esc(zi(o.inc.d)) +
                 (o.inc.h ? " · " + linkHcl(o.inc.h) : "") + (o.inc.t ? '<details class="more-t"><summary>detalii</summary><div class="muted">' + esc(o.inc.t) + "</div></details>" : "") + "</td>" : "") +
-              (s ? '<td class="n" data-v="' + (tot ? s.prezent / tot : -1) + '">' + pctPrez(s) + '</td><td class="n" data-v="' + s.absent + '">' + nr(s.absent) + '</td><td class="n" data-v="' + (s.I + s.A) + '">' + nr(s.I) + " / " + nr(s.A) +
+              '<td class="n" data-v="' + (nt ? nt.nota : -1) + '">' + (nt ? '<span class="nota-p" style="background:' + culoareNota(nt.nota) + '" title="prezență ' + pctN(nt.P) + ", intervenții în " + pctN(nt.INT) + " din ședințe, " + nt.init.length + ' inițiative">' + dec(nt.nota.toFixed(1)) + "</span>" : '<span class="muted">-</span>') + "</td>" +
+              (s ? '<td class="n" data-v="' + (s.sedinte ? ratPrez(s) : -1) + '">' + pctPrez(s) + '</td><td class="n" data-v="' + s.absent + '">' + nr(s.absent) + '</td><td class="n" data-v="' + (s.I + s.A) + '">' + nr(s.I) + " / " + nr(s.A) +
                 '</td><td class="n" data-v="' + s.N + '">' + nr(s.N) + '</td><td class="n" data-v="' + s.P + '">' + nr(s.P) + '</td><td class="n" data-v="' + s["?"] + '">' + nr(s["?"]) + "</td>"
                 : '<td class="n muted" colspan="6">încă fără procese-verbale publicate</td>') +
               '<td class="n" data-v="' + nRap + '">' + (function () { var n_ = nRap; return n_ ? '<a href="#consiliu/consilieri/' + encodeURIComponent(o.c.id) + '">' + n_ + "</a>" : '<span class="muted">0</span>'; })() + "</td></tr>";
@@ -2481,6 +2573,16 @@
         Object.keys(activi.concat(incetati).reduce(function (a, o) { var k = o.k || (curent ? compDe(o.c.id) : null); if (k && k.partid) a[k.partid] = 1; return a; }, {})).sort().map(function (p_) { return "<option>" + esc(p_) + "</option>"; }).join("") +
         '</select><span class="muted cs-h">Apasă pe capul unei coloane ca să sortezi după ea.</span></div>' +
         tabel(activi, false) + "</section>" +
+        (function () {
+          var R = rows.map(function (o) { return { o: o, n: notaCons(V, o.c, mm[1], mm[2]) }; }).filter(function (x) { return x.n.sedinte >= 3; }).sort(function (a, b) { return b.n.nota - a.n.nota; });
+          if (!R.length) return "";
+          var med = R.reduce(function (a, x) { return a + x.n.nota; }, 0) / R.length;
+          return '<section class="card section"><h2>Nota de activitate în mandatul ' + esc(ales) + "</h2>" +
+            '<p class="note">Media consilierilor: <b>' + dec(med.toFixed(2)) + "</b>. Apasă pe un nume pentru detalii pe ani. Nota e calculată automat după metodologia Rădăuțiul Civic; vezi mai jos ce intră în ea și ce nu.</p>" +
+            '<div class="hbars nota-rk">' + R.map(function (x) { var n = x.n.nota;
+              return '<a class="hb hb-a" href="#consiliu/consilieri/' + encodeURIComponent(x.o.c.id) + '"><span class="hb-l">' + esc(x.o.c.nume) + '</span><span class="hb-t"><i style="width:' + (n * 10) + "%;background:" + culoareNota(n) + '"></i></span><span class="hb-v">' + dec(n.toFixed(2)) + "</span></a>"; }).join("") + "</div>" +
+            METODA_NOTA + "</section>";
+        })() +
         (incetati.length ? '<section class="card section"><h2>Mandat încetat în această legislatură <span class="nr-b n">' + incetati.length + "</span></h2>" +
           '<p class="note">Consilieri care au plecat din consiliu înainte de sfârșitul mandatului: demisie, incompatibilitate, pierderea calității de membru al partidului și alte cazuri prevăzute de lege. Locul lor e preluat de supleanți de pe aceeași listă.</p>' +
           tabel(incetati, true) + "</section>" : "") +
@@ -2534,8 +2636,31 @@
           '<div class="cs-d">' + (compDe(c.id).iesit ? '<span class="warn-t">Nu mai e consilier local. ' + esc(compDe(c.id).iesit.text || "") + "</span>" : "") +
           (INTERN ? (declaratii(compDe(c.id)) || '<span class="muted">Declarațiile nu sunt pe pagina primăriei.</span>') + ' <a href="#declaratii">analiza declarațiilor</a>' : "") + "</div></div></section>" : "") +
         ((c.evenimente || []).length ? '<p class="note">' + c.evenimente.map(function (e) { return e.hcl ? (e.fel === "validare" ? "Mandat validat" : "Mandat încetat") + " prin " + linkHcl(e.hcl) + " din " + esc(zi(e.data)) : (e.fel === "validare" ? "A depus jurământul în " : "Mandat încetat în ") + linkSed(e.data, null); }).join(" · ") + ".</p>" : "") +
-        '<div class="grid">' + tile("Prezență", pctPrez(st), "", nr(st.prezent) + " ședințe prezent, " + nr(st.absent) + " absent" + (st.necunoscut ? ", " + nr(st.necunoscut) + " necunoscut" : "")) +
+        '<div class="grid">' + tile("Prezență", pctPrez(st), "", nr(st.sedinte - st.absent) + " din " + nr(st.sedinte) + " ședințe fără absență în procesul-verbal") +
         tile("Voturi împotrivă", nr(st.I), "", "") + tile("Abțineri", nr(st.A), "", "") + tile("Nu a votat", nr(st.N), "", "conflict de interese sau a ieșit din sală") + "</div>" +
+        (function () {
+          var ani_ = Object.keys(ani).sort(), Mv = mandateDin(V), mand = Mv.filter(function (m) { return c.mandate.indexOf(m[0]) >= 0; }).pop();
+          if (!ani_.length) return "";
+          var NA = ani_.map(function (a) { return { a: a, n: notaCons(V, c, a, String(+a + 1)) }; }).filter(function (x) { return x.n.sedinte; });
+          var NM = mand ? notaCons(V, c, mand[1], mand[2]) : null;
+          var sedL = function (d) { return '<a href="#consiliu/sedinte/' + esc(d) + '">' + esc(zi(d)) + "</a>"; };
+          var intD = Object.keys(c.interventii || {}).sort().reverse();
+          return '<section class="card section"><h2>Nota de activitate</h2>' +
+            (NM ? '<p class="note">În mandatul ' + esc(mand[0]) + ", până acum:</p>" + scalaNota(NM.nota) +
+              '<div class="grid nota-g">' + tile("Prezență", pctN(NM.P), "", (NM.sedinte - NM.abs) + " din " + NM.sedinte + " ședințe fără absență în procesul-verbal") +
+              tile("Intervenții", pctN(NM.INT), "din ședințe", "a luat cuvântul în " + NM.cuInt + " din " + NM.neAbs + " ședințe (" + NM.nInt + " intervenții)") +
+              tile("Proiecte inițiate", nr(NM.init.length), "", NM.norma ? "norma pe consilier în perioadă: " + dec(NM.norma.toFixed(0)) : "") +
+              tile("Raport de activitate", dec(NM.CR.toFixed(1)), "din 2", NM.crEstimat ? "fără an încheiat de evaluat" : "în medie pe anii încheiați") + "</div>" : "") +
+            (NA.length > 1 ? '<h3 class="an-h">Nota pe ani</h3><div class="chart" id="cp-nota"></div>' : "") +
+            '<div class="tw"><table><thead><tr><th>An</th><th class="n">Nota</th><th class="n">Prezență</th><th class="n">Ședințe cu intervenții</th><th class="n">Proiecte inițiate</th><th class="n">Raport</th></tr></thead><tbody>' +
+            NA.slice().reverse().map(function (x) { var n = x.n, cr = (perfManual().calitate_rapoarte || {})[c.id];
+              return "<tr><td>" + x.a + (x.a >= AN_CURENT ? ' <small class="muted">(în curs)</small>' : "") + '</td><td class="n"><span class="nota-p" style="background:' + culoareNota(n.nota) + '">' + dec(n.nota.toFixed(1)) + '</span></td><td class="n">' + pctN(n.P) + '</td><td class="n">' + n.cuInt + " / " + n.neAbs +
+                '</td><td class="n">' + n.init.length + (n.norma ? ' <small class="muted">/ ' + dec(n.norma.toFixed(0)) + "</small>" : "") + '</td><td class="n">' + (x.a >= AN_CURENT && !(cr && cr[x.a] != null) ? '<span class="muted">se depune anul viitor</span>' : n.CR >= 2 ? "detaliat" : n.CR >= 1 ? "publicat" : "lipsă") + "</td></tr>"; }).join("") +
+            "</tbody></table></div>" +
+            (c.initiative && c.initiative.length ? '<h3 class="an-h">Proiecte inițiate <span class="nr-b n">' + c.initiative.length + "</span></h3>" + '<ul class="nota-li">' + c.initiative.map(function (x) { return "<li>" + sedL(x[0]) + ": " + esc(x[1]) + "...</li>"; }).join("") + "</ul>" : "") +
+            (intD.length ? '<details class="nota-d"><summary><b>Ședințele în care a luat cuvântul</b> <span class="nr-b n">' + intD.length + '</span></summary><p class="note">În paranteză, de câte ori, după procesul-verbal.</p><div class="lnks">' + intD.map(function (d) { return '<a href="#consiliu/sedinte/' + esc(d) + '">' + esc(zi(d)) + " <small>(" + c.interventii[d] + ")</small></a>"; }).join("") + "</div></details>" : "") +
+            METODA_NOTA + "</section>";
+        })() +
         '<section class="card section"><h2>Pe ani</h2><p class="note">„Pentru (dedus)” e votul unui consilier prezent care nu e numit printre cei care au votat altfel; îl socotim doar în ședințele în care știm sigur cine a fost în sală.</p>' +
         '<div class="tw"><table><thead><tr><th>An</th><th class="n">Ședințe</th><th class="n">Absent</th><th class="n">Împotrivă</th><th class="n">Abțineri</th><th class="n">Nu a votat</th><th class="n">Pentru (dedus)</th></tr></thead><tbody>' +
         Object.keys(ani).sort().reverse().map(function (a) { var x = ani[a]; return "<tr><td>" + a + '</td><td class="n">' + x.s + '</td><td class="n">' + x.X + '</td><td class="n">' + x.I + '</td><td class="n">' + x.A + '</td><td class="n">' + x.N + '</td><td class="n">' + x.P + "</td></tr>"; }).join("") +
@@ -2546,6 +2671,9 @@
           '<p class="note">Rapoartele anuale pe care consilierul le-a depus, publicate de primărie.</p>' + RA.map(function (x) {
             return '<div class="doc"><div class="h">' + (x.an ? '<span class="id">' + esc(x.an) + "</span>" : "") + '<a class="lk" href="' + esc(safeUrl(x.url) || "#") + '" rel="noopener">PDF</a></div><div class="t">' + esc(x.titlu) + "</div></div>"; }).join("") + "</section>" : ""; })() +
         '<section class="card section"><h2>Toate voturile</h2><div id="cp-l"></div></section>';
+      if ($("cp-nota")) { var NA2 = Object.keys(ani).sort().map(function (a) { return { a: a, n: notaCons(V, c, a, String(+a + 1)) }; }).filter(function (x) { return x.n.sedinte; });
+        chart($("cp-nota"), { cats: NA2.map(function (x) { return x.a; }), series: [], h: 170, label: "Nota de activitate pe ani", line: { color: "var(--c1)", values: NA2.map(function (x) { return x.n.nota; }) },
+          tooltip: function (i) { var n = NA2[i].n; return "<b>" + NA2[i].a + "</b>: nota " + dec(n.nota.toFixed(2)) + "<br>prezență " + pctN(n.P) + ", intervenții în " + n.cuInt + "/" + n.neAbs + " ședințe, " + n.init.length + " proiecte inițiate"; } }); }
       lista($("cp-l"), voturi, { placeholder: "Caută în titlurile proiectelor (ex. buget, teren, taxe)", unitate: ["vot", "voturi"],
         an: function (x) { return x.d.slice(0, 4); }, text: function (x) { return (x.v.titlu || "") + (x.v.hcl ? " hcl " + x.v.hcl.nr + "/" + x.v.hcl.an : ""); },
         extraFilter: { html: '<select aria-label="Votul"><option value="">Orice vot</option>' + Object.keys(VCOD).map(function (k) { return '<option value="' + k + '">' + VCOD[k][2] + "</option>"; }).join("") + "</select>", test: function (x, e) { return x.c === e; } },

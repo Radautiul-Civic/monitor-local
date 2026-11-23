@@ -83,6 +83,16 @@ def leaga(nume, consilieri):
 CORECTII = os.path.join(os.path.dirname(os.path.dirname(__file__)), "surse", "componenta", "corectii.json")
 
 
+def _performanta_manual(cale=CORECTII):
+    """Ce nu se poate citi automat pentru nota consilierilor: schimbarea partidului, președinții de comisii, calitatea rapoartelor
+    (0 lipsă sau copiat, 1 general, 2 detaliat), completate de echipă în corectii.json, la „performanta”."""
+    try:
+        with open(cale, encoding="utf-8") as f:
+            return json.load(f).get("performanta") or {}
+    except (OSError, ValueError):
+        return {}
+
+
 def corecteaza(rows, cons, cale=CORECTII):
     """Pagina primăriei nu e mereu la zi: partidele lipsă, consilierii plecați și cei noi vin din surse/componenta/corectii.json."""
     try:
@@ -160,7 +170,7 @@ def scrie(data_dir, client=None, slug="componenta"):
                 x[camp] = None
         out.append(x)
     out = corecteaza(out, cons)
-    rez = {"sursa": d[0]["link"], "actualizat": d[0]["modified"][:10], "consilieri": out}
+    rez = {"sursa": d[0]["link"], "actualizat": d[0]["modified"][:10], "consilieri": out, "performanta": _performanta_manual()}
     with open(os.path.join(data_dir, "componenta.json"), "w", encoding="utf-8") as f:
         json.dump(rez, f, ensure_ascii=False, separators=(",", ":"))
     return {"consilieri": len(out), "legati": sum(1 for x in out if x["id"]), "fara_foto": sum(1 for x in out if not x["foto"]),

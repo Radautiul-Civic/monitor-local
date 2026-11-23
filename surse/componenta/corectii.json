@@ -1,21 +1,27 @@
 {
-  "_despre": "Corecții la pagina „Componența” a primăriei (actualizată ultima dată pe 17.11.2025), din documente publice: ordinea de zi a ședințelor, hotărâri, informații confirmate de echipă.",
-  "partide": {
-    "dan-george-marcu": "AUR",
-    "constantin-cristinel-hritcan": "AUR"
-  },
-  "iesiti": {
-    "constantin-cristinel-hritcan": {
-      "pana_la": "2026-10-22",
-      "text": "Locul său în consiliu a fost preluat de Anuței Eugen-Dorin, validat prin Încheierea Judecătoriei Rădăuți nr. 1581/12.08.2026, rămasă definitivă prin Decizia Tribunalului Suceava nr. 967/09.10.2026; jurământul a fost depus în ședința din 22 octombrie 2026."
-    }
-  },
-  "adaugati": [
-    {
-      "nume": "Anuței Eugen-Dorin",
-      "partid": "AUR",
-      "din": "2026-10-22",
-      "text": "Consilier local validat prin Încheierea Judecătoriei Rădăuți nr. 1581/12.08.2026, rămasă definitivă prin Decizia Tribunalului Suceava nr. 967/09.10.2026; a depus jurământul în ședința din 22 octombrie 2026, pe locul rămas liber după Hrițcan Constantin-Cristinel."
-    }
-  ]
+ "_despre": "Corecții la pagina „Componența” a primăriei (actualizată ultima dată pe 17.11.2025), din documente publice: ordinea de zi a ședințelor, hotărâri, informații confirmate de echipă.",
+ "partide": {
+  "dan-george-marcu": "AUR",
+  "constantin-cristinel-hritcan": "AUR"
+ },
+ "iesiti": {
+  "constantin-cristinel-hritcan": {
+   "pana_la": "2026-10-22",
+   "text": "Locul său în consiliu a fost preluat de Anuței Eugen-Dorin, validat prin Încheierea Judecătoriei Rădăuți nr. 1581/12.08.2026, rămasă definitivă prin Decizia Tribunalului Suceava nr. 967/09.10.2026; jurământul a fost depus în ședința din 22 octombrie 2026."
+  }
+ },
+ "adaugati": [
+  {
+   "nume": "Anuței Eugen-Dorin",
+   "partid": "AUR",
+   "din": "2026-10-22",
+   "text": "Consilier local validat prin Încheierea Judecătoriei Rădăuți nr. 1581/12.08.2026, rămasă definitivă prin Decizia Tribunalului Suceava nr. 967/09.10.2026; a depus jurământul în ședința din 22 octombrie 2026, pe locul rămas liber după Hrițcan Constantin-Cristinel."
+  }
+ ],
+ "performanta": {
+  "_despre": "Pentru nota consilierilor (metodologia Rădăuțiul Civic). traseism: {id: text cu sursa}; presedinti_comisii: {id: [ani]}; calitate_rapoarte: {id: {an: 0|1|2}} (0 lipsă sau copiat, 1 general, 2 detaliat). Ce lipsește: fără traseism, fără președinție de comisie, raport publicat = 1.",
+  "traseism": {},
+  "presedinti_comisii": {},
+  "calitate_rapoarte": {}
+ }
 }

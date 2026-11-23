@@ -434,7 +434,8 @@ def export(store, mostre=8):
         sedinte[k] = {"data": r["session_date"], "tip": r["session_type"], "titlu": r["title"],
                       "pdf": pdf["url"] if pdf else None, "prezenti": pr, "in_functie": prz["in_functie"],
                       "absenti": prz["absenti"], "presedinte": prz["presedinte"], "online": prz["online"],
-                      "constituire": prz["constituire"], "hcl_in_sedinta": len(hcl), "voturi": leaga_hcl(vot, hcl)}
+                      "constituire": prz["constituire"], "hcl_in_sedinta": len(hcl), "voturi": leaga_hcl(vot, hcl),
+                      "vorbitori": prz.get("vorbitori") or {}, "initiatori": prz.get("initiatori") or []}
         if len(sedinte) <= mostre:
             sedinte[k]["mostra"] = mostra(text)
     S = sorted(sedinte.values(), key=lambda x: x["data"], reverse=True)
@@ -590,6 +591,8 @@ def extra_sedinta(text):
     if m:
         out["online"] = _nume_lista(text[m.start(1):m.end(1)])
     # consilierul care intră în locul altuia depune jurământul în ședință
+    out["vorbitori"] = vorbitori(text)
+    out["initiatori"] = initiatori(text)
     out["juramant"] = []
     for m in re.finditer(r"depun\w*\s+(?:a\s+)?juramant\w*|a\s+depus\s+juramantul", s):
         zona = s[max(0, m.start() - 220): m.end() + 220]
@@ -597,6 +600,50 @@ def extra_sedinta(text):
             n = _nume_presedinte(text, max(0, m.start() - 220) + p.end())
             if n and not (NU_NUME & set(_tok(n))) and n not in out["juramant"]:
                 out["juramant"].append(n)
+    return out
+
+
+# cine vorbește în ședință: paragrafele care încep cu „Dl X intervine/întreabă/precizează...” (OCR scrie des „DI” pentru „Dl”)
+R_VORBITOR = re.compile(r"^[ \t_|]*(?:D[lI1]\.?|D-[lI]\.?|D-ul|D-na|Dna\.?|Domnul|Doamna)[ \t]+(?:consilier\w*[ \t]+(?:local[ \t]+)?)?_?"
+                        r"([A-ZĂÂÎȘŞȚŢ][\w\-ăâîșşțţ]+(?:[ \t]*-[ \t]*[A-ZĂÂÎȘŞȚŢ][\w\-ăâîșşțţ]+|[ \t]+[A-ZĂÂÎȘŞȚŢ][\w\-ăâîșşțţ]+){0,2})[ \t,]+([a-zăâîșşțţ]+)",
+                        re.M)
+# ce nu e o intervenție pe fond: anunțul că nu participă la vot, conducerea ședinței
+R_NU_INTERV = re.compile(r"nu\s+particip|supune\s+la\s+vot|declara\s+(?:inchis|deschis)|da\s+citire|constata\s+ca\s+sunt\s+prezent")
+# inițiatorii din ordinea de zi: „... - inițiator(i) consilier(i) local(i) X, Y;”
+R_INITIATOR = re.compile(r"initiator\w*\s*[,:\-]?\s*(?:(?:domn\w*|doamn\w*|d-l|dl)\s+)?consilier\w*\s+local\w*\s*[,:\-]?\s*(.{3,300}?)"
+                         r"(?=;|\n\s*[-_'.]*\s*se\s+solicit|\n\s*-\s*exist|\s+proiect\w*\s+de\s+hot|\n\s*\d+\s*[.,]\s|\n\s*\n|$)", re.S)
+
+
+def vorbitori(text):
+    """{nume: câte intervenții} din procesul-verbal (nume așa cum apar, de obicei doar numele de familie)."""
+    out = {}
+    for m in R_VORBITOR.finditer(text or ""):
+        nume = re.sub(r"\s*-\s*", "-", m.group(1)).strip()
+        if NU_NUME & set(_tok(nume)) or len(nume) < 3:
+            continue
+        rand = normalizeaza(text[m.start(): text.find("\n", m.end()) if text.find("\n", m.end()) > 0 else m.end() + 200])
+        if R_NU_INTERV.search(rand):
+            continue
+        out[nume] = out.get(nume, 0) + 1
+    return out
+
+
+def initiatori(text):
+    """[(cheia proiectului, [nume])] pentru proiectele din ordinea de zi inițiate de consilieri."""
+    s = normalizeaza(text or "")
+    out = []
+    for m in R_INITIATOR.finditer(s):
+        lista = re.sub(r"\s+", " ", text[m.start(1): m.end(1)])
+        lista = re.sub(r"(?i)\b(?:partidul|grupul|din partea)\b.*?(?=,|$)", "", lista)
+        nume = [n.strip(" .,-—–_") for n in re.split(r",|\s+(?:și|şi|si)\s+", lista)]
+        nume = [n for n in nume if 2 <= len(_tok(n)) <= 4 and not (NU_NUME & set(_tok(n)))]
+        if not nume:
+            continue
+        i = s.rfind("proiect", 0, m.start())
+        t = s[i: m.start()] if i >= 0 and m.start() - i < 700 else s[max(0, m.start() - 300): m.start()]
+        t = re.split(r"\bprivind\b", t, maxsplit=1)[-1]
+        cheie = " ".join(re.findall(r"[a-z]{3,}", t)[:14])
+        out.append((cheie, nume))
     return out
 
 
@@ -812,8 +859,19 @@ def consilieri(sedinte, mandate=None, azi=None, evenimente=None, min_mentiuni=2)
 
     # 3. pe fiecare ședință: cine era în consiliu, cine a lipsit, cum a votat fiecare
     cod = {k: {} for k in perioade}
+    interv = {k: {} for k in perioade}
+    initiative = {k: {} for k in perioade}
     for x in S:
         ros = activi(x["data"], x.get("in_functie"))
+        for n, c in (x.get("vorbitori") or {}).items():
+            k = rezolva(n, x["data"], ros)
+            if k:
+                interv[k][x["data"]] = interv[k].get(x["data"], 0) + c
+        for cheie_p, nume in x.get("initiatori") or []:
+            for n in nume:
+                k = rezolva(n, x["data"], ros)
+                if k and cheie_p not in initiative[k]:   # același proiect, amânat și pus din nou pe ordinea de zi, o singură dată
+                    initiative[k][cheie_p] = x["data"]
         abs_ = {rezolva(n, x["data"], ros) for n in x.get("absenti") or []} - {None}
         nf, pr = x.get("in_functie"), x.get("prezenti")
         complet = bool(nf and pr is not None and len(abs_) == nf - pr)
@@ -857,7 +915,8 @@ def consilieri(sedinte, mandate=None, azi=None, evenimente=None, min_mentiuni=2)
                 reale.append([a_ if (date.fromisoformat(ds[0]) - date.fromisoformat(a_)).days <= 60 else ds[0], ds[-1]])
         seg = reale or seg
         out.append({"id": re.sub(r"\s+", "-", k), "nume": nume, "variante": sorted(forme[k]), "perioade": seg,
-                    "mandate": legc.get(k, []), "evenimente": evc.get(k, []), "stat": st, "cod": cod[k]})
+                    "mandate": legc.get(k, []), "evenimente": evc.get(k, []), "stat": st, "cod": cod[k],
+                    "interventii": interv[k], "initiative": sorted(([d, c] for c, d in initiative[k].items()), reverse=True)})
     out.sort(key=lambda c: (-int(c["perioade"][-1][1] >= (ultima or "")), c["nume"]))
     return out, [{"eticheta": e, "start": a, "sfarsit": b,
                   "membri": sum(1 for c in out if e in c["mandate"])} for e, a, b in LEG]

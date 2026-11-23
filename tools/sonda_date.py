@@ -31,3 +31,18 @@ elif fel in ("pv-grep", "hcl-grep"):
             n += 1
             if n >= 400:
                 raise SystemExit
+elif fel == "vorbitori":   # câte intervenții și inițiative găsește extragerea, pe ani, și câteva exemple
+    from collections import Counter
+    sys.path.insert(0, ".")
+    from monitor_colector import voturi as V
+    pe_an, init_an, ex = Counter(), Counter(), []
+    for d, tp, t in texte("pv", "session_date"):
+        v, i = V.vorbitori(t), V.initiatori(t)
+        pe_an[d[:4]] += sum(v.values())
+        init_an[d[:4]] += len(i)
+        if d[:4] == (arg or "2023"):
+            ex.append((d, v, i))
+    print("interventii pe ani:", dict(sorted(pe_an.items())))
+    print("proiecte cu initiatori consilieri pe ani:", dict(sorted(init_an.items())))
+    for d, v, i in ex[:40]:
+        print(d, v, i)

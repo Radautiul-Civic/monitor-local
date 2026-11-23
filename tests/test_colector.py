@@ -1857,3 +1857,39 @@ class TestDeclaratii(unittest.TestCase):
              "Membru: SC „NORD GAZ” SRL. Cont la Banca Transilvania S.A.")
         self.assertEqual([f["nucleu"] for f in D.firme_din_text(t)], ["best style construct", "nord gaz"])
         self.assertEqual(D._nucleu('s.c."best style construct"s.r.l.'), "best style construct")
+
+
+class TestNotaSiAsfaltari(unittest.TestCase):
+    def test_vorbitori(self):
+        from monitor_colector import voturi as V
+        t = ("DI Primar propune suplimentarea ordinii de zi.\n"
+             "DI Jecalo intervine şi propune ca proiectele să fie discutate.\n"
+             "Dna Blanaru intervine şi precizează că nu participă la discuţii şi nici la vot la proiectul 3.\n"
+             "Dna Blanaru intervine şi întreabă dacă se poate o corelare?\n"
+             "D-ul consilier Mitric Emanuel anunță că are o propunere.\n"
+             "D-ul Carcalete supune la vot amendamentul.\n"
+             "Dl Jecalo răspunde că da.\n")
+        self.assertEqual(V.vorbitori(t), {"Jecalo": 2, "Blanaru": 1, "Mitric Emanuel": 1})
+
+    def test_initiatori(self):
+        from monitor_colector import voturi as V
+        t = ("2. Proiect de hotărâre privind conferirea titlului de Cetăţean de Onoare doamnei doctor Popescu Angelica- iniţiatori, consilieri locali "
+             "Airinei Cristina, Nistor Tatar şi Vasiloschi Iulian-Teodor;\n- Se solicită aviz\n"
+             "3. Proiect de hotărâre privind bugetul - iniţiator primar LOGHIN Bogdan-Andrei;\n")
+        r = V.initiatori(t)
+        self.assertEqual(len(r), 1)
+        self.assertEqual(r[0][1], ["Airinei Cristina", "Nistor Tatar", "Vasiloschi Iulian-Teodor"])
+        self.assertTrue(r[0][0].startswith("conferirea titlului"))
+
+    def test_strazi_in_oras_si_km(self):
+        from monitor_colector import teme
+        L = [[[47.80, 25.90], [47.83, 25.90], [47.84, 25.90], [47.88, 25.91]]]
+        self.assertEqual(teme.taie_in_oras(L), [[[47.83, 25.90], [47.84, 25.90]]])
+        self.assertAlmostEqual(teme.lungime_km(teme.taie_in_oras(L)), 1.11, places=2)
+        inv = [{"categorie": "strazi", "strazi": ["Str. Luncii"], "chei": ["luncii"],
+                "pasi": [{"pas": "indicatori", "data": "2023-02-01"}, {"pas": "finalizat", "data": "2025-05-01"}]},
+               {"categorie": "scoli", "chei": ["luncii"], "pasi": [{"pas": "indicatori", "data": "2023-02-01"}]}]
+        a = teme.asfaltari(inv, {"luncii": {"km": 1.2}})
+        self.assertEqual(a["2023"]["aprobat"]["km"], 1.2)
+        self.assertEqual(a["2023"]["aprobat"]["lista"], [["Str. Luncii", 1.2]])
+        self.assertEqual(a["2025"]["finalizat"]["obiective"], 1)
