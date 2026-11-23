@@ -142,7 +142,7 @@ def public_date():
     except (OSError, ValueError) as e:
         print(f"atenție: indicatori: {e}", file=sys.stderr)
     for name in ("liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json", "buget.json", "concursuri.json",
-                 "sedinte.json", "noutati.json", "noutati.xml", "acasa.json"):
+                 "sedinte.json", "noutati.json", "noutati.xml", "acasa.json", "componenta.json"):
         if os.path.exists(os.path.join(d, name)):
             out[name] = os.path.join(d, name)
     di = os.path.join(d, "intern-date")   # voturi, consilieri etc.; litigiile rămân interne
@@ -158,7 +158,7 @@ def intern_date():
     d = os.path.join(ROOT, "data")
     out = {}
     for name in ("indicatori.json", "liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json", "buget.json", "concursuri.json",
-                 "sedinte.json", "noutati.json", "acasa.json"):
+                 "sedinte.json", "noutati.json", "acasa.json", "componenta.json"):
         if os.path.exists(os.path.join(d, name)):
             out[name] = os.path.join(d, name)
     di = os.path.join(d, "intern-date")   # litigii cu numele părților, voturi
@@ -211,15 +211,18 @@ def cautare_de_urcat(base):
 MANIFEST_DISTRIBUIE = os.path.join(ROOT, "data", "publicat-distribuie.json")
 
 
-def distribuie_de_urcat():
+def _folder_de_urcat(local, remote, manifest, subfoldere=("",)):
+    """Fișierele noi sau schimbate (după amprentă) dintr-un folder din data/, pentru folderul `remote` de pe hosting."""
     import hashlib
-    d = os.path.join(ROOT, "data", "distribuie")
+    d = os.path.join(ROOT, "data", local)
     if not os.path.isdir(d):
         return [], None
-    done = _manifest(MANIFEST_DISTRIBUIE)
+    done = _manifest(manifest)
     files = []
-    for sub in ("img", ""):   # întâi imaginile, ca pagina să nu trimită spre o imagine încă neurcată
+    for sub in subfoldere:
         p0 = os.path.join(d, sub)
+        if not os.path.isdir(p0):
+            continue
         for n in sorted(os.listdir(p0)):
             p = os.path.join(p0, n)
             if not os.path.isfile(p):
@@ -228,8 +231,16 @@ def distribuie_de_urcat():
                 h = hashlib.sha1(f.read()).hexdigest()
             key = (sub + "/" + n) if sub else n
             if done.get(key) != h:
-                files.append((p, "/".join(x for x in ("s", sub) if x), n, key, h))
+                files.append((p, "/".join(x for x in (remote, sub) if x), n, key, h))
     return files, done
+
+
+def distribuie_de_urcat():
+    # întâi imaginile, ca pagina să nu trimită spre o imagine încă neurcată
+    return _folder_de_urcat("distribuie", "s", MANIFEST_DISTRIBUIE, ("img", ""))
+
+
+MANIFEST_CONSILIERI = os.path.join(ROOT, "data", "publicat-consilieri.json")
 
 
 RAPOARTE = ("indicatori.md", "urbanism-registre.txt", "sicap-de-verificat.txt", "sicap-castigatori-proba.json",
@@ -289,7 +300,9 @@ def main():
     df, manifeste["distribuie"] = distribuie_de_urcat()
     print(f"distribuie: {len(df)} fișiere noi sau modificate")
     files = files[:len(files) - len(cf)] + [(p, r, n, "distribuie", k, h) for p, r, n, k, h in df] + files[len(files) - len(cf):]
-    cai = {"texte": MANIFEST, "cautare": MANIFEST_CAUTARE, "distribuie": MANIFEST_DISTRIBUIE}
+    kf, manifeste["consilieri"] = _folder_de_urcat("consilieri", "date/consilieri", MANIFEST_CONSILIERI)
+    files = files[:len(files) - len(cf)] + [(p, r, n, "consilieri", k, h) for p, r, n, k, h in kf] + files[len(files) - len(cf):]
+    cai = {"texte": MANIFEST, "cautare": MANIFEST_CAUTARE, "distribuie": MANIFEST_DISTRIBUIE, "consilieri": MANIFEST_CONSILIERI}
 
     def salveaza():
         for m, d in manifeste.items():

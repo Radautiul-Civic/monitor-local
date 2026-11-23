@@ -1739,3 +1739,27 @@ class TestPoveste(unittest.TestCase):
         self.assertEqual((a["achizitii_lei"], a["achizitii_nr"]), (51000, 2))
         self.assertEqual(a["cel_mai_mare"]["obiect"], "Asfaltare")
         self.assertEqual(a["furnizor_principal"], {"nume": "FIRMA SRL", "lei": 51000})
+
+
+class TestComponenta(unittest.TestCase):
+    HTML = ('<table class="tablepress"><thead><tr class="row-1"><th>Nume</th><th>Fotografie</th><th>Partid</th><th>Decl. avere</th><th>Decl. interese</th></tr></thead><tbody>'
+            '<tr class="row-2"><td class="column-1">Airinei Cristina</td><td class="column-2"><img src="https://x.ro/CS_Airinei-225x300.jpeg" alt=""></td>'
+            '<td class="column-3"><img src="https://x.ro/Partidul_Social_Democrat_logo.svg_-150x150-1.png" alt=""></td>'
+            '<td class="column-4"><a href="https://x.ro/DA1.pdf">Declaratie 2024/1</a><br><a href="https://x.ro/DA2.pdf">Declaratie 2024/2</a></td>'
+            '<td class="column-5"><a href="https://x.ro/DI.pdf">Declaratie 2024</a></td></tr>'
+            '<tr class="row-3"><td class="column-1">Hritcan Constantin-Cristinel</td><td class="column-2"></td>'
+            '<td class="column-3"><img src="https://x.ro/images.jpeg" alt=""></td><td class="column-4"></td><td class="column-5"></td></tr></tbody></table>')
+
+    def test_parse_si_legare(self):
+        from monitor_colector import componenta as K
+        P = K.parse(self.HTML)
+        self.assertEqual([x["nume"] for x in P], ["Airinei Cristina", "Hritcan Constantin-Cristinel"])
+        self.assertEqual(P[0]["partid"], "PSD")
+        self.assertIsNone(P[1]["partid"])
+        self.assertEqual([d["url"] for d in P[0]["avere"]], ["https://x.ro/DA1.pdf", "https://x.ro/DA2.pdf"])
+        self.assertIsNone(P[1]["foto"])
+        cons = [{"id": "airinei-cristina"}, {"id": "constantin-cristinel-hritean"}]
+        self.assertEqual(K.leaga("Airinei Cristina", cons), "airinei-cristina")
+        self.assertEqual(K.leaga("Hritcan Constantin-Cristinel", cons), "constantin-cristinel-hritean")
+        self.assertIsNone(K.leaga("Popescu Ion", cons))
+        self.assertEqual(K.partid_din("Sigla_noua_PNL-150x150-1.png"), "PNL")

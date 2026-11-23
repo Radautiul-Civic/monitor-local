@@ -162,6 +162,11 @@ def main(argv=None):
                 stats["cetateni"] = cetateni.scrie(store, config.DATA_DIR, concursuri=cc)
             except Exception as e:
                 stats["cetateni"] = f"eroare: {e}"
+            try:   # componența consiliului: fotografiile, partidele și declarațiile consilierilor (pagina primăriei)
+                from . import componenta
+                stats["componenta"] = componenta.scrie(config.DATA_DIR)
+            except Exception as e:
+                stats["componenta"] = f"eroare: {e}"
             try:   # pagina de start: „Rădăuți în <anul curent>”
                 from . import poveste
                 def _cit(n, implicit=None):
