@@ -3077,11 +3077,13 @@
         (REZ || []).forEach(function (x) { (NOU.evenimente = NOU.evenimente || []).push({ data: (x.aprobat_la || x.data).slice(0, 10), tip: "rezumat", titlu: "Rezumatul ședinței din " + zi(x.data), text: ((x.rezumat || {}).rezumat || "").slice(0, 220), link: "#consiliu/sedinte/" + x.data }); });
         NOU.evenimente.sort(function (a, b) { return a.data < b.data ? 1 : a.data > b.data ? -1 : 0; });
       }
-      var U = (SED.urmatoare || [])[0], des = (SED.consultare || []).filter(function (p) { return p.deschis; });
+      // toate ședințele convocate și încă neținute (pot fi două: una ordinară și una extraordinară), în ordinea datei
+      var UU = (SED.urmatoare || []).slice().sort(function (a, b) { return (a.data + (a.ora || "")).localeCompare(b.data + (b.ora || "")); }), U = UU[0], des = (SED.consultare || []).filter(function (p) { return p.deschis; });
       var h = "";
       if (U || des.length) h += '<section class="card section urm">' + (U ? '<div class="urm-g">' : "<div>") +
-        (U ? '<a class="urm-i" href="#consiliu/urmatoare"><span class="lbl">Ședința următoare a consiliului</span><b>' + esc(ziSapt(U.data)) + esc(zi(U.data)) + (U.ora ? ", ora " + esc(U.ora) : "") + "</b><span>" +
-          ((U.ordinea_de_zi || []).length ? U.ordinea_de_zi.length + " puncte pe ordinea de zi" : "ședință " + esc(TIP_SED[U.tip] || "")) + " · " + esc(catePana(U.data)) + "</span></a>" : "") +
+        UU.map(function (U, i) { var n = (U.ordinea_de_zi || []).length;
+          return '<a class="urm-i" href="#consiliu/urmatoare"><span class="lbl">' + (UU.length > 1 ? esc({ ordinara: "Ședința ordinară", extraordinara: "Ședința extraordinară", extraordinara_de_indata: "Ședința convocată de îndată" }[U.tip] || "Ședința consiliului") : "Ședința următoare a consiliului") + "</span><b>" + esc(ziSapt(U.data)) + esc(zi(U.data)) + (U.ora ? ", ora " + esc(U.ora) : "") + "</b><span>" +
+            (n ? n + (n === 1 ? " punct" : n < 20 ? " puncte" : " de puncte") + " pe ordinea de zi" : "ședință " + esc(TIP_SED[U.tip] || "")) + " · " + esc(catePana(U.data)) + "</span></a>"; }).join("") +
         "</div>" + (des.length ? consLista(des, true) : "") + "</section>";
       var E = NOU.evenimente || [], flux = $("nou-flux"), hf = "";
       if (E.length) hf += '<section class="card section"><div class="h-row"><h2>Ce a mai publicat primăria</h2><a class="rss" href="' + FTDATA + 'noutati.xml" title="Abonează-te prin RSS">RSS</a></div>' +
