@@ -430,6 +430,9 @@ def export(store):
         x = {k: a[k] for k in CAMPURI_PUBLICE if a.get(k) not in (None, "", "/")}
         x["registru_pdf"], x["registru_pagina"] = r["registru_pdf"], links.get(r["registru_wp_id"])
         g = geocod.pentru(coord, a.get("strada"), a.get("adresa"))
+        if not g and a.get("strada") and geocod.in_radauti(a.get("adresa")):   # strada negăsită după nume: punct pe strada din OSM
+            p = geocod.strada_osm(a.get("strada"))
+            g = (p[0], p[1], "stradă") if p else None
         if g:   # poziția pe hartă (căutată automat după adresă, în OpenStreetMap)
             x["lat"], x["lon"], x["precizie"] = g
         out.setdefault(r["tip"], []).append(x)

@@ -542,10 +542,12 @@ def taxe(db):
 
 
 # ---------------------------------------------------------------- rapoarte
-TIP_RAPORT = [("activitate_primar", "Raportul anual al primarului", r"raport\w* anual|starea economic|activitat\w* primar"),
+TIP_RAPORT = [("comisii", "Rapoartele comisiilor de specialitate ale consiliului local", r"\bcomisi"),
+              ("viceprimar", "Rapoartele viceprimarilor", r"viceprimar"),
+              ("activitate_primar", "Raportul anual al primarului", r"raport\w* anual|starea economic|activitat\w* primar|raport\w* primar"),
               ("legea52", "Transparență decizională (Legea nr. 52/2003)", r"52/2003|transparent\w* decizional|raport\w* de evaluare"),
               ("legea544", "Acces la informații publice (Legea nr. 544/2001)", r"544"),
-              ("consilieri", "Rapoartele de activitate ale consilierilor", r"consilier|activitate cl|membrilor consiliului"),
+              ("consilieri", "Rapoartele de activitate ale consilierilor", r"consilier|activitate cl|membrilor consiliului|rapoartele membrilor|rapoarte de activitate cl"),
               ("sna", "Integritate (Strategia Națională Anticorupție)", r"\bsna\b|anticorup|integritat"),
               ("buget", "Buget: etichetarea cheltuielilor, execuție", r"etichet|executi\w* bugetar"),
               ("alta", "Alte rapoarte și studii", r".")]
@@ -558,6 +560,8 @@ def rapoarte(db):
     for url, lt, pagina, ptitlu, d in rows:
         t = norm((lt or "") + " " + (ptitlu or ""))
         fel = next(k for k, _, rx in TIP_RAPORT if re.search(rx, t))
+        if fel == "alta" and re.search(r"consiliul-local|rapoartele-membrilor|rapoarte-de-activitate-cl", pagina or ""):
+            fel = "consilieri"   # pe paginile consiliului local, rapoartele fără „consilier” în titlu sunt tot ale consilierilor
         # anul raportului: din titlu, altfel din numele fișierului (nu din „uploads/2025/06”, care e data publicării)
         an = re.findall(r"\b(20[0-3]\d)\b", norm(lt or "")) or re.findall(r"(?<!\d)(20[0-3]\d)(?!\d)", url.rsplit("/", 1)[-1])
         out.append({"fel": fel, "titlu": (lt or ptitlu or "").strip()[:300], "url": url, "pagina": pagina, "an": max(an) if an else None})
@@ -607,7 +611,7 @@ def scrie(store, data_dir, azi=None):
                 if k in geo:
                     x["chei"].append(k)
                     continue
-                linii = taie_in_oras(osm.get(k) or [])
+                linii = taie_in_oras(osm.get(geocod.cheie_in_osm(k, osm)) or []) if osm else []
                 if linii:
                     geo[k] = {"linii": linii, "km": round(lungime_km(linii), 2)}
                 else:

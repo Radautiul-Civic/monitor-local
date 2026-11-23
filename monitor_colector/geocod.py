@@ -157,3 +157,46 @@ def pentru(coord, strada, adresa):
         la, lo = coord[cheie(strada)]
         return round(la, 5), round(lo, 5), "stradă"
     return None
+
+
+_OSM = None
+
+
+def strada_osm(strada, data_dir=None):
+    """Un punct pe stradă din geometria OpenStreetMap a orașului (data/osm-strazi.json), pentru străzile pe care Nominatim
+    nu le găsește după numele din registru („Mihai Viteazu” e „Mihai Viteazul” în OSM, „Frincei” e „Francei” etc.):
+    mijlocul celei mai lungi bucăți de stradă din oraș. (lat, lon) sau None."""
+    global _OSM
+    import json as _json
+    import os
+    from . import teme
+    if _OSM is None:
+        try:
+            with open(os.path.join(data_dir or config.DATA_DIR, "osm-strazi.json"), encoding="utf-8") as f:
+                _OSM = _json.load(f)
+        except (OSError, ValueError):
+            _OSM = {}
+    if not _OSM or not strada:
+        return None
+    cheie_osm = cheie_in_osm(teme._cheie_strada(strada), _OSM)
+    if not cheie_osm:
+        return None
+    linii = teme.taie_in_oras(_OSM[cheie_osm])
+    if not linii:
+        return None
+    ln = max(linii, key=lambda l: teme.lungime_km([l]))
+    pt = ln[len(ln) // 2]
+    return round(pt[0], 5), round(pt[1], 5)
+
+
+def cheie_in_osm(k, osm):
+    """Numele străzii din registru/titlu, găsit printre numele din OSM, cu variantele obișnuite de scriere."""
+    import difflib
+    if not k:
+        return None
+    variante = [k, k + "l", k[:-1] if k.endswith("l") else k, re.sub(r"\bion\b", "ioan", k), k.replace("frincei", "francei")]
+    v = next((v for v in variante if v in osm), None)
+    if v:
+        return v
+    m = difflib.get_close_matches(k, list(osm), n=1, cutoff=0.86)
+    return m[0] if m else None
