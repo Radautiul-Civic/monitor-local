@@ -839,3 +839,12 @@ details.alerte .al-f{margin-top:8px;max-width:640px}
 .cal-l{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
 @media (max-width:640px){.cal-c{min-height:48px;padding:3px}.cal-c i{font-size:0;padding:0;height:6px;border-radius:3px}.cal-c i.t{height:6px}}
 .rp-an{border-top:1px solid var(--line);padding:6px 0}.rp-an summary{cursor:pointer;padding:4px 0}
+.sm-f{align-items:center;gap:10px 16px}
+.sm-t{display:inline-flex;gap:12px;flex-wrap:wrap}
+.sm-t .cx-c{margin:0}
+.pt-grup{background:none;border:0}
+.pt-grup i{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#8a8f94;color:#fff;font-style:normal;font-weight:700;font-size:.8rem;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.sm-t input,.cx-c input{width:auto!important;height:auto!important;min-width:0!important;flex:none!important;padding:0!important;margin:0}.sm-t label{white-space:nowrap}
+.sp-h{margin:26px 0 10px;font-size:1.3rem}
+.cal-tt{margin:0 0 8px}
+.tag.cons-t{border-color:#1baf7a;color:#0b7a3e;background:color-mix(in srgb,#1baf7a 10%,transparent);text-decoration:none}
