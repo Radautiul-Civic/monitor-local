@@ -148,7 +148,44 @@ def strazi_osm(data_dir, retea=True):
             logging.warning("Overpass %s: niciun drum în răspuns", url)
         except Exception as e:   # noqa: BLE001
             logging.warning("Overpass %s: %s", url, str(e)[:200])
+    # rezervă: API-ul principal OpenStreetMap, pe bucăți mici (limita lui e de 50.000 de puncte pe cerere)
+    try:
+        out = _strazi_api_osm(requests)
+        if out:
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(out, f, separators=(",", ":"))
+            return out
+        logging.warning("API OSM: niciun drum")
+    except Exception as e:   # noqa: BLE001
+        logging.warning("API OSM: %s", str(e)[:200])
     return {}
+
+
+def _strazi_api_osm(requests, s=47.805, v=25.855, n=47.885, e=25.985, pasi=4):
+    import time
+    import xml.etree.ElementTree as ET
+    noduri, drumuri = {}, {}
+    for i in range(pasi):
+        for j in range(pasi):
+            b = (v + (e - v) * j / pasi, s + (n - s) * i / pasi, v + (e - v) * (j + 1) / pasi, s + (n - s) * (i + 1) / pasi)
+            r = requests.get("https://api.openstreetmap.org/api/0.6/map", params={"bbox": ",".join(f"{x:.5f}" for x in b)},
+                             timeout=120, headers={"User-Agent": "MonitorLocal (monitor.radautiulcivic.ro)"})
+            r.raise_for_status()
+            root = ET.fromstring(r.content)
+            for nd in root.iter("node"):
+                noduri[nd.get("id")] = (round(float(nd.get("lat")), 5), round(float(nd.get("lon")), 5))
+            for w in root.iter("way"):
+                tag = {t.get("k"): t.get("v") for t in w.iter("tag")}
+                if tag.get("highway") and tag.get("name"):
+                    drumuri[w.get("id")] = (tag["name"], [x.get("ref") for x in w.iter("nd")])
+            time.sleep(1)
+    out = {}
+    for nume, refs in drumuri.values():
+        k = _cheie_strada(nume)
+        g = [list(noduri[x]) for x in refs if x in noduri]
+        if k and len(g) >= 2:
+            out.setdefault(k, []).append(g)
+    return out
 
 
 def nume_obiectiv(titlu):
