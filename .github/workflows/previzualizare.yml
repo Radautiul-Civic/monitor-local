@@ -12,6 +12,9 @@ on:
       texte:
         description: "Opțional, pentru dezvoltare: baza de date și textele documentelor din aceste surse (ex. hcl,dispozitii), tot criptate"
         default: ""
+      transcriere:
+        description: "Opțional: data ședinței (AAAA-LL-ZZ) a cărei transcrieri (din zona internă) intră în arhiva criptată"
+        default: ""
 
 permissions:
   contents: write
@@ -43,6 +46,10 @@ jobs:
         env:
           CHEIE: ${{ inputs.cheie }}
           TEXTE: ${{ inputs.texte }}
+          TRANSCRIERE: ${{ inputs.transcriere }}
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
         run: |
           python - <<'PY'
           import os, sys, tarfile
@@ -55,6 +62,19 @@ jobs:
                   p = os.path.join("data", d, "index.json")
                   if os.path.exists(p):
                       t.add(p, arcname="s/index.json")
+              zi_tr = os.environ.get("TRANSCRIERE", "").strip()
+              if zi_tr:   # transcrierea unei ședințe, din folderul intern (doar în arhiva criptată)
+                  import re, io
+                  sys.path.insert(0, ".")
+                  from monitor_colector.intern_ftp import Intern
+                  if re.fullmatch(r"\d{4}-\d{2}-\d{2}", zi_tr):
+                      with Intern() as I:
+                          for n in I.lista("intern/transcrieri"):
+                              if n.startswith(zi_tr) and n.endswith(".json"):
+                                  b = I.citeste("intern/transcrieri/" + n)
+                                  if b:
+                                      ti = tarfile.TarInfo("transcrieri/" + n); ti.size = len(b)
+                                      t.addfile(ti, io.BytesIO(b)); print("transcriere:", n, len(b))
               surse = [x for x in os.environ.get("TEXTE", "").split(",") if x]
               if surse:
                   import sqlite3, json
