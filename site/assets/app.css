@@ -684,3 +684,32 @@ h3.an-h{margin:18px 0 4px;font-size:.95rem;color:var(--ink-2)}
   .pop-act td{padding:0 0 2px}
   .leaflet-popup-content{margin:10px 12px;font-size:13px}
 }
+
+/* harta terenurilor și clădirilor: marcaje pătrate cu iconiță */
+.pm-w{background:none;border:0}
+.pm{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;background:var(--c);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);transform:rotate(0deg)}
+.pm svg,.pm-l svg{width:15px;height:15px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.legend .pm-l,.pm-l{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:4px;background:var(--c);vertical-align:-4px;margin-right:6px}
+.pm-l svg{width:12px;height:12px}
+
+/* investiții: categorii, hartă */
+.sx-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+@media (max-width:760px){.sx-2{grid-template-columns:1fr}}
+.inv-st{font-size:.85rem;margin:2px 0 4px}
+.inv-lg{gap:8px}
+.inv-lg button{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:.82rem;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:var(--bg-2,transparent);color:var(--ink-2);cursor:pointer}
+.inv-lg button:not(.on){opacity:.45;text-decoration:line-through}
+.inv-lg button i{width:14px;height:4px;border-radius:2px}
+.fin-t td.n,.fin-t th.n{text-align:right;white-space:nowrap}
+
+/* taxe: grafice mici și listă */
+.tx-g{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.tx-c{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.tx-h{display:flex;flex-direction:column;gap:2px;font-size:.88rem;min-height:3.2em}
+.tx-v{font-size:1.25rem;font-weight:700;margin:4px 0 2px}
+.vr{font-size:.8rem;font-weight:600;padding:1px 6px;border-radius:999px;white-space:nowrap}
+.vr.up{color:#b3261e;background:color-mix(in srgb,#e34948 14%,transparent)}
+.vr.dn{color:#0b7a3e;background:color-mix(in srgb,#1baf7a 14%,transparent)}
+.vr.z{color:var(--ink-2)}
+.tx-t td.n,.tx-t th.n{text-align:right;white-space:nowrap}
+.tx-t td:first-child{max-width:520px}

@@ -68,6 +68,84 @@ NUME_PAS = {"indicatori": "Documentație și indicatori aprobați", "modificare"
             "inventar": "Trecut în inventarul orașului", "alta": "Altă hotărâre"}
 
 
+CATEG_INV = [("scoli", "Școli și grădinițe", r"scoal|scoli|colegi|gradinit|liceu|invatamant|cres[ae]|educati"),
+             ("sanatate", "Spital și sănătate", r"spital|medical|dispensar|sanatat"),
+             ("social", "Social și comunitar", r"varstnic|centr\w* comunitar|asistent\w* social|camin pentru|persoane cu dizabilit|cantina social|adapost"),
+             ("cultura", "Cultură și monumente", r"monument|statu[ia]|statuar|muze|casa de cultura|teatr|bibliotec|casa casatoriilor|biseric|manastir"),
+             ("apa", "Apă și canalizare", r"\bapa\b|apa potabil|canaliz|pluvial|bransament\w* (de )?apa|foraj|alimentar\w* cu apa"),
+             ("mediu", "Mediu și salubrizare", r"ecologic|deseur|salubr|colectar|insule"),
+             ("digital", "Digitalizare și supraveghere video", r"video|supraveghere|fibr|digital|informatic|software|dark fiber|wifi"),
+             ("trotuare", "Trotuare, parcări, siguranță rutieră", r"trotuar|parcar|semnaliz|giratoriu|pist\w* (de )?biciclet|alee|pietonal|trecer\w* (de )?pietoni|esplanad|pavar|dale"),
+             ("strazi", "Străzi și asfaltări", r"asfalt|covor|carosabil|pietruir|balast|bituminoas|imbracamint|modernizar\w* (str|drum|strazi)|strazi|drum\w* (local|comunal)|reabilitar\w* str|ocolitoar|largir\w* dn|\bdn ?2"),
+             ("energie", "Energie, iluminat, încălzire", r"iluminat|energ|electric|\bles\b|fotovolt|solar|termic|central\w* termic|cazan|stocare|gaze? natural"),
+             ("parcuri", "Parcuri, sport, agrement", r"\bparc|loc de joaca|bazin|sport|stadion|teren (de )?fotbal|patinoar|zoo|agrement|sauna"),
+             ("cladiri", "Clădiri publice și renovări", r"sediu|cladir|reabilitar\w* energetic|primari|fatad|acoperis|invelitoar|anvelop|consolidar|cimitir|piata|obor|locuint"),
+             ("alta", "Alte investiții", r".")]
+
+
+def categorie_investitie(nume):
+    t = norm(nume or "")
+    return next(k for k, _, rx in CATEG_INV if re.search(rx, t))
+
+
+def strazi_din(nume):
+    """Străzile pomenite în numele obiectivului: „str. Putnei”, „străzile Mănejului, Pepenăriei și Eudoxiu Hurmuzachi”."""
+    out = []
+    nume = (nume or "").replace("ş", "ș").replace("ţ", "ț").replace("Ş", "Ș").replace("Ţ", "Ț")
+    m = re.search(r"\bstr[aă]zile\s+(.+?)(?:\s+din\b|\s+municipiul|,\s*jud|$)", nume, re.I)
+    if m:
+        out += [x.strip(" .") for x in re.split(r",|\s+și\s+|\s+si\s+", m.group(1)) if len(x.strip()) > 2]
+    for m in re.finditer(r"\b(?:str(?:ada|\.)?|calea|b-dul|bulevardul|aleea)\s*\.?\s*(?:(?:ing|dr|prof|gen|av)\.\s*)?([A-ZĂÂÎȘŞȚŢ0-9][\wăâîșşțţĂÂÎȘŞȚŢ\-\. ]{1,35}?)(?=\s*(?:nr\.?|din\b|de la\b|pana\b|până\b|tronson|intersect|,|;|\.(?:\s|$)|\(|$|\s+cu\b|\s+si\b|\s+și\b|\s+la\b|\s+in\b|\s+în\b))", nume):
+        pref = re.match(r"(calea|aleea|b-dul|bulevardul)", m.group(0), re.I)
+        out.append(((pref.group(1).capitalize() + " ") if pref else "") + m.group(1).strip())
+    vazut, rez = set(), []
+    for x in out:
+        k = norm(x)
+        x = re.sub(r"\s+partea\s+\w+$|\s+(și|si)\s+str$", "", x).strip(" .")
+        x = re.sub(r"^(ing|dr|prof|gen|av|cpt|lt)\.\s*", "", x, flags=re.I)
+        k = norm(x)
+        if k not in vazut and len(k) > 3 and not re.match(r"^(nr|fn|f\.n)\b", k) and not any(v.startswith(k) or k.startswith(v) for v in vazut):
+            vazut.add(k)
+            rez.append(x)
+    return rez[:6]
+
+
+def _cheie_strada(n):
+    t = re.sub(r"[^a-z0-9 ]+", " ", norm(n or ""))
+    t = re.sub(r"^(strada|str|bulevardul|b dul|piata)\s+", "", t.strip())
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def strazi_osm(data_dir, retea=True):
+    """Geometria străzilor din Rădăuți (OpenStreetMap, prin Overpass), salvată o dată în data/osm-strazi.json."""
+    p = os.path.join(data_dir, "osm-strazi.json")
+    try:
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        pass
+    if not retea:
+        return {}
+    try:
+        import requests
+        q = '[out:json][timeout:90];way["highway"]["name"](47.805,25.855,47.885,25.985);out tags geom;'
+        r = requests.post("https://overpass-api.de/api/interpreter", data={"data": q}, timeout=120,
+                          headers={"User-Agent": "MonitorLocal (monitor.radautiulcivic.ro)"})
+        r.raise_for_status()
+        out = {}
+        for w in r.json().get("elements") or []:
+            k = _cheie_strada((w.get("tags") or {}).get("name"))
+            g = [[round(pt["lat"], 5), round(pt["lon"], 5)] for pt in w.get("geometry") or []]
+            if k and len(g) >= 2:
+                out.setdefault(k, []).append(g)
+        if out:
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(out, f, separators=(",", ":"))
+        return out
+    except Exception:
+        return {}
+
+
 def nume_obiectiv(titlu):
     """Numele obiectivului din titlul hotărârii (textul dintre ghilimele de după „obiectivul de investiții” / „proiectul”)."""
     for kw in (r"obiectiv\w*(\s+de\s+investi\w+)?", r"proiect\w*", r"investi\w+"):
@@ -141,8 +219,10 @@ def investitii(db, sx=None):
     out = []
     for g in grupuri:
         P = g["pasi"]
+        g["categorie"] = categorie_investitie(g["nume"] + " " + " ".join(p["titlu"] for p in P[:1]))
+        g["strazi"] = strazi_din(g["nume"])
         vals = [p for p in P if p.get("valoare")]
-        x = {"nume": g["nume"], "pasi": P, "prima": P[0]["data"], "ultima": P[-1]["data"],
+        x = {"nume": g["nume"], "categorie": g["categorie"], "strazi": g["strazi"], "pasi": P, "prima": P[0]["data"], "ultima": P[-1]["data"],
              "valoare": vals[-1]["valoare"] if vals else None, "tva": vals[-1]["tva"] if vals else None,
              "stare": "finalizat" if any(p["pas"] in ("finalizat", "inventar") for p in P) else "aprobat"}
         if sx:
@@ -334,8 +414,14 @@ def taxe(db):
         anuala = bool(re.search(r"privind stabilirea impozitelor si taxelor locale pentru anul", t)) and "modific" not in t
         a["hotarari"].append({"an": an, "nr": nr, "data": data, "titlu": clean_title(titlu)[:300], "anuala": anuala})
         if anuala:
-            a["niveluri"] = niveluri_taxe(_txt(db, pdf))
-            a["hcl"] = {"an": an, "nr": nr}
+            txt = _txt(db, pdf)
+            if len(txt) >= a.get("_lung", 0):   # mai multe „anuale” pe un an: cea cu anexele (textul cel mai lung)
+                a["niveluri"] = niveluri_taxe(txt)
+                a["hcl"] = {"an": an, "nr": nr}
+                a["pdf"] = pdf
+                a["_lung"] = len(txt)
+    for a in ani.values():
+        a.pop("_lung", None)
     return dict(sorted(ani.items()))
 
 
@@ -370,7 +456,7 @@ def scrie(store, data_dir, azi=None):
     except (OSError, ValueError):
         sx = None
     rez, stats = {"generat_la": (azi or date.today()).isoformat()}, {}
-    for nume, fn in (("investitii", lambda: investitii(db, sx)), ("patrimoniu", lambda: patrimoniu(db, geocod.coordonate(db))),
+    for nume, fn in (("investitii", lambda: investitii(db, sx)), ("categorii_investitii", lambda: {k: n for k, n, _ in CATEG_INV}), ("patrimoniu", lambda: patrimoniu(db, geocod.coordonate(db))),
                      ("dispozitii", lambda: dispozitii(db)), ("finantari", lambda: finantari(db)), ("taxe", lambda: taxe(db)),
                      ("rapoarte", lambda: rapoarte(db))):
         try:
@@ -379,6 +465,37 @@ def scrie(store, data_dir, azi=None):
             stats[nume] = len(v) if isinstance(v, (list, dict)) and not (isinstance(v, dict) and "lista" in v) else len(v["lista"])
         except Exception as e:   # o temă care pică nu le oprește pe celelalte
             stats[nume] = f"eroare: {e}"
+    # lista completă a taxelor, extrasă cu modelul de limbaj din hotărârile anuale (cu cache; vezi taxe_ai.py)
+    if isinstance(rez.get("taxe"), dict):
+        try:
+            from . import taxe_ai
+            stats["taxe_ai"] = taxe_ai.aplica(db, data_dir, rez["taxe"])
+            rez["indicatori_taxe"] = taxe_ai.indicatori_publici()
+        except Exception as e:
+            stats["taxe_ai"] = f"eroare: {e}"
+    # harta investițiilor: geometria străzilor pomenite (OpenStreetMap) și, ca rezervă, poziția străzii din registrele de urbanism
+    try:
+        osm, coord = strazi_osm(data_dir), geocod.coordonate(db)
+        geo = {}
+        for x in rez.get("investitii") or []:
+            x["chei"] = []
+            for st in x.get("strazi") or []:
+                k = _cheie_strada(st)
+                if k in geo:
+                    x["chei"].append(k)
+                    continue
+                if k in osm:
+                    geo[k] = {"linii": osm[k]}
+                else:
+                    p = geocod.pentru(coord, st, "Rădăuți")
+                    if p:
+                        geo[k] = {"punct": [p[0], p[1]]}
+                if k in geo:
+                    x["chei"].append(k)
+        rez["strazi_geo"] = geo
+        stats["strazi_geo"] = len(geo)
+    except Exception as e:
+        stats["strazi_geo"] = f"eroare: {e}"
     with open(os.path.join(data_dir, "teme.json"), "w", encoding="utf-8") as f:
         json.dump(rez, f, ensure_ascii=False, separators=(",", ":"))
     return stats
