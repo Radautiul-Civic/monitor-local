@@ -790,3 +790,8 @@ details.alerte .al-f{margin-top:8px;max-width:640px}
 .cl-comp figure{margin:0}
 .cl-comp img{display:block;width:100%;height:auto;border-radius:10px}
 .cl-comp figcaption{margin-top:6px}
+.inv-ani{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 0}
+.inv-ani input[type=range]{flex:1;min-width:180px;accent-color:var(--accent)}
+.inv-ani output{font-weight:700;min-width:5.5em;font-size:1.1rem}
+.inv-ani .cx-c{margin:0}
+.inv-play{min-width:40px;font-size:1rem}
