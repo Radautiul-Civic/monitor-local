@@ -663,3 +663,12 @@ ol.inv-p li{margin:3px 0}
 ol.inv-p li>span:first-child{color:var(--muted);font-variant-numeric:tabular-nums;display:inline-block;min-width:9.5em}
 .inv-s{font-size:.84rem;margin-top:4px}
 h3.an-h{margin:18px 0 4px;font-size:.95rem;color:var(--ink-2)}
+/* achiziții: coloanele pe două rânduri (3 + 2), mai late; lista din coloană e listă simplă, nu grilă */
+.sx-cols{grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;overflow:visible}
+.sx-cols>.sx-col{grid-column:span 2}
+.sx-cols>.sx-col:nth-child(n+4){grid-column:span 3}
+.sx-col-l.sx-feed-l{display:block;max-height:440px;overflow-y:auto;overflow-x:hidden}
+.sx-col-l .ff-t,.sx-col-l .ff-m{overflow-wrap:anywhere}
+.sx-col-h{min-height:0}
+@media (max-width:900px){.sx-cols{grid-template-columns:repeat(2,minmax(0,1fr))}.sx-cols>.sx-col,.sx-cols>.sx-col:nth-child(n+4){grid-column:span 1}.sx-cols>.sx-col:last-child{grid-column:1/-1}}
+@media (max-width:640px){.sx-cols{grid-template-columns:minmax(0,1fr);overflow:visible}.sx-cols>.sx-col,.sx-cols>.sx-col:nth-child(n+4),.sx-cols>.sx-col:last-child{grid-column:auto}.sx-col-l.sx-feed-l{max-height:320px}}
