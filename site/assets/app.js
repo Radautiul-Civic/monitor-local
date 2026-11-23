@@ -3200,9 +3200,10 @@
       var E = NOU.evenimente || [], flux = $("nou-flux"), hf = "";
       if (E.length) hf += '<section class="card section"><div class="h-row"><h2>Ce a mai publicat primăria</h2><a class="rss" href="' + FTDATA + 'noutati.xml" title="Abonează-te prin RSS">RSS</a></div>' +
         '<div class="seg nt-seg" role="group" aria-label="Ce noutăți">' + NT_GRUP.map(function (g, i) { return '<button type="button" data-g="' + g[0] + '" aria-pressed="' + (i === 0) + '">' + esc(g[1]) + "</button>"; }).join("") + "</div>" +
-        '<div id="nou-l"></div><button class="more" id="nou-m" hidden>Arată mai multe</button></section>';
+        '<div id="nou-l"></div><button class="more" id="nou-m" hidden>Arată mai multe</button></section>' + alerteHtml("", "Primește noutățile pe e-mail, pe strada sau subiectul tău");
       if (flux) { el.innerHTML = h; flux.innerHTML = hf; } else el.innerHTML = h + hf;
       sdjInit();
+      alerteLeaga();
       if (!E.length) return;
       var box = flux || el, grup = "", shown = flux ? 6 : 10;
       function lista() {
@@ -3304,6 +3305,38 @@
       desen();
     }).catch(function () { $("z-map").innerHTML = '<p class="empty">Harta nu s-a putut încărca.</p>'; });
   }
+  // ---------- Alerte pe e-mail (alerte.php): noutățile despre o stradă sau un subiect ----------
+  var SUBIECTE_AL = [["taxe", "Taxe și impozite"], ["buget", "Buget"], ["investiti", "Investiții"], ["asfalt", "Asfaltări"], ["urbanism", "Urbanism"], ["achizit", "Achiziții publice"], ["concurs", "Concursuri și angajări"], ["teren", "Terenuri și clădiri"]];
+  function alerteHtml(strada, titlu) {
+    var id = "al-" + Math.random().toString(36).slice(2, 7);
+    return '<details class="card section alerte"' + (strada ? " open" : "") + '><summary><b>' + esc(titlu || "Primește noutățile pe e-mail") + '</b> <span class="muted">gratuit, te poți dezabona oricând</span></summary>' +
+      '<form class="al-f" data-id="' + id + '"><label class="cx-f"><span>Străzile tale (despărțite prin virgulă, cel mult 5)</span><input name="strazi" type="text" maxlength="250" value="' + esc(strada || "") + '" placeholder="ex. Putnei, Ștefan cel Mare"></label>' +
+      '<fieldset class="al-s"><legend>și/sau subiectele care te interesează</legend>' + SUBIECTE_AL.map(function (x) { return '<label><input type="checkbox" name="subiect" value="' + x[0] + '"> ' + esc(x[1]) + "</label>"; }).join("") + "</fieldset>" +
+      '<label class="cx-f"><span>Adresa de e-mail</span><input name="email" type="email" required maxlength="200" autocomplete="email"></label>' +
+      '<input name="site" type="text" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">' +
+      '<label class="cx-c"><input name="acord" type="checkbox" required> Sunt de acord ca Asociația Rădăuțiul Civic să-mi păstreze adresa și alegerile, doar ca să-mi trimită aceste noutăți. Nu le dă nimănui; le șterge la dezabonare.</label>' +
+      '<button class="btn ok" type="submit">Abonează-mă</button> <span class="al-m muted" aria-live="polite"></span>' +
+      '<p class="note">Îți trimitem întâi un e-mail de confirmare. Apoi, când apar pe monitor hotărâri, proiecte, autorizații sau achiziții care pomenesc ce ai ales, primești cel mult un e-mail pe zi.</p></form></details>';
+  }
+  function alerteLeaga(root) {
+    Array.prototype.forEach.call((root || document).querySelectorAll("form.al-f:not([data-ok])"), function (f) {
+      f.setAttribute("data-ok", "1");
+      f.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var m = f.querySelector(".al-m"), b = f.querySelector("button");
+        var corp = { act: "abonare", email: f.email.value.trim(), acord: f.acord.checked, site: f.site.value,
+          strazi: f.strazi.value.split(",").map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 5),
+          subiecte: Array.prototype.filter.call(f.querySelectorAll('input[name="subiect"]'), function (c) { return c.checked; }).map(function (c) { return c.value; }) };
+        if (!corp.strazi.length && !corp.subiecte.length) { m.textContent = "Alege cel puțin o stradă sau un subiect."; return; }
+        b.disabled = true; m.textContent = "Se trimite...";
+        fetch(BASE + "alerte.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corp) }).then(function (r) { return r.json(); }).then(function (d) {
+          b.disabled = false;
+          m.textContent = d.ok ? (d.deja ? "Gata: am adăugat alegerile la abonarea ta." : "Ți-am trimis un e-mail de confirmare. Deschide-l și apasă pe link (verifică și în Spam).") : (d.eroare || "Nu a mers; încearcă din nou.");
+          if (d.ok) m.classList.remove("muted");
+        }).catch(function () { b.disabled = false; m.textContent = "Nu a mers acum; încearcă mai târziu."; });
+      });
+    });
+  }
   function strada(el, r) {
     var cap = head("Strada mea", "Scrie numele străzii și vezi tot ce o privește.");
     var lipsa = [];
@@ -3356,9 +3389,10 @@
           (sx.length > 12 ? '<p class="note"><a href="#achizitii/sicap?q=' + encodeURIComponent(k) + '">Toate cele ' + sx.length + "</a></p>" : "") + "</section>" : "") +
         (ac.length ? '<section class="card section"><h2>Autorizații de construire</h2>' + ac.slice(0, 12).map(act).join("") + (ac.length > 12 ? '<p class="note"><a href="#primarie/urbanism/ac">Toate autorizațiile</a> (caută „' + esc(v) + "”)</p>" : "") + "</section>" : "") +
         (cu.length ? '<section class="card section"><h2>Certificate de urbanism</h2>' + cu.slice(0, 8).map(act).join("") + (cu.length > 8 ? '<p class="note">Și încă ' + (cu.length - 8) + ".</p>" : "") + "</section>" : "") +
-        '<section class="card section"><h2>În textul documentelor</h2><div id="s-ft"></div></section>' +
+        '<section class="card section"><h2>În textul documentelor</h2><div id="s-ft"></div></section>' + alerteHtml(v.replace(/^(strada|str\.?)\s+/i, ""), "Primește pe e-mail noutățile despre strada " + v.replace(/^(strada|str\.?)\s+/i, "")) +
         (!acte.length && !hc.length && !sx.length ? '<p class="note">Nu am găsit acte de urbanism, hotărâri sau achiziții cu acest nume de stradă. Încearcă doar numele, fără „strada” (ex. Putnei).</p>' : "");
       ftBox($("s-ft"), { q: '"' + v.replace(/^(strada|str\.?)\s+/i, "") + '"', cate: 8 });
+      alerteLeaga(o);
       if ($("s-map")) incarcaLeaflet().then(function () {
         var Lf = window.L, cs = getComputedStyle(document.documentElement);
         var cul = { ac: cs.getPropertyValue("--s1").trim() || "#2a78d6", cu: cs.getPropertyValue("--s2").trim() || "#eb6834" };
