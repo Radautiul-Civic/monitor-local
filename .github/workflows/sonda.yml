@@ -29,6 +29,17 @@ jobs:
           import os, re, html, json
           from monitor_colector.wp import WPClient
           c = WPClient()
+          if os.environ["SLUG"].startswith("cauta:"):   # căutare pe site și în arhivă: titlu, tip, adresă
+              from monitor_colector import config
+              for baza in (config.BASE_URL, "https://arhiva.primariaradauti.ro"):
+                  for q in os.environ["SLUG"][6:].split("|"):
+                      cl = WPClient(base_url=baza)
+                      for pag in range(1, 4):
+                          r = cl._get("/wp-json/wp/v2/search", {"search": q, "per_page": 100, "page": pag})
+                          if r is None or not r.json(): break
+                          for x in r.json():
+                              print(baza[8:20], "|", q, "|", x.get("subtype"), "|", html.unescape(x.get("title") or "")[:140], "|", x.get("url"))
+              raise SystemExit
           r = c._get("/wp-json/wp/v2/pages", {"slug": os.environ["SLUG"], "_fields": "id,link,modified,content"})
           d = r.json()
           if not d:
