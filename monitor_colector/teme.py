@@ -553,17 +553,35 @@ TIP_RAPORT = [("comisii", "Rapoartele comisiilor de specialitate ale consiliului
               ("alta", "Alte rapoarte și studii", r".")]
 
 
+def an_din_text(text_path):
+    """Anul raportului din primele rânduri ale documentului („pentru anul 2025”, „Perioada: anul 2024”, „perioada 28 iunie - 31
+    decembrie 2012”). Textul vine din OCR, deci căutăm doar în primii 1500 de caractere și doar după aceste formule."""
+    if not text_path:
+        return []
+    try:
+        with open(text_path, encoding="utf-8", errors="replace") as f:
+            t = norm(f.read(3000))[:1500]
+    except OSError:
+        return []
+    for rx in (r"pentru\s*/?\s*anul\s*:?\s*(20[0-3]\d)", r"\banul\s*:?\s*(20[0-3]\d)", r"perioada\s*:?\s*(?:anul\s*)?(20[0-3]\d)",
+               r"perioada[^.]{0,60}?(20[0-3]\d)", r"\bin\s+anul\s+(20[0-3]\d)"):
+        m = re.search(rx, t)
+        if m:
+            return [m.group(1)]
+    return []
+
+
 def rapoarte(db):
-    rows = db.execute("SELECT d.url, d.link_text, p.link, p.title, p.date FROM documents d JOIN posts p ON p.wp_id=d.wp_id "
+    rows = db.execute("SELECT d.url, d.link_text, p.link, p.title, p.date, d.text_path FROM documents d JOIN posts p ON p.wp_id=d.wp_id "
                       "WHERE p.source='rapoarte' ORDER BY p.date DESC, d.url").fetchall()
     out = []
-    for url, lt, pagina, ptitlu, d in rows:
+    for url, lt, pagina, ptitlu, d, tp in rows:
         t = norm((lt or "") + " " + (ptitlu or ""))
         fel = next(k for k, _, rx in TIP_RAPORT if re.search(rx, t))
         if fel == "alta" and re.search(r"consiliul-local|rapoartele-membrilor|rapoarte-de-activitate-cl", pagina or ""):
             fel = "consilieri"   # pe paginile consiliului local, rapoartele fără „consilier” în titlu sunt tot ale consilierilor
         # anul raportului: din titlu, altfel din numele fișierului (nu din „uploads/2025/06”, care e data publicării)
-        an = re.findall(r"\b(20[0-3]\d)\b", norm(lt or "")) or re.findall(r"(?<!\d)(20[0-3]\d)(?!\d)", url.rsplit("/", 1)[-1])
+        an = re.findall(r"\b(20[0-3]\d)\b", norm(lt or "")) or re.findall(r"(?<!\d)(20[0-3]\d)(?!\d)", url.rsplit("/", 1)[-1]) or an_din_text(tp)
         out.append({"fel": fel, "titlu": (lt or ptitlu or "").strip()[:300], "url": url, "pagina": pagina, "an": max(an) if an else None})
     return {"lista": out, "feluri": {k: n for k, n, _ in TIP_RAPORT}}
 

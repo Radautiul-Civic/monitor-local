@@ -125,10 +125,10 @@ class Store:
         return self.db.execute(q + (f" LIMIT {int(limit)}" if limit else "")).fetchall()
 
     def documents_to_ocr(self, limit=None):
-        # Întâi procesele-verbale (din ele extragem voturile), apoi restul.
+        # Întâi procesele-verbale (din ele extragem voturile), apoi rapoartele de activitate (anul lor e adesea doar în text), apoi restul.
         q = ("SELECT d.* FROM documents d LEFT JOIN posts p ON p.wp_id = d.wp_id "
              "WHERE d.text_layer=0 AND d.ocr_at IS NULL AND d.local_path IS NOT NULL "
-             "ORDER BY (p.source IN ('dispozitii','proiecte')) DESC, (p.source = 'pv') DESC, d.rowid")
+             "ORDER BY (p.source IN ('dispozitii','proiecte')) DESC, (p.source = 'pv') DESC, (p.source = 'rapoarte') DESC, d.rowid")
         return self.db.execute(q + (f" LIMIT {int(limit)}" if limit else "")).fetchall()
 
     def update_document(self, url, **fields):
