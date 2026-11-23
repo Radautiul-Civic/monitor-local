@@ -46,3 +46,18 @@ elif fel == "vorbitori":   # câte intervenții și inițiative găsește extrag
     print("proiecte cu initiatori consilieri pe ani:", dict(sorted(init_an.items())))
     for d, v, i in ex[:40]:
         print(d, v, i)
+elif fel == "doc-text":   # textul documentelor publice care conțin expresia (ex. numărul unui proiect), primele N caractere din fiecare
+    rx, _, lung = arg.partition(" ")
+    rx = re.compile(rx, re.I)
+    n = 0
+    for url, tp in c.execute("SELECT url, text_path FROM documents WHERE text_path IS NOT NULL ORDER BY rowid DESC"):
+        if not tp or not os.path.exists(tp):
+            continue
+        with open(tp, encoding="utf-8", errors="replace") as f:
+            t = f.read()
+        if rx.search(t) or rx.search(url):
+            print("=====", url, len(t))
+            print(t[: int(lung or 20000)])
+            n += 1
+            if n >= 6:
+                break
