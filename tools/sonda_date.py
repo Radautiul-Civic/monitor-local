@@ -61,3 +61,11 @@ elif fel == "doc-text":   # textul documentelor publice care conțin expresia (e
             n += 1
             if n >= 6:
                 break
+elif fel == "termo":   # seria prețurilor la termoficare (date publice, data/termoficare.json)
+    import json
+    d = json.load(open("data/termoficare.json", encoding="utf-8"))
+    for p in d.get("preturi") or []:
+        print(p.get("de_la"), p.get("pana_la"), "| pop", p.get("populatie_cu_tva"), "| sub", p.get("subventie_cu_tva"), "| tot", p.get("total_cu_tva"), "| tva", p.get("tva"), "| hcl", (p.get("hcl") or {}).get("nr"), "/", (p.get("hcl") or {}).get("an"))
+    for h in d.get("hotarari") or []:
+        if h.get("pierderi_lei"):
+            print("PIERDERI", h["an"], h["nr"], h["pierderi_lei"], h.get("pe_scurt", "")[:120])
