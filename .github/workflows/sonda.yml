@@ -1,0 +1,49 @@
+name: Sondă (structura unei pagini publice a primăriei)
+
+# Pentru dezvoltare: afișează în jurnal structura simplificată (etichete, clase, imagini, text) a unei pagini
+# publice de pe site-ul primăriei, citită prin API-ul WordPress. Nu scrie nimic nicăieri.
+on:
+  workflow_dispatch:
+    inputs:
+      slug:
+        description: "Slug-ul paginii WordPress (ex. componenta)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  sonda:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - env:
+          SLUG: ${{ inputs.slug }}
+        run: |
+          python - <<'PY'
+          import os, re, html, json
+          from monitor_colector.wp import WPClient
+          c = WPClient()
+          r = c._get("/wp-json/wp/v2/pages", {"slug": os.environ["SLUG"], "_fields": "id,link,modified,content"})
+          d = r.json()
+          if not d:
+              print("pagina nu există"); raise SystemExit
+          t = d[0]["content"]["rendered"]
+          print(d[0]["link"], d[0]["modified"], len(t), "caractere")
+          t = re.sub(r"\s+", " ", t)
+          # etichetele, cu clasele și sursele imaginilor; textul scurtat
+          for m in re.finditer(r"<(/?)(\w+)([^>]*)>|([^<]+)", t):
+              if m.group(4):
+                  x = m.group(4).strip()
+                  if x: print("   TEXT:", html.unescape(x)[:120])
+              else:
+                  tag, attr = m.group(2), m.group(3)
+                  keep = re.findall(r'(class|src|alt|href|data-src|srcset)="([^"]*)"', attr)
+                  if m.group(1): continue
+                  print(f"<{tag}>", " ".join(f"{k}={v[:110]}" for k, v in keep if k != "srcset"))
+          PY
