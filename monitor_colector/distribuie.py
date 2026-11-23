@@ -21,7 +21,7 @@ FONTURI = os.path.join(os.path.dirname(__file__), "fonturi")
 SIGLA = os.path.join(os.path.dirname(os.path.dirname(__file__)), "site", "assets", "img", "sigla.png")
 TIP_SED = {"ordinara": "ordinară", "extraordinara": "extraordinară", "extraordinara_de_indata": "convocată de îndată"}
 # culorile monitorului (app.css)
-CUL = {"sedinta": (42, 120, 214), "consultare": (98, 80, 214), "hcl": (27, 175, 122), "rezumat": (42, 120, 214)}
+CUL = {"sedinta": (42, 120, 214), "consultare": (98, 80, 214), "hcl": (27, 175, 122), "rezumat": (42, 120, 214), "consilier": (42, 120, 214)}
 
 
 def zi(d):
@@ -86,10 +86,47 @@ def elemente(sed, hcl, rezumate=None, azi=None):
     return out
 
 
+def consilieri(vot, comp):
+    """Fișele consilierilor din componența actuală: prezența și voturile din mandatul în curs (din procesele-verbale)."""
+    M = vot.get("mandate") or {}
+    if not M:
+        return []
+    start = max(M.values())
+    V = {c["id"]: c for c in vot.get("consilieri") or []}
+    out = []
+    for x in (comp or {}).get("consilieri") or []:
+        c = V.get(x.get("id"))
+        if not c or x.get("iesit"):
+            continue
+        st = {"prezent": 0, "absent": 0, "I": 0, "A": 0, "N": 0}
+        for d, cod in c.get("cod", {}).items():
+            if d < start or not cod:
+                continue
+            if cod[0] == "p":
+                st["prezent"] += 1
+            elif cod[0] == "X":
+                st["absent"] += 1
+            for k in cod[1:]:
+                if k in ("I", "A", "N"):
+                    st[k] += 1
+        t = st["prezent"] + st["absent"]
+        if not t:
+            continue
+        prez = round(100 * st["prezent"] / t)
+        out.append({"cheie": f"consilier-{x['id']}", "tip": "consilier", "eticheta": "Consilier local" + (f" · {x['partid']}" if x.get("partid") else ""),
+                    "titlu": x["nume"], "foto": x.get("foto"),
+                    "cifre": [(f"{prez}%", "prezență"), (str(st["absent"]), "absențe"), (str(st["I"]), "voturi împotrivă"), (str(st["A"]), "abțineri")],
+                    "descriere": f"{x['nume']}, consilier local în Rădăuți: prezență {prez}% la ședințele din mandatul actual, {st['absent']} absențe, "
+                                 f"{st['I']} voturi împotrivă și {st['A']} abțineri, din procesele-verbale.",
+                    "jos": f"Extras automat din procesele-verbale, din {zi(start)}", "link": f"#consiliu/consilieri/{x['id']}"})
+    return out
+
+
 def pagina(e):
     esc = lambda s: html.escape(s or "", quote=True)
     url, img, tinta = f"{SITE}/s/{e['cheie']}.html", f"{SITE}/s/img/{e['cheie']}.png", f"{SITE}/{e['link']}"
-    titlu = f"{e['eticheta']}: {e['titlu']}" if e["tip"] != "sedinta" and e["tip"] != "rezumat" else e["titlu"]
+    titlu = (f"{e['titlu']}, consilier local" if e["tip"] == "consilier" else
+             f"{e['eticheta']}: {e['titlu']}" if e["tip"] not in ("sedinta", "rezumat") else e["titlu"])
     return f"""<!doctype html>
 <html lang="ro"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -162,8 +199,29 @@ def imagine(e, cale):
     lw = d.textlength(et, font=fe)
     d.rounded_rectangle([M, 160, M + lw + 36, 206], radius=23, fill=cul)
     d.text((M + 18, 168), et, font=fe, fill=(255, 255, 255))
+    if e.get("cifre"):   # fișa unui consilier: fotografia, numele, patru cifre
+        y0 = 236
+        foto = os.path.join(DATA_FOTO, e["foto"]) if e.get("foto") and DATA_FOTO else None
+        xt = M
+        if foto and os.path.exists(foto):
+            from PIL import ImageOps
+            f0 = ImageOps.fit(Image.open(foto).convert("RGB"), (150, 150), centering=(0.5, 0.3))
+            masca = Image.new("L", (150, 150), 0)
+            ImageDraw.Draw(masca).ellipse([0, 0, 149, 149], fill=255)
+            im.paste(f0, (M, y0), masca)
+            xt = M + 180
+        d.text((xt, y0 + 30), _scurt(e["titlu"], 40), font=f(54, True), fill=(26, 28, 30))
+        w = (W - 2 * M - 3 * 16) // 4
+        for i, (v, l) in enumerate(e["cifre"]):
+            x0 = M + i * (w + 16)
+            d.rounded_rectangle([x0, 410, x0 + w, 510], radius=14, fill=(255, 255, 255), outline=(227, 225, 218), width=2)
+            d.text((x0 + 18, 420), v, font=f(46, True), fill=cul)
+            d.text((x0 + 18, 476), l, font=f(20, False), fill=(77, 82, 87))
+        lin, mar = [], 0
+    else:
+        lin, mar = None, None
     # titlul: cât mai mare care încape în 4 rânduri
-    for mar in (58, 52, 46, 40):
+    for mar in (() if lin is not None else (58, 52, 46, 40)):
         ft = f(mar, True)
         lin = _rupe(d, e["titlu"], ft, W - 2 * M, 4)
         if len(lin) <= 3 or mar == 40:
@@ -180,6 +238,9 @@ def imagine(e, cale):
     d.text((W - M - d.textlength(adr, font=fa), H - 72), adr, font=fa, fill=(77, 82, 87))
     os.makedirs(os.path.dirname(cale), exist_ok=True)
     im.save(cale, "PNG", optimize=True)
+
+
+DATA_FOTO = None   # folderul data/ (fotografiile consilierilor sunt în data/consilieri/)
 
 
 def hcl_recente(db, azi, zile=365):
@@ -206,8 +267,18 @@ def scrie(store, data_dir, azi=None):
             sed = json.load(f)
     except (OSError, ValueError):
         sed = {}
+    global DATA_FOTO
+    DATA_FOTO = data_dir
     rez = rezumate_publicate()
     el = elemente(sed, hcl_recente(store.db, azi), rez if isinstance(rez, list) else [], azi)
+    try:
+        with open(os.path.join(data_dir, "intern-date", "voturi.json"), encoding="utf-8") as f:
+            vot = json.load(f)
+        with open(os.path.join(data_dir, "componenta.json"), encoding="utf-8") as f:
+            comp = json.load(f)
+        el += consilieri(vot, comp)
+    except (OSError, ValueError):
+        pass
     d = os.path.join(data_dir, "distribuie")
     os.makedirs(os.path.join(d, "img"), exist_ok=True)
     pastrate = set()

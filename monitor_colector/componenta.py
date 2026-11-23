@@ -80,6 +80,38 @@ def leaga(nume, consilieri):
     return None
 
 
+CORECTII = os.path.join(os.path.dirname(os.path.dirname(__file__)), "surse", "componenta", "corectii.json")
+
+
+def corecteaza(rows, cons, cale=CORECTII):
+    """Pagina primăriei nu e mereu la zi: partidele lipsă, consilierii plecați și cei noi vin din surse/componenta/corectii.json."""
+    try:
+        with open(cale, encoding="utf-8") as f:
+            c = json.load(f)
+    except (OSError, ValueError):
+        return rows
+    k = lambda n: "-".join(sorted(_tok(n)))
+    for x in rows:
+        if not x.get("partid") and k(x["nume"]) in c.get("partide", {}):
+            x["partid"] = c["partide"][k(x["nume"])]
+        if k(x["nume"]) in c.get("iesiti", {}):
+            x["iesit"] = c["iesiti"][k(x["nume"])]
+    nume = {k(x["nume"]) for x in rows}
+    for a in c.get("adaugati", []):
+        if k(a["nume"]) not in nume:
+            rows.append({"nume": a["nume"], "foto": None, "sigla": None, "partid": a.get("partid"), "avere": [], "interese": [],
+                         "nou": {"din": a.get("din"), "text": a.get("text")}, "id": leaga(a["nume"], cons)})
+    # sigla partidului pentru cei adăugați sau corectați: aceeași ca la ceilalți consilieri ai partidului
+    sigle = {}
+    for x in rows:
+        if x.get("partid") and x.get("sigla"):
+            sigle.setdefault(x["partid"], x["sigla"])
+    for x in rows:
+        if x.get("partid") and not x.get("sigla") and x["partid"] in sigle:
+            x["sigla"] = sigle[x["partid"]]
+    return rows
+
+
 def _imagine(sesiune, url, cale, latura):
     from PIL import Image
     r = sesiune.get(url, timeout=60)
@@ -127,6 +159,7 @@ def scrie(data_dir, client=None, slug="componenta"):
                 erori += 1
                 x[camp] = None
         out.append(x)
+    out = corecteaza(out, cons)
     rez = {"sursa": d[0]["link"], "actualizat": d[0]["modified"][:10], "consilieri": out}
     with open(os.path.join(data_dir, "componenta.json"), "w", encoding="utf-8") as f:
         json.dump(rez, f, ensure_ascii=False, separators=(",", ":"))

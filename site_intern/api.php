@@ -23,7 +23,7 @@ $INTERN = __DIR__ . '/date/';
 $PUBLIC = dirname(__DIR__) . '/date/';
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {   // starea, pentru panou
-  iesire(200, ['video' => citeste($INTERN . 'video.json'), 'aprobari' => citeste($INTERN . 'aprobari.json'), 'ok' => true]);
+  iesire(200, ['video' => citeste($INTERN . 'video.json'), 'aprobari' => citeste($INTERN . 'aprobari.json'), 'mesaje' => citeste($INTERN . 'mesaje.json'), 'ok' => true]);
 }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') iesire(405, ['eroare' => 'metodă nepermisă']);
 // doar de pe pagina monitorului (o pagină străină nu poate trimite decizii în numele echipei)
@@ -45,6 +45,13 @@ switch ($in['act'] ?? '') {
     foreach ($v as $x) if (($x['url'] ?? '') === $url) iesire(200, ['ok' => true, 'nota' => 'era deja în listă']);
     $v[] = ['data' => $data, 'url' => $url, 'adaugat_la' => $acum, 'de' => $cine];
     scrie($INTERN . 'video.json', $v);
+    iesire(200, ['ok' => true]);
+
+  case 'mesaj':   // marchează un mesaj din formularul public ca rezolvat (sau nerezolvat)
+    $i = intval($in['i'] ?? -1); $m = citeste($INTERN . 'mesaje.json');
+    if ($i < 0 || $i >= count($m)) iesire(400, ['eroare' => 'mesaj inexistent']);
+    $m[$i]['citit'] = !empty($in['citit']); $m[$i]['de'] = $cine; $m[$i]['citit_la'] = $acum;
+    scrie($INTERN . 'mesaje.json', $m);
     iesire(200, ['ok' => true]);
 
   case 'decizie':   // aprobă / respinge / cere refacerea unui rezumat

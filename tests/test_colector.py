@@ -1763,3 +1763,17 @@ class TestComponenta(unittest.TestCase):
         self.assertEqual(K.leaga("Hritcan Constantin-Cristinel", cons), "constantin-cristinel-hritean")
         self.assertIsNone(K.leaga("Popescu Ion", cons))
         self.assertEqual(K.partid_din("Sigla_noua_PNL-150x150-1.png"), "PNL")
+
+    def test_corectii(self):
+        import tempfile
+        from monitor_colector import componenta as K
+        P = K.parse(self.HTML)
+        P[1]["sigla"] = None
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
+            json.dump({"partide": {"constantin-cristinel-hritcan": "AUR"}, "iesiti": {"constantin-cristinel-hritcan": {"pana_la": "2026-10-22", "text": "x"}},
+                       "adaugati": [{"nume": "Anuței Eugen-Dorin", "partid": "AUR", "din": "2026-10-22"}]}, f)
+        P = K.corecteaza(P, [], f.name)
+        self.assertEqual(P[1]["partid"], "AUR")
+        self.assertEqual(P[1]["iesit"]["pana_la"], "2026-10-22")
+        self.assertEqual(P[2]["nume"], "Anuței Eugen-Dorin")
+        os.unlink(f.name)

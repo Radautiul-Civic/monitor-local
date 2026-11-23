@@ -598,3 +598,46 @@ td.cs-n{white-space:nowrap}
 .sx-ff .seg button{padding:6px 12px;font-size:.86rem}
 .cm-t a{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .ph-foto img{object-position:center 28%}
+/* drumul hotărârii */
+.drum{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.drum li{position:relative;padding:22px 12px 0 0;display:flex;flex-direction:column;gap:2px;font-size:.88rem}
+.drum li::before{content:"";position:absolute;top:31px;left:0;right:0;height:3px;background:color-mix(in srgb,var(--sec) 30%,var(--line))}
+.drum li:last-child::before{right:auto;width:14px}
+.drum .dot{position:absolute;top:24px;left:0;width:17px;height:17px;border-radius:50%;background:var(--surface);border:3px solid var(--sec);box-sizing:border-box}
+.drum li.c .dot{background:var(--good);border-color:var(--good)}
+.drum li.par .dot{background:var(--warn);border-color:var(--warn)}
+.drum .dz{position:absolute;top:0;left:0;font-size:.74rem;color:var(--muted);white-space:nowrap}
+.drum b{margin-top:26px;font-size:.92rem}
+@media (max-width:640px){.drum{grid-template-columns:1fr}.drum li{padding:0 0 14px 28px}.drum li::before{top:0;bottom:0;left:7px;right:auto;width:3px;height:auto}.drum li:last-child::before{display:none}
+  .drum .dot{top:2px}.drum .dz{position:static;order:3}.drum b{margin-top:0}}
+/* explicații la termeni */
+abbr.gl{text-decoration:underline dotted color-mix(in srgb,var(--sec) 70%,var(--muted));text-underline-offset:3px;cursor:help;position:relative}
+abbr.gl:hover::after,abbr.gl:focus::after{content:attr(data-def);position:absolute;left:0;top:calc(100% + 6px);z-index:30;width:max-content;max-width:min(300px,80vw);
+  background:var(--ink);color:var(--surface);font-size:.82rem;font-weight:400;line-height:1.4;letter-spacing:0;text-transform:none;padding:8px 10px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.18);white-space:normal}
+abbr.gl:focus{outline:none;background:color-mix(in srgb,var(--sec) 12%,transparent);border-radius:3px}
+/* bugetul ca dreptunghiuri */
+.tm{position:relative;width:100%;margin-top:8px;border-radius:10px;overflow:hidden}
+.tm-b{position:absolute;box-sizing:border-box;border:2px solid var(--surface);background:color-mix(in srgb,var(--c) 82%,#000 0%);color:#fff;text-align:left;padding:8px 10px;cursor:pointer;
+  display:flex;flex-direction:column;justify-content:flex-start;gap:2px;overflow:hidden;font:inherit;transition:filter .15s}
+.tm-b:hover,.tm-b.ales{filter:brightness(1.1) saturate(1.1)}
+.tm-b.ales{outline:3px solid var(--ink);outline-offset:-3px;z-index:2}
+.tm-b b{font-size:.86rem;line-height:1.2;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.tm-b span{font-size:.78rem;opacity:.95;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.tm-dc{margin-top:12px;padding:12px 14px;border-left:4px solid var(--c);background:var(--surface-2);border-radius:0 10px 10px 0;font-size:.92rem}
+/* Despre */
+ul.src{list-style:none;margin:6px 0 0;padding:0}
+ul.src li{display:flex;flex-direction:column;padding:10px 0;border-top:1px solid var(--line)}
+ul.src li span{color:var(--ink-2);font-size:.9rem}
+ol.pasi-n{margin:8px 0 0;padding-left:1.3em}
+ol.pasi-n li{margin:6px 0}
+.ct form{display:flex;flex-direction:column;gap:12px;max-width:720px}
+.ct label{display:flex;flex-direction:column;gap:4px;font-size:.9rem;font-weight:600;color:var(--ink-2)}
+.ct textarea,.ct input{font:inherit;font-weight:400;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
+.ct textarea:focus,.ct input:focus{outline:none;border-color:var(--sec);box-shadow:0 0 0 3px color-mix(in srgb,var(--sec) 22%,transparent)}
+.ct-r{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ct-h{position:absolute!important;left:-9999px;width:1px;height:1px;overflow:hidden}
+.ct-a{display:flex;gap:12px;align-items:center}
+.ct-ok{font-weight:600;color:var(--good)}
+.doc.rezolvat{opacity:.6}
+@media (max-width:640px){.ct-r{grid-template-columns:1fr}}
+.grid.two>.section{margin:0}
