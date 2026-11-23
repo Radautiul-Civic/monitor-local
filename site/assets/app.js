@@ -2436,6 +2436,7 @@
   // nota = 1 (din oficiu) + 2,5 × prezența + 2,5 × inițiativele + 2,5 × intervențiile + 1 × raportul/2 + 0,5 × fără traseism + 0,25 × președinte de comisie
   var AN_CURENT = String(new Date().getFullYear());
   function perfManual() { return (COMP || {}).performanta || {}; }
+  function areNota(V) { return (V.consilieri || []).some(function (c) { return c.interventii; }); }   // datele noi vin cu prima colectare după actualizare
   function notaCons(V, c, d0, d1) {
     var prez = 0, abs = 0, neAbs = 0, cuInt = 0, nInt = 0, aniS = {};
     Object.keys(c.cod).forEach(function (d) {
@@ -2549,7 +2550,7 @@
             var nume = k && tk(k.nume) !== tk(o.c.nume) && tk(k.nume).length === tk(o.c.nume).length ? k.nume : o.c.nume;
             var link = o.c.id && s ? '<a href="#consiliu/consilieri/' + encodeURIComponent(o.c.id) + '"><strong>' + esc(nume) + "</strong></a>" : "<strong>" + esc(nume) + "</strong>";
             var nou = val ? '<span class="tag">validat ' + esc(zi(val.data)) + "</span>" : k && k.nou ? '<span class="tag">din ' + esc(zi(k.nou.din)) + "</span>" : "";
-            var tot = s ? s.prezent + s.absent : 0, nRap = rapoarteCons(o.c).length, nt = s ? notaCons(V, o.c, mm[1], mm[2]) : null;
+            var tot = s ? s.prezent + s.absent : 0, nRap = rapoarteCons(o.c).length, nt = s && areNota(V) ? notaCons(V, o.c, mm[1], mm[2]) : null;
             return '<tr data-n="' + esc(norm(nume)) + '" data-p="' + esc((k && k.partid) || "") + '">' + (inc ? "" : '<td class="n nrc">' + (i + 1) + "</td>") + '<td class="cs-n" data-v="' + esc(nume) + '"><span class="cs-nm">' + avatar(k, o.c.nume, false, true) + "<span>" + link + (nou ? "<br>" + nou : "") + "</span></span></td>" +
               '<td class="cs-p">' + (k && k.sigla ? '<img src="' + FTDATA + esc(k.sigla) + '" alt="" loading="lazy" onerror="this.remove()">' : "") + esc((k && k.partid) || "") + "</td>" +
               (inc ? '<td class="nw" data-v="' + esc((p[0] || [""])[0]) + '">' + p.map(function (x) { return esc(zi(x[0])) + " - " + esc(zi(x[1])); }).join("<br>") + '</td><td class="inc" data-v="' + esc(o.inc.d || "") + '">' + esc(zi(o.inc.d)) +
@@ -2574,6 +2575,7 @@
         '</select><span class="muted cs-h">Apasă pe capul unei coloane ca să sortezi după ea.</span></div>' +
         tabel(activi, false) + "</section>" +
         (function () {
+          if (!areNota(V)) return "";
           var R = rows.map(function (o) { return { o: o, n: notaCons(V, o.c, mm[1], mm[2]) }; }).filter(function (x) { return x.n.sedinte >= 3; }).sort(function (a, b) { return b.n.nota - a.n.nota; });
           if (!R.length) return "";
           var med = R.reduce(function (a, x) { return a + x.n.nota; }, 0) / R.length;
@@ -2640,7 +2642,7 @@
         tile("Voturi împotrivă", nr(st.I), "", "") + tile("Abțineri", nr(st.A), "", "") + tile("Nu a votat", nr(st.N), "", "conflict de interese sau a ieșit din sală") + "</div>" +
         (function () {
           var ani_ = Object.keys(ani).sort(), Mv = mandateDin(V), mand = Mv.filter(function (m) { return c.mandate.indexOf(m[0]) >= 0; }).pop();
-          if (!ani_.length) return "";
+          if (!ani_.length || !areNota(V)) return "";
           var NA = ani_.map(function (a) { return { a: a, n: notaCons(V, c, a, String(+a + 1)) }; }).filter(function (x) { return x.n.sedinte; });
           var NM = mand ? notaCons(V, c, mand[1], mand[2]) : null;
           var sedL = function (d) { return '<a href="#consiliu/sedinte/' + esc(d) + '">' + esc(zi(d)) + "</a>"; };
