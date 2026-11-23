@@ -23,6 +23,7 @@ FELURI = [("pierderi", r"pierderi|subventi|acoperirea diferentei"),
           ("gestiune", r"dare in administrare|delegar|contract|regulament|caiet\w* de sarcini|studiu\w* de oportunitate|atribuire|licitati|gestiun"),
           ("investitii", r"indicator|investiti|reabilit|modernizar|retea|extinder|centrala")]
 MAX_PE_RULARE = int(os.environ.get("MC_TERMO_AI_MAX", "40"))
+VERIFICATE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "surse", "termoficare", "preturi.json")
 
 INSTRUCTIUNI = (
     "Citești hotărâri ale Consiliului Local Rădăuți despre prețul energiei termice (termoficare). Textul vine din documente scanate (OCR), "
@@ -38,11 +39,13 @@ def _mesaj(titlu, text):
         '"total_cu_tva": <prețul local al serviciului (producere, transport, distribuție) pentru consumatorii casnici, cu TVA, lei/MWh>, '
         '"populatie_cu_tva": <prețul local facturat populației (consumatori casnici), cu TVA, lei/MWh>, '
         '"subventie_cu_tva": <suma necesară acoperirii diferenței, adică subvenția de la buget, cu TVA, lei/MWh>, '
-        '"tva": <cota TVA în procente>, "noncasnici_cu_tva": <prețul pentru consumatorii noncasnici, cu TVA, lei/MWh>}],\n'
+        '"tva": <cota TVA în procente>, "noncasnici_cu_tva": <prețul pentru consumatorii noncasnici, cu TVA, lei/MWh>, '
+        '"unitate": "<MWh sau Gcal: unitatea în care sunt date prețurile în hotărâre>"}],\n'
         ' "pierderi_lei": <dacă hotărârea aprobă acoperirea unor pierderi, suma totală în lei, altfel null>,\n'
         ' "pe_scurt": "<o propoziție simplă: ce hotărăște>"}\n'
         "Numerele ca numere JSON (punct zecimal). Dacă o valoare lipsește sau nu se poate citi sigur, pune null. "
-        "Verifică: de obicei total = populație + subvenție.\n\n=== TEXTUL ===\n" + text[:60000]
+        "Dacă hotărârea dă prețurile în lei/Gcal, păstrează valorile din text și pune unitate Gcal (le transformăm noi). "
+        "Nu inventa perioade din fundamentări sau din anexele cu pierderi. Verifică: de obicei total = populație + subvenție.\n\n=== TEXTUL ===\n" + text[:60000]
     )
 
 
@@ -74,6 +77,10 @@ def _curata(r):
         x = {"de_la": p["de_la"], "pana_la": p.get("pana_la") if re.fullmatch(r"20\d\d-\d\d-\d\d", str(p.get("pana_la") or "")) else None}
         for k in ("total_cu_tva", "populatie_cu_tva", "subventie_cu_tva", "tva", "noncasnici_cu_tva"):
             x[k] = _num(p.get(k))
+        if str(p.get("unitate") or "").lower().startswith("gcal"):
+            for k in ("total_cu_tva", "populatie_cu_tva", "subventie_cu_tva", "noncasnici_cu_tva"):
+                if x[k]:
+                    x[k] = round(x[k] / 1.163, 2)
         if x["populatie_cu_tva"] or x["total_cu_tva"]:
             per.append(x)
     return {"perioade": per, "pierderi_lei": _num(r.get("pierderi_lei")), "pe_scurt": str(r.get("pe_scurt") or "")[:300]}
@@ -120,9 +127,22 @@ def scrie(db, data_dir, cheie=None):
     # seria prețurilor: pentru fiecare perioadă, ultima hotărâre care a stabilit-o (modificările și prelungirile o înlocuiesc)
     serie = {}
     for x in sorted(H, key=lambda h: (h["data"] or "", h["an"], h["nr"])):
-        for p in x.get("perioade") or []:
+        for p in (x.get("perioade") or []) if x["fel"] == "tarife" else []:
             serie[p["de_la"]] = dict(p, hcl={"an": x["an"], "nr": x["nr"]})
-    rez = {"hotarari": H, "preturi": [serie[k] for k in sorted(serie)]}
+    # prețurile verificate de echipă (surse/termoficare/preturi.json) au prioritate; cele citite automat rămân în „preturi_automat”
+    verif = []
+    try:
+        with open(VERIFICATE, encoding="utf-8") as f:
+            verif = json.load(f).get("preturi") or []
+    except (OSError, ValueError):
+        pass
+    auto = [dict(serie[k], verificat=False) for k in sorted(serie)]
+    if verif:
+        ultima = max(p["de_la"] for p in verif)
+        preturi = [dict(p, verificat=True) for p in verif] + [p for p in auto if p["de_la"] > ultima]
+    else:
+        preturi = auto
+    rez = {"hotarari": H, "preturi": sorted(preturi, key=lambda p: p["de_la"]), "preturi_automat": auto}
     with open(os.path.join(data_dir, "termoficare.json"), "w", encoding="utf-8") as f:
         json.dump(rez, f, ensure_ascii=False, separators=(",", ":"))
     return {"hotarari": len(H), "cu_preturi": sum(1 for x in H if x.get("perioade")), "perioade": len(serie), "ai_acum": noi, "erori": erori}

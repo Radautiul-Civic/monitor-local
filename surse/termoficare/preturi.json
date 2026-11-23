@@ -1,0 +1,281 @@
+{
+ "_despre": "Prețurile energiei termice verificate de echipă în textul hotărârilor (anexe și articole). Toate în lei/MWh, cu TVA; unde hotărârea dă lei/Gcal, valoarea e împărțită la 1,163. Au prioritate față de extragerea automată.",
+ "preturi": [
+  {
+   "de_la": "2017-07-01",
+   "pana_la": null,
+   "populatie_cu_tva": 144.96,
+   "subventie_cu_tva": 95.49,
+   "total_cu_tva": 240.45,
+   "tva": 19,
+   "hcl": {
+    "an": 2017,
+    "nr": 145
+   },
+   "unitate_in_hotarare": "Gcal"
+  },
+  {
+   "de_la": "2018-01-01",
+   "pana_la": null,
+   "populatie_cu_tva": 144.96,
+   "subventie_cu_tva": 85.61,
+   "total_cu_tva": 230.57,
+   "tva": 19,
+   "hcl": {
+    "an": 2017,
+    "nr": 257
+   },
+   "unitate_in_hotarare": "Gcal"
+  },
+  {
+   "de_la": "2018-11-01",
+   "pana_la": "2018-11-21",
+   "populatie_cu_tva": 144.96,
+   "subventie_cu_tva": 110.64,
+   "total_cu_tva": 255.61,
+   "tva": 19,
+   "hcl": {
+    "an": 2018,
+    "nr": 246
+   },
+   "unitate_in_hotarare": "Gcal"
+  },
+  {
+   "de_la": "2018-11-22",
+   "pana_la": null,
+   "populatie_cu_tva": 144.96,
+   "subventie_cu_tva": 121.57,
+   "total_cu_tva": 266.53,
+   "tva": 19,
+   "hcl": {
+    "an": 2018,
+    "nr": 246
+   },
+   "unitate_in_hotarare": "Gcal"
+  },
+  {
+   "de_la": "2019-07-01",
+   "pana_la": null,
+   "populatie_cu_tva": 144.96,
+   "subventie_cu_tva": 122.2,
+   "total_cu_tva": 267.16,
+   "tva": 19,
+   "hcl": {
+    "an": 2019,
+    "nr": 180
+   },
+   "unitate_in_hotarare": "Gcal"
+  },
+  {
+   "de_la": "2019-11-01",
+   "pana_la": null,
+   "populatie_cu_tva": 146.35,
+   "subventie_cu_tva": 122.2,
+   "total_cu_tva": 268.56,
+   "tva": 19,
+   "hcl": {
+    "an": 2019,
+    "nr": 275
+   },
+   "unitate_in_hotarare": "Gcal"
+  },
+  {
+   "de_la": "2020-07-01",
+   "pana_la": null,
+   "populatie_cu_tva": 146.35,
+   "subventie_cu_tva": 122.24,
+   "total_cu_tva": 268.6,
+   "tva": 19,
+   "hcl": {
+    "an": 2020,
+    "nr": 140
+   },
+   "unitate_in_hotarare": "Gcal"
+  },
+  {
+   "de_la": "2021-01-01",
+   "pana_la": null,
+   "populatie_cu_tva": 209.57,
+   "subventie_cu_tva": 112.26,
+   "total_cu_tva": 321.83,
+   "tva": 19,
+   "hcl": {
+    "an": 2021,
+    "nr": 23
+   },
+   "unitate_in_hotarare": "Gcal"
+  },
+  {
+   "de_la": "2021-07-01",
+   "pana_la": null,
+   "populatie_cu_tva": 255.52,
+   "subventie_cu_tva": 112.26,
+   "total_cu_tva": 367.78,
+   "tva": 19,
+   "hcl": {
+    "an": 2021,
+    "nr": 140
+   },
+   "unitate_in_hotarare": "Gcal"
+  },
+  {
+   "de_la": "2021-11-01",
+   "pana_la": null,
+   "populatie_cu_tva": 336.94,
+   "subventie_cu_tva": 300.95,
+   "total_cu_tva": 637.88,
+   "tva": 19,
+   "hcl": {
+    "an": 2021,
+    "nr": 245
+   },
+   "unitate_in_hotarare": "Gcal",
+   "nota": "în 2022 nu a fost aprobat alt tarif"
+  },
+  {
+   "de_la": "2023-07-01",
+   "pana_la": null,
+   "populatie_cu_tva": 367.43,
+   "subventie_cu_tva": 300.95,
+   "total_cu_tva": 668.37,
+   "tva": 19,
+   "hcl": {
+    "an": 2023,
+    "nr": 186
+   },
+   "unitate_in_hotarare": "MWh"
+  },
+  {
+   "de_la": "2023-11-01",
+   "pana_la": "2024-03-31",
+   "populatie_cu_tva": 266.16,
+   "subventie_cu_tva": 257.95,
+   "total_cu_tva": 524.11,
+   "tva": 5,
+   "hcl": {
+    "an": 2023,
+    "nr": 284
+   },
+   "unitate_in_hotarare": "Gcal",
+   "nota": "cu TVA 5% (HCL 284/2023 modifică HCL 280/2023)"
+  },
+  {
+   "de_la": "2024-04-01",
+   "pana_la": "2024-06-30",
+   "populatie_cu_tva": 266.16,
+   "subventie_cu_tva": 438.62,
+   "total_cu_tva": 704.78,
+   "tva": 19,
+   "hcl": {
+    "an": 2024,
+    "nr": 89
+   },
+   "unitate_in_hotarare": "MWh"
+  },
+  {
+   "de_la": "2024-07-01",
+   "pana_la": "2024-10-31",
+   "populatie_cu_tva": 280.87,
+   "subventie_cu_tva": 280,
+   "total_cu_tva": 560.87,
+   "tva": 19,
+   "hcl": {
+    "an": 2024,
+    "nr": 129
+   },
+   "unitate_in_hotarare": "MWh"
+  },
+  {
+   "de_la": "2024-11-01",
+   "pana_la": "2025-03-31",
+   "populatie_cu_tva": 211.87,
+   "subventie_cu_tva": 280,
+   "total_cu_tva": 491.87,
+   "tva": 5,
+   "hcl": {
+    "an": 2024,
+    "nr": 246
+   },
+   "unitate_in_hotarare": "MWh"
+  },
+  {
+   "de_la": "2025-04-01",
+   "pana_la": "2025-06-30",
+   "populatie_cu_tva": 383.96,
+   "subventie_cu_tva": 280,
+   "total_cu_tva": 663.96,
+   "tva": 19,
+   "hcl": {
+    "an": 2024,
+    "nr": 246
+   },
+   "unitate_in_hotarare": "MWh"
+  },
+  {
+   "de_la": "2025-07-01",
+   "pana_la": "2025-10-31",
+   "populatie_cu_tva": 374.64,
+   "subventie_cu_tva": 320,
+   "total_cu_tva": 694.64,
+   "tva": 19,
+   "hcl": {
+    "an": 2025,
+    "nr": 190
+   },
+   "unitate_in_hotarare": "MWh"
+  },
+  {
+   "de_la": "2025-11-01",
+   "pana_la": "2026-01-31",
+   "populatie_cu_tva": 273.1,
+   "subventie_cu_tva": 296,
+   "total_cu_tva": 569.1,
+   "tva": 11,
+   "hcl": {
+    "an": 2025,
+    "nr": 281
+   },
+   "unitate_in_hotarare": "MWh"
+  },
+  {
+   "de_la": "2026-02-01",
+   "pana_la": "2026-03-31",
+   "populatie_cu_tva": 389.69,
+   "subventie_cu_tva": 296,
+   "total_cu_tva": 685.69,
+   "tva": 11,
+   "hcl": {
+    "an": 2026,
+    "nr": 60
+   },
+   "unitate_in_hotarare": "MWh"
+  },
+  {
+   "de_la": "2026-04-01",
+   "pana_la": "2026-06-30",
+   "populatie_cu_tva": 504.73,
+   "subventie_cu_tva": 322.67,
+   "total_cu_tva": 827.4,
+   "tva": 21,
+   "hcl": {
+    "an": 2026,
+    "nr": 95
+   },
+   "unitate_in_hotarare": "MWh",
+   "nota": "HCL 66/2026 și 95/2026"
+  },
+  {
+   "de_la": "2026-07-01",
+   "pana_la": "2026-10-31",
+   "populatie_cu_tva": 477.03,
+   "subventie_cu_tva": 322.67,
+   "total_cu_tva": 799.7,
+   "tva": 21,
+   "hcl": {
+    "an": 2026,
+    "nr": 140
+   },
+   "unitate_in_hotarare": "MWh"
+  }
+ ]
+}

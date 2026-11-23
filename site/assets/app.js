@@ -1805,11 +1805,11 @@
       "<li>Firmele și instituțiile (consumatorii noncasnici) plătesc prețul întreg; subvenția e doar pentru populație.</li>" +
       "<li>Prețurile sunt în <b>lei pe MWh</b> (1 Gcal = 1,163 MWh).</li></ul></section>";
     if (P.length) {
-      h += '<section class="card section"><h2>Prețurile, perioadă cu perioadă</h2><p class="note">Din anexele hotărârilor de tarife, citite automat dintr-un document scanat; pot avea greșeli, iar fiecare perioadă duce la hotărâre. O perioadă modificată sau prelungită apare cu ultima hotărâre care a stabilit-o.</p>' +
+      h += '<section class="card section"><h2>Prețurile, perioadă cu perioadă</h2><p class="note">Din articolele și anexele hotărârilor de tarife, verificate de echipă în document (cele marcate „neverificat” sunt citite automat și încă nu au fost verificate). Până în 2023, hotărârile dau prețurile în lei/Gcal; aici sunt transformate în lei/MWh (împărțite la 1,163), ca să se poată compara. Fiecare perioadă duce la hotărâre.</p>' +
         legend([["Plătește populația", "#ec7a2c"], ["Plătește bugetul local", "#2a78d6"]]) + '<div class="chart" id="tf-ch"></div>' +
         '<div class="tw"><table class="tx-t"><thead><tr><th>Perioada</th><th class="n">Populația</th><th class="n">Bugetul local</th><th class="n">Prețul întreg</th><th class="n">TVA</th><th class="n">Populația, față de perioada dinainte</th><th>Hotărârea</th></tr></thead><tbody>' +
         P.slice().reverse().map(function (p, i, A) { var a = A[i + 1];
-          return "<tr><td>" + esc(perioada(p)) + '</td><td class="n"><b>' + lei2(p.populatie_cu_tva) + '</b></td><td class="n">' + lei2(p.subventie_cu_tva) + '</td><td class="n">' + lei2(p.total_cu_tva) + '</td><td class="n">' + (p.tva ? p.tva + "%" : "-") +
+          return "<tr><td>" + esc(perioada(p)) + (p.verificat === false ? ' <span class="tag" title="Citit automat din hotărâre, încă neverificat de echipă">neverificat</span>' : "") + (p.nota ? '<br><small class="muted">' + esc(p.nota) + "</small>" : "") + '</td><td class="n"><b>' + lei2(p.populatie_cu_tva) + '</b></td><td class="n">' + lei2(p.subventie_cu_tva) + '</td><td class="n">' + lei2(p.total_cu_tva) + '</td><td class="n">' + (p.tva ? p.tva + "%" : "-") +
             '</td><td class="n">' + (a ? variatie(a.populatie_cu_tva, p.populatie_cu_tva) : "") + "</td><td>" + (p.hcl ? linkHcl(p.hcl) : "") + "</td></tr>"; }).join("") + "</tbody></table></div></section>";
     }
     var pier = H.filter(function (x) { return x.fel === "pierderi"; });

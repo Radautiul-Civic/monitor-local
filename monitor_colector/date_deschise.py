@@ -82,6 +82,14 @@ def scrie(data_dir):
            ["inceput", "sfarsit", "institutie", "procedura", "functii", "categorie", "posturi", "candidati", "stare", "titlu"],
            ([c.get("inceput"), c.get("sfarsit"), c.get("institutie"), c.get("procedura_nume"), ", ".join(f if isinstance(f, str) else (f.get("nume") or "") for f in c.get("functii") or []),
              c.get("categorie"), c.get("posturi"), c.get("candidati"), c.get("stare"), c.get("titlu")] for c in K.get("concursuri") or []))
+    TF = citeste("termoficare.json")
+    fisier("termoficare_preturi.csv", "Prețul energiei termice (termoficare), pe perioade: cât plătește populația, cât acoperă bugetul local, prețul întreg; lei/MWh cu TVA",
+           ["de_la", "pana_la", "populatie_lei_mwh", "buget_local_lei_mwh", "pret_intreg_lei_mwh", "tva_procent", "hcl", "unitate_in_hotarare", "verificat", "nota"],
+           ([p.get("de_la"), p.get("pana_la"), p.get("populatie_cu_tva"), p.get("subventie_cu_tva"), p.get("total_cu_tva"), p.get("tva"),
+             f"{p['hcl']['nr']}/{p['hcl']['an']}" if p.get("hcl") else None, p.get("unitate_in_hotarare"), "da" if p.get("verificat") else "nu", p.get("nota")] for p in TF.get("preturi") or []))
+    fisier("termoficare_hotarari.csv", "Hotărârile consiliului local despre termoficare (tarife, pierderi acoperite din buget, contractul, investiții)",
+           ["an", "nr", "data", "fel", "pierderi_lei", "pe_scurt", "titlu"],
+           ([x["an"], x["nr"], x.get("data"), x["fel"], x.get("pierderi_lei"), x.get("pe_scurt"), x["titlu"]] for x in TF.get("hotarari") or []))
     with open(os.path.join(out, "index.json"), "w", encoding="utf-8") as f:
         json.dump(idx, f, ensure_ascii=False, separators=(",", ":"))
     return {x["fisier"]: x["randuri"] for x in idx}
