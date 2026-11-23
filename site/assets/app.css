@@ -655,3 +655,11 @@ ol.pasi-n li{margin:6px 0}
 .av>img:first-child{position:absolute;inset:0;width:100%!important;height:100%!important;max-width:none;border-radius:50%;object-fit:cover;object-position:center 20%}
 .av>i{position:relative}
 .av-p{z-index:1}
+/* investiții */
+.doc.inv .h{align-items:center}
+.inv-v{font-weight:700;font-variant-numeric:tabular-nums}
+ol.inv-p{list-style:none;margin:6px 0 4px;padding:0 0 0 12px;border-left:2px solid color-mix(in srgb,var(--sec) 35%,var(--line));font-size:.85rem;color:var(--ink-2)}
+ol.inv-p li{margin:3px 0}
+ol.inv-p li>span:first-child{color:var(--muted);font-variant-numeric:tabular-nums;display:inline-block;min-width:9.5em}
+.inv-s{font-size:.84rem;margin-top:4px}
+h3.an-h{margin:18px 0 4px;font-size:.95rem;color:var(--ink-2)}

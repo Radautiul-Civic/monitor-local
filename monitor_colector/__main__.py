@@ -66,6 +66,10 @@ def main(argv=None):
                     stats["api_arhiva"] = collect.collect_archive_api(store, full=a.tot)
                 except Exception as e:
                     stats["api_arhiva"] = f"eroare: {e}"
+                try:   # rapoartele primăriei și dispozițiile din arhivă (pagini cu liste de PDF-uri)
+                    stats["pagini"] = collect.collect_pagini(store)
+                except Exception as e:
+                    stats["pagini"] = f"eroare: {e}"
         if a.comanda == "arhiva":
             stats["arhiva"] = collect.collect_archive(store, years=set(a.ani) or None)
             if not a.ani:
@@ -167,6 +171,11 @@ def main(argv=None):
                 stats["componenta"] = componenta.scrie(config.DATA_DIR)
             except Exception as e:
                 stats["componenta"] = f"eroare: {e}"
+            try:   # teme: investiții, patrimoniu, dispoziții, finanțări, taxe locale, rapoarte
+                from . import teme
+                stats["teme"] = teme.scrie(store, config.DATA_DIR)
+            except Exception as e:
+                stats["teme"] = f"eroare: {e}"
             try:   # pagina de start: „Rădăuți în <anul curent>”
                 from . import poveste
                 def _cit(n, implicit=None):

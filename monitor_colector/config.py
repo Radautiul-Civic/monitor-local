@@ -55,6 +55,14 @@ ARCHIVE_HCL_PAGES = {
     2025: "/monitorul-oficial-local/hotarari-cl/",
 }
 
+# Pagini (nu categorii) cu liste de documente: rapoartele primăriei și dispozițiile mai vechi din arhivă.
+# Sursa internă -> listă de pagini; „site:<slug>” = pagină de pe site-ul nou (citită prin API), restul = cale în arhivă.
+PAGINI_DOCUMENTE = {
+    "rapoarte": ["site:raport-anual", "site:raport-de-evaluare", "site:rapoarte-de-activitate", "site:arhiva-rapoarte-de-activitate-cl-2024",
+                 "site:raport-stadiu-implementare-sna", "/primarie/rapoarte-si-studii/", "/consiliul-local/rapoartele-membrilor-consiliului-local/"],
+    "dispozitii_arhiva": [f"/monitorul-oficial-local/dispozitii-ale-primarului/dispozitii-anul-{an}/" for an in range(2012, 2025)],
+}
+
 DOC_EXTENSIONS = (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".odt", ".ods", ".zip")
 
 # Verificări manuale ale problemelor semnalate automat (an/număr -> rezultat).

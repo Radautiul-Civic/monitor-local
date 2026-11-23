@@ -26,7 +26,8 @@
     { id: "acasa", nume: "Acasă" },
     { id: "strada", nume: "Strada mea" },
     { id: "consiliu", nume: "Consiliul Local", def: "hcl", sub: [["urmatoare", "Ședința următoare"], ["proiecte", "Proiecte de hotărâre"], ["hcl", "Hotărâri adoptate"], ["sedinte", "Ședințe și procese-verbale"], ["consilieri", "Consilieri"]] },
-    { id: "primarie", nume: "Primărie", def: "urbanism", sub: [["buget", "Buget"], ["urbanism", "Urbanism"]] },
+    { id: "primarie", nume: "Primărie", def: "urbanism", sub: [["buget", "Buget"], ["investitii", "Investiții"], ["taxe", "Taxe locale"], ["patrimoniu", "Terenuri și clădiri"],
+      ["finantari", "Finanțări nerambursabile"], ["dispozitii", "Dispozițiile primarului"], ["rapoarte", "Rapoarte"], ["urbanism", "Urbanism"]] },
     { id: "achizitii", nume: "Achiziții publice", def: "sicap", sub: [["sicap", "SICAP"], ["contracte", "Contracte"]] },
     { id: "angajari", nume: "Concursuri și angajări", def: "statistici", sub: [["statistici", "Statistici"], ["concursuri", "Concursuri"], ["posturi", "Organigramă și posturi"]] }
   ].concat(INTERN ? [{ id: "litigii", nume: "Litigii", def: "noutati", sub: [["noutati", "Noutăți"], ["dosare", "Dosare"], ["statistici", "Statistici"]] }] : [])
@@ -1739,6 +1740,123 @@
       onClick: function (i) { executie(el, ani[i]); } });
   }
 
+  // ---------- Primărie: teme care leagă documentele (date/teme.json) ----------
+  var TEME = null;
+  var TEME_PAG = { investitii: 1, taxe: 1, patrimoniu: 1, finantari: 1, dispozitii: 1, rapoarte: 1 };
+  function temaPagina(el, r) {
+    var titluri = { investitii: ["Investițiile orașului", "Fiecare obiectiv de investiții, cu hotărârile despre el, valoarea aprobată și achizițiile din SICAP cu titlu asemănător."],
+      taxe: ["Taxe și impozite locale", "Hotărârile anuale despre impozitele și taxele locale și câteva niveluri, de la an la an."],
+      patrimoniu: ["Terenuri și clădiri", "Ce face orașul cu terenurile și clădirile lui: vânzări, concesionări, închirieri, schimburi, treceri dintr-un domeniu în altul."],
+      finantari: ["Finanțări nerambursabile", "Banii din bugetul orașului pentru asociații, fundații și culte, prin programele anuale (Legea nr. 350/2005)."],
+      dispozitii: ["Dispozițiile primarului", "Dispozițiile publicate de primar, pe tipuri, și câte au fost emise în total, după numerotare."],
+      rapoarte: ["Rapoarte", "Rapoartele publicate de primărie: raportul anual, transparența decizională, activitatea consilierilor, integritate."] };
+    var t = titluri[r.sub], cap = head(t[0], t[1], r);
+    if (!TEME) { el.innerHTML = cap + '<p class="updated">Se încarcă...</p>'; get(DATA + "teme.json").then(function (d) { TEME = d; render(); }).catch(function () { TEME = {}; render(); }); return; }
+    var D = TEME[r.sub];
+    if (!D || (Array.isArray(D) && !D.length) || (D.lista && !D.lista.length)) { el.innerHTML = cap + '<section class="card section"><p class="empty">Datele apar după următoarea colectare.</p></section>'; return; }
+    ({ investitii: pagInvestitii, taxe: pagTaxe, patrimoniu: pagPatrimoniu, finantari: pagFinantari, dispozitii: pagDispozitii, rapoarte: pagRapoarte })[r.sub](el, cap, D);
+  }
+  var STARE_INV = { aprobat: ["aprobat în consiliu", "n"], licitat: ["licitație lansată", "ic"], contractat: ["cu achiziții în SICAP", "par"], finalizat: ["finalizat", "c"] };
+  function pagInvestitii(el, cap, D) {
+    var tot = D.reduce(function (a, x) { return a + (x.valoare || 0); }, 0), cuV = D.filter(function (x) { return x.valoare; }).length;
+    var nr_ = function (s) { return D.filter(function (x) { return x.stare === s; }).length; };
+    el.innerHTML = cap + '<div class="grid">' + tile("Obiective de investiții", nr(D.length), "", "din hotărârile consiliului local") +
+      tile("Valoarea aprobată", lei(tot), "", "la " + cuV + " obiective cu valoarea citită din hotărâre") +
+      tile("Cu achiziții în SICAP", nr(nr_("contractat") + nr_("licitat")), "", "licitații sau contracte cu titlu asemănător") + tile("Finalizate", nr(nr_("finalizat")), "", "după hotărârile de finalizare sau de trecere în inventar") + "</div>" +
+      '<section class="card section"><h2>Obiectivele</h2><p class="note">Hotărârile sunt grupate după numele obiectivului, citit din titlu. Valoarea e cea din ultima hotărâre cu indicatori; achizițiile din SICAP sunt cele cu titlu asemănător, publicate după prima hotărâre, deci pot fi și altele legate de obiectiv sau, rar, unele nelegate. Verifică în documente.</p><div id="inv-l"></div></section>';
+    lista($("inv-l"), D, { placeholder: "Caută: stradă, școală, lucrare", unitate: ["obiectiv", "obiective"], an: function (x) { return (x.ultima || "").slice(0, 4); }, text: function (x) { return x.nume + " " + x.pasi.map(function (p) { return p.titlu; }).join(" "); },
+      extraFilter: { html: '<select aria-label="Stadiul"><option value="">Orice stadiu</option>' + Object.keys(STARE_INV).map(function (k) { return '<option value="' + k + '">' + STARE_INV[k][0] + "</option>"; }).join("") + "</select>", test: function (x, e) { return x.stare === e; } },
+      item: function (x) {
+        var st = STARE_INV[x.stare] || ["", "n"];
+        return '<div class="doc inv"><div class="h"><span class="rz ' + st[1] + '">' + st[0] + "</span>" + (x.valoare ? '<span class="inv-v">' + lei(x.valoare) + (x.tva ? ' <small class="muted">' + esc(x.tva) + "</small>" : "") + "</span>" : "") + "</div>" +
+          '<div class="t"><b>' + esc(x.nume) + "</b></div>" +
+          '<ol class="inv-p">' + x.pasi.map(function (p) { return "<li><span>" + esc(zi(p.data)) + "</span> " + linkHcl(p) + " · " + esc(NUME_PAS[p.pas] || p.pas) + (p.valoare ? " · " + lei(p.valoare) : "") + "</li>"; }).join("") + "</ol>" +
+          ((x.sicap || []).length ? '<div class="inv-s"><span class="muted">În SICAP:</span> ' + x.sicap.map(function (q) {
+            return '<a href="' + SICAP_URL + (q.fel === "directa" ? "direct-acquisition/view/" : q.fel === "licitatie" ? "notices/c-notice/v2/view/" : "notices/ca-notices/view-c/") + q.id + '" rel="noopener">' +
+              esc({ directa: "achiziție directă", licitatie: "licitație", contract: "contract" }[q.fel]) + " " + esc(zi(q.data)) + (q.lei ? ", " + lei(q.lei) : "") + "</a>"; }).join(" · ") + "</div>" : "") + "</div>";
+      } });
+  }
+  var NUME_PAS = { indicatori: "documentație și indicatori", modificare: "indicatori modificați", finantare: "finanțare sau cofinanțare", credite: "credite de angajament",
+    esalonare: "eșalonare financiară", finalizat: "proiect finalizat", inventar: "trecut în inventar", alta: "altă hotărâre" };
+  function pagTaxe(el, cap, D) {
+    var ani = Object.keys(D).sort(), K = [["indexare_pct", "Indexare față de anul anterior", function (v) { return dec(v) + "%"; }],
+      ["cladiri_rezidentiale_pf_pct", "Impozit pe clădirile rezidențiale ale persoanelor fizice (cota)", function (v) { return dec(v) + "%"; }],
+      ["auto_1600_lei_200cm3", "Impozit auto, autoturisme până la 1.600 cm³ (lei pentru fiecare 200 cm³)", function (v) { return dec(v.toFixed(2)) + " lei"; }],
+      ["salubrizare_pf_lei_persoana_luna", "Taxa de salubrizare, persoane fizice (lei pe persoană, pe lună)", function (v) { return dec(v.toFixed(2)) + " lei"; }]];
+    var cuNiv = ani.filter(function (a) { return Object.keys(D[a].niveluri || {}).length; });
+    el.innerHTML = cap + (cuNiv.length ? '<section class="card section"><h2>Câteva niveluri, de la an la an</h2><p class="note">Citite automat din hotărârea anuală (textul scanat), deci unele lipsesc; fiecare an duce la hotărâre. Indexarea e procentul cu care s-au actualizat nivelurile față de anul anterior, după rata inflației.</p>' +
+      '<div class="tw"><table><thead><tr><th></th>' + cuNiv.map(function (a) { return '<th class="n">' + a + (D[a].hcl ? '<br><a href="#consiliu/hcl/' + D[a].hcl.an + "/" + D[a].hcl.nr + '">HCL ' + D[a].hcl.nr + "/" + D[a].hcl.an + "</a>" : "") + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      K.map(function (k) { return "<tr><td>" + k[1] + "</td>" + cuNiv.map(function (a) { var v = (D[a].niveluri || {})[k[0]]; return '<td class="n">' + (v != null ? k[2](v) : '<span class="muted">-</span>') + "</td>"; }).join("") + "</tr>"; }).join("") +
+      "</tbody></table></div></section>" : "") +
+      '<section class="card section"><h2>Hotărârile, pe ani</h2>' + ani.slice().reverse().map(function (a) {
+        return '<h3 class="an-h">Pentru anul ' + a + "</h3>" + D[a].hotarari.map(function (h) { return '<div class="doc"><div class="h"><span class="id">' + linkHcl(h) + "</span>" + (h.anuala ? '<span class="rz c">hotărârea anuală</span>' : '<span class="tag">modificare</span>') + (h.data ? '<span class="muted">adoptată ' + esc(zi(h.data)) + "</span>" : "") + '</div><div class="t">' + esc(h.titlu) + "</div></div>"; }).join("");
+      }).join("") + "</section>";
+  }
+  var FEL_PAT = { vanzare: ["Vânzări", "var(--c8)"], concesionare: ["Concesionări", "var(--c4)"], inchiriere: ["Închirieri", "var(--c1)"], schimb: ["Schimburi", "var(--c7)"],
+    folosinta: ["Folosință gratuită, administrare", "var(--c3)"], uz: ["Drept de uz, servitute, superficie", "var(--c6)"], cumparare: ["Cumpărări, donații, preluări", "var(--c5)"], domeniu: ["Domeniul public / privat, inventar", "var(--plan)"] };
+  function pagPatrimoniu(el, cap, D) {
+    var pe = {}; D.forEach(function (x) { pe[x.fel] = (pe[x.fel] || 0) + 1; });
+    var anC = String(new Date().getFullYear()), vAn = D.filter(function (x) { return x.fel === "vanzare" && x.an == anC; }).length;
+    el.innerHTML = cap + '<div class="grid">' + tile("Hotărâri despre terenuri și clădiri", nr(D.length), "", "din 2013 până azi") + tile("Vânzări", nr(pe.vanzare || 0), "", vAn + " în " + anC) +
+      tile("Concesionări și închirieri", nr((pe.concesionare || 0) + (pe.inchiriere || 0)), "", "") + tile("Pe hartă", nr(D.filter(function (x) { return x.lat; }).length), "", "unde strada din titlu a putut fi găsită") + "</div>" +
+      '<section class="card section"><h2>Pe tipuri</h2>' + hbl(Object.keys(FEL_PAT).filter(function (k) { return pe[k]; }).map(function (k) { return { l: FEL_PAT[k][0], v: pe[k] }; }), nr, D.length) + "</section>" +
+      '<section class="card section"><h2>Pe hartă</h2><p class="note">Poziția e cea a străzii (sau a adresei) din titlul hotărârii, găsită automat; e aproximativă.</p><div class="map" id="pat-map"></div></section>' +
+      '<section class="card section"><h2>Toate hotărârile</h2><div id="pat-l"></div></section>';
+    lista($("pat-l"), D, { placeholder: "Caută: stradă, număr cadastral, firmă", unitate: ["hotărâre", "hotărâri"], an: function (x) { return String(x.an); }, text: function (x) { return x.titlu + " " + (x.strada || "") + " " + (x.cadastral || ""); },
+      extraFilter: { html: '<select aria-label="Tipul"><option value="">Toate tipurile</option>' + Object.keys(FEL_PAT).map(function (k) { return '<option value="' + k + '">' + FEL_PAT[k][0] + "</option>"; }).join("") + "</select>", test: function (x, e) { return x.fel === e; } },
+      item: function (x) {
+        return '<div class="doc"><div class="h"><span class="id">' + linkHcl(x) + '</span><span class="tag" style="border-color:' + FEL_PAT[x.fel][1] + '">' + esc(FEL_PAT[x.fel][0]) + "</span>" +
+          (x.strada ? '<span class="muted">' + esc(x.strada) + "</span>" : "") + (x.suprafata ? '<span class="muted">' + nr(x.suprafata) + " mp</span>" : "") + '<span class="muted">' + esc(zi(x.data)) + "</span></div>" +
+          '<div class="t">' + esc(x.titlu) + "</div></div>";
+      } });
+    incarcaLeaflet().then(function () {
+      var Lf = window.L, m = Lf.map("pat-map", { scrollWheelZoom: false }).setView([47.8445, 25.9195], 14);
+      Lf.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(m);
+      var g = Lf.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 36 }); m.addLayer(g);
+      D.filter(function (x) { return x.lat; }).forEach(function (x) {
+        g.addLayer(Lf.circleMarker([x.lat, x.lon], { radius: 7, color: "#fff", weight: 1.5, fillOpacity: .9, fillColor: getComputedStyle(document.documentElement).getPropertyValue(FEL_PAT[x.fel][1].slice(4, -1)).trim() || "#2a78d6" })
+          .bindPopup("<b>" + esc(FEL_PAT[x.fel][0]) + "</b> · " + linkHcl(x) + " · " + esc(zi(x.data)) + "<br>" + esc(x.titlu.slice(0, 260))));
+      });
+    }).catch(function () { $("pat-map").innerHTML = '<p class="empty">Harta nu s-a putut încărca.</p>'; });
+  }
+  var DOM_FIN = { social: ["Social (asociații și fundații)", "var(--c1)"], culte: ["Culte religioase", "var(--c7)"], sport: ["Sport", "var(--c3)"], cultura: ["Cultură", "var(--c4)"],
+    tineret: ["Tineret", "var(--c5)"], educatie: ["Educație", "var(--c2)"], mediu: ["Mediu", "var(--c6)"] };
+  function pagFinantari(el, cap, D) {
+    var P = D.filter(function (x) { return x.anul_programului && x.total && !x.inlocuit; }).sort(function (a, b) { return a.anul_programului < b.anul_programului ? -1 : 1; });
+    var dom = {}; P.forEach(function (x) { Object.keys(x.domenii || {}).forEach(function (k) { dom[k] = 1; }); });
+    var dk = Object.keys(DOM_FIN).filter(function (k) { return dom[k]; }), ult = P[P.length - 1];
+    el.innerHTML = cap + (ult ? '<div class="grid">' + tile("Programul pe " + ult.anul_programului, lei(ult.total), "", Object.keys(ult.domenii || {}).map(function (k) { return lei(ult.domenii[k]) + " " + (DOM_FIN[k] || [k])[0].toLowerCase(); }).join(", ")) +
+      tile("În total, în programele găsite", lei(P.reduce(function (a, x) { return a + x.total; }, 0)), "", P.length + " programe anuale, " + P[0].anul_programului + "-" + ult.anul_programului) + "</div>" : "") +
+      (P.length ? '<section class="card section"><h2>Bugetul programelor, pe domenii</h2>' + legend(dk.map(function (k) { return DOM_FIN[k]; })) + '<div class="chart" id="ch-fin"></div>' +
+        '<p class="note">Sumele sunt cele aprobate în program, citite automat din hotărâre; cât s-a dat efectiv fiecărui beneficiar se vede în contractele de finanțare, publicate separat de primărie.</p></section>' : "") +
+      '<section class="card section"><h2>Hotărârile</h2>' + D.map(function (x) { return '<div class="doc"><div class="h"><span class="id">' + linkHcl(x) + "</span>" + (x.total ? '<span class="rz c">' + lei(x.total) + "</span>" : "") + (x.data ? '<span class="muted">' + esc(zi(x.data)) + "</span>" : "") + '</div><div class="t">' + esc(x.titlu) + "</div></div>"; }).join("") + "</section>";
+    if (P.length) chart($("ch-fin"), { cats: P.map(function (x) { return x.anul_programului; }), stacked: true, label: "Finanțări nerambursabile pe ani",
+      series: dk.map(function (k) { return { name: DOM_FIN[k][0], color: DOM_FIN[k][1], values: P.map(function (x) { return Math.round(((x.domenii || {})[k] || 0) / 1000); }) }; }),
+      labelValue: function (i) { return Math.round(P[i].total / 1000); }, tooltip: function (i) { return "<b>" + P[i].anul_programului + "</b>: " + lei(P[i].total) + "<br>" + Object.keys(P[i].domenii || {}).map(function (k) { return (DOM_FIN[k] || [k])[0] + ": " + lei(P[i].domenii[k]); }).join("<br>"); } });
+  }
+  function pagDispozitii(el, cap, D) {
+    var ani = Object.keys(D.pe_ani).sort(), ult = ani[ani.length - 1], A = D.pe_ani[ult] || {};
+    el.innerHTML = cap + '<div class="grid">' + tile("Dispoziții publicate în " + ult, nr(A.publicate || 0), "", "pe site-ul primăriei") +
+      (A.numar_maxim ? tile("Dispoziții emise în " + ult, "cel puțin " + nr(A.numar_maxim), "", "după cel mai mare număr din cele publicate") : "") + "</div>" +
+      '<section class="card section"><h2>Publicate și emise, pe ani</h2><p class="note">Primarul emite dispoziții pentru multe lucruri: convocarea consiliului, buget, personal, comisii, ajutoare. Cele cu caracter normativ se publică; cele individuale se comunică celor vizați, deci nu toate apar pe site. Numărul emis e estimat după cea mai mare dispoziție publicată în anul respectiv.</p>' +
+      '<div class="tw"><table><thead><tr><th>An</th><th class="n">Publicate</th><th class="n">Emise (cel puțin)</th>' + Object.keys(D.feluri).map(function (k) { return '<th class="n">' + esc(D.feluri[k]) + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      ani.slice().reverse().map(function (a) { var x = D.pe_ani[a]; return "<tr><td>" + a + '</td><td class="n">' + x.publicate + '</td><td class="n">' + (x.numar_maxim ? nr(x.numar_maxim) : "-") + "</td>" + Object.keys(D.feluri).map(function (k) { return '<td class="n">' + ((x.pe_feluri || {})[k] || 0) + "</td>"; }).join("") + "</tr>"; }).join("") +
+      "</tbody></table></div></section>" +
+      '<section class="card section"><h2>Dispozițiile publicate</h2><div id="disp-l"></div></section>';
+    lista($("disp-l"), D.lista, { placeholder: "Caută în titluri", unitate: ["dispoziție", "dispoziții"], an: function (x) { return x.an; }, text: function (x) { return x.obiect; },
+      extraFilter: { html: '<select aria-label="Tipul"><option value="">Toate tipurile</option>' + Object.keys(D.feluri).map(function (k) { return '<option value="' + k + '">' + esc(D.feluri[k]) + "</option>"; }).join("") + "</select>", test: function (x, e) { return x.fel === e; } },
+      item: function (x) { return doc((x.nr ? "Dispoziția nr. " + x.nr : "Dispoziție") + "/" + esc(x.an), x.obiect, '<span class="tag">' + esc(D.feluri[x.fel] || "") + "</span>" + (x.data ? " publicată " + esc(zi(x.data)) : ""), x); } });
+  }
+  function pagRapoarte(el, cap, D) {
+    var g = {}; D.lista.forEach(function (x) { (g[x.fel] = g[x.fel] || []).push(x); });
+    el.innerHTML = cap + Object.keys(D.feluri).filter(function (k) { return g[k]; }).map(function (k) {
+      var L2 = g[k].slice().sort(function (a, b) { return (b.an || "").localeCompare(a.an || ""); });
+      return '<section class="card section"><h2>' + esc(D.feluri[k]) + ' <span class="nr-b n">' + L2.length + "</span></h2>" + L2.map(function (x) {
+        return '<div class="doc"><div class="h">' + (x.an ? '<span class="id">' + esc(x.an) + "</span>" : "") + '<a class="lk" href="' + esc(safeUrl(x.url) || "#") + '" rel="noopener">PDF</a>' +
+          (safeUrl(x.pagina) ? '<a class="lk" href="' + esc(x.pagina) + '" rel="noopener">pagina</a>' : "") + '</div><div class="t">' + esc(x.titlu) + "</div></div>"; }).join("") + "</section>";
+    }).join("");
+  }
+
   // ---------- Primărie: Urbanism, harta ----------
   var LEAF = null;
   function incarcaLeaflet() {
@@ -3048,6 +3166,7 @@
     else if (id === "litigii" && INTERN) litigii(el, r);
     else if (id === "primarie") {
       if (r.sub === "buget") buget(el, r);
+      else if (TEME_PAG[r.sub]) temaPagina(el, r);
       else if ((r.rest[0] || "harta") === "harta") harta(el, r);
       else registru(el, r, r.rest[0] === "ac" ? "ac" : "cu");
     }

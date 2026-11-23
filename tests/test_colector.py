@@ -1777,3 +1777,46 @@ class TestComponenta(unittest.TestCase):
         self.assertEqual(P[1]["iesit"]["pana_la"], "2026-10-22")
         self.assertEqual(P[2]["nume"], "Anuței Eugen-Dorin")
         os.unlink(f.name)
+
+
+class TestTeme(unittest.TestCase):
+    def test_suma(self):
+        from monitor_colector.teme import suma
+        for s, mii, v in (("67,095,20", 0, 67095.20), ("222 566.000", 0, 222566.0), ("1.003,067", 1, 1003067), ("50.000", 0, 50000), ("99954.396", 0, 99954.396)):
+            self.assertAlmostEqual(suma(s, bool(mii)), v, places=2)
+
+    def test_nume_obiectiv(self):
+        from monitor_colector.teme import nume_obiectiv
+        self.assertEqual(nume_obiectiv("Hotărâre privind aprobarea indicatorilor pentru obiectivul de investiții «Reabilitare rețea de apă pe str. Vânătorilor»"),
+                         "Reabilitare rețea de apă pe str. Vânătorilor")
+        self.assertEqual(nume_obiectiv("privind obiectivul de investiții ,,Reparații la Școala Gimnazială ,,Gheorghe Popadiuc” din Rădăuți”"),
+                         "Reparații la Școala Gimnazială ,,Gheorghe Popadiuc” din Rădăuți")
+
+    def test_valoare_si_taxe(self):
+        from monitor_colector.teme import valoare_investitie, niveluri_taxe
+        self.assertEqual(valoare_investitie("1. Valoarea totala\\nValoarea totala (cu TVA) este de: 130.273,32 lel"), (130273.32, "cu TVA"))
+        n = niveluri_taxe("au fost indexate pentru anul 2026 cu 5,59%. Cota impozitului pentru clădirile rezidențiale şi clădirile 0,08% - 0,2% 0,08% anexă")
+        self.assertEqual(n, {"indexare_pct": 5.59, "cladiri_rezidentiale_pf_pct": 0.08})
+
+    def test_teme_pe_baza_de_date(self):
+        from monitor_colector import teme as T
+        db = sqlite3.connect(":memory:")
+        db.execute("CREATE TABLE hcl (year, number, adoption_date, title, pdf_url)")
+        db.execute("CREATE TABLE documents (url, wp_id, link_text, text_path)")
+        db.execute("CREATE TABLE posts (wp_id, source, title, date, link)")
+        db.executemany("INSERT INTO hcl VALUES (?,?,?,?,?)", [
+            (2026, 10, "2026-03-01", "Hotărâre privind aprobarea indicatorilor tehnico-economici pentru obiectivul de investiții «Modernizare strada Putnei»", None),
+            (2026, 40, "2026-09-01", "Hotărâre privind aprobarea finalizării proiectului «Modernizare strada Putnei»", None),
+            (2026, 12, "2026-03-01", "Hotărâre privind aprobarea vânzării directe a imobilului situat în str. Mică nr. 23, în suprafață de 300 mp", None),
+            (2026, 13, "2026-03-01", "Hotărâre privind repartizarea unei locuințe sociale vacante din str. Gării", None)])
+        db.executemany("INSERT INTO posts VALUES (?,?,?,?,?)", [(1, "dispozitii", "Dispoziția nr. 807/20.11.2026 privind convocarea Consiliului Local", "2026-11-20", "x"),
+                                                                (2, "dispozitii", "Dispoziție nr. 733/2026 privind aprobarea virărilor de credite", "2026-10-27", "y")])
+        I = T.investitii(db)
+        self.assertEqual(len(I), 1)
+        self.assertEqual([p["pas"] for p in I[0]["pasi"]], ["indicatori", "finalizat"])
+        self.assertEqual(I[0]["stare"], "finalizat")
+        P = T.patrimoniu(db)
+        self.assertEqual([(x["fel"], x.get("strada"), x.get("suprafata")) for x in P], [("vanzare", "Mică", 300.0)])
+        D = T.dispozitii(db)
+        self.assertEqual(D["pe_ani"]["2026"]["numar_maxim"], 807)
+        self.assertEqual(D["pe_ani"]["2026"]["pe_feluri"], {"convocare": 1, "buget": 1})

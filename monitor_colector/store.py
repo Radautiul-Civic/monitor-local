@@ -118,8 +118,10 @@ class Store:
 
     def documents_to_fetch(self, limit=None):
         # întâi convocările și proiectele (ședința următoare trebuie să apară la timp), apoi în ordinea adăugării
+        # dispozițiile vechi din arhivă le folosim doar după titlu (sunt mii): nu le descărcăm aici
         q = ("SELECT d.* FROM documents d LEFT JOIN posts p ON p.wp_id = d.wp_id WHERE d.fetched_at IS NULL "
-             "ORDER BY (p.source IN ('dispozitii','proiecte')) DESC, d.rowid")
+             "AND COALESCE(p.source, '') != 'dispozitii_arhiva' "
+             "ORDER BY (p.source IN ('dispozitii','proiecte')) DESC, (p.source = 'rapoarte') DESC, d.rowid")
         return self.db.execute(q + (f" LIMIT {int(limit)}" if limit else "")).fetchall()
 
     def documents_to_ocr(self, limit=None):

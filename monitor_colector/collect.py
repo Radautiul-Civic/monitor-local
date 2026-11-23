@@ -186,6 +186,37 @@ def collect_archive_lists(store, client=None):
     return stats
 
 
+def collect_pagini(store, client_site=None, client_arhiva=None):
+    """Documentele (PDF) din paginile din config.PAGINI_DOCUMENTE: câte o intrare în „posts” pe document, cu titlul din
+    textul linkului și pagina-sursă, ca descărcarea și OCR-ul să le ia ca pe celelalte documente."""
+    cs = client_site or WPClient()
+    ca = client_arhiva or WPClient(base_url=config.ARCHIVE_URL)
+    stats = {}
+    for sursa, pagini in config.PAGINI_DOCUMENTE.items():
+        n = 0
+        for pg in pagini:
+            try:
+                if pg.startswith("site:"):
+                    r = cs._get("/wp-json/wp/v2/pages", {"slug": pg[5:], "_fields": "link,content"})
+                    d = r.json() if r is not None else []
+                    if not d:
+                        continue
+                    html_, link, baza, origin = d[0]["content"]["rendered"], d[0]["link"], cs.base, "site"
+                else:
+                    html_, link, baza, origin = ca.get_html(pg), ca.base + pg, ca.base, "arhiva"
+            except Exception as e:   # pagini care nu (mai) există: 404
+                log.info("pagina %s: %s", pg, e)
+                continue
+            for it in parse.parse_archive_links(html_, baza):
+                sid = _sid(it["url"])
+                _pseudo_post(store, sid, sursa, link, it["text"] or it["url"].rsplit("/", 1)[-1])
+                store.add_document(it["url"], sid, origin, it["text"])
+                n += 1
+        store.db.commit()
+        stats[sursa] = n
+    return stats
+
+
 def discover(client=None):
     """Listează categoriile site-ului (pentru a adăuga surse noi în config)."""
     client = client or WPClient()
