@@ -247,6 +247,26 @@ RAPOARTE = ("indicatori.md", "urbanism-registre.txt", "sicap-de-verificat.txt", 
             "voturi-proba.txt", "concursuri-proba.txt", "rulare-geocodare.txt", "rulare-buget.txt", "rulare-litigii.txt", "rulare-sicap.txt")
 
 
+def golire_cloudflare():
+    """Golește cache-ul Cloudflare al monitorului (dacă există secretele), ca vizitatorii să vadă imediat pagina nouă.
+    O facem imediat după ce s-au urcat pagina și datele, nu la sfârșit: indexul de căutare poate dura zeci de minute."""
+    tok, zona = os.environ.get("CF_API_TOKEN"), os.environ.get("CF_ZONE_ID")
+    if not (tok and zona):
+        return False
+    import urllib.request
+    for corp in ({"hosts": ["monitor.radautiulcivic.ro"]}, {"purge_everything": True}):
+        try:
+            req = urllib.request.Request(f"https://api.cloudflare.com/client/v4/zones/{zona}/purge_cache", data=json.dumps(corp).encode(),
+                                         headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, method="POST")
+            with urllib.request.urlopen(req, timeout=30) as r:
+                if json.load(r).get("success"):
+                    print("cache Cloudflare golit după urcarea paginii și a datelor")
+                    return True
+        except Exception as e:
+            print(f"golirea cache-ului Cloudflare n-a mers ({list(corp)[0]}): {e}", file=sys.stderr)
+    return False
+
+
 def _conectare(host, user, pwd):
     ftp = ftplib.FTP_TLS()
     ftp.connect(host, int(os.environ.get("FTP_PORT", "21")), timeout=60)
@@ -310,7 +330,7 @@ def main():
                 _scrie_manifest(cai[m], d)
 
     ftp = _conectare(host, user, pwd)
-    urcate, start_cautare, oprit = 0, None, 0
+    urcate, start_cautare, oprit, golit = 0, None, 0, False
     try:
         for name in SCOASE_DIN_PUBLIC:   # fișiere publicate înainte în zona publică, acum doar interne
             try:
@@ -322,6 +342,9 @@ def main():
         _cwd[0] = None
         for i, (local, rel, name, man, key, sig) in enumerate(files):
             if man == "cautare":
+                if not golit:
+                    golit = True
+                    golire_cloudflare()
                 start_cautare = start_cautare or time.monotonic()
                 if time.monotonic() - start_cautare > buget_cautare:
                     oprit = len(files) - i

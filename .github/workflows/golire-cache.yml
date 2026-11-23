@@ -1,0 +1,16 @@
+name: Golire cache Cloudflare
+
+# Doar golirea cache-ului Cloudflare, fără publicare (când pagina e deja urcată, dar vizitatorii încă văd versiunea veche).
+on:
+  workflow_dispatch:
+
+jobs:
+  goleste:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        run: python -c "import sys; sys.path.insert(0, 'tools'); import publica; sys.exit(0 if publica.golire_cloudflare() else 1)"
