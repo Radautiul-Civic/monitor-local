@@ -3079,12 +3079,41 @@
     return "mailto:" + catre + "?subject=" + encodeURIComponent(subiect) + "&body=" + encodeURIComponent(corp);
   }
   // lista strânsă a proiectelor în consultare (pagina de start), fiecare cu butonul de propuneri
+  // ---------- Sondaje la proiectele în consultare (sondaj.php pe hosting) ----------
+  var SDJ = null;
+  function sdjHtml(p, mic) { return p.nr && !p.adoptat ? '<div class="sdj' + (mic ? " mic" : "") + '" data-p="' + esc(p.nr) + '" hidden></div>' : ""; }
+  function sdjDesen(e) {
+    var p = e.getAttribute("data-p"), c = (SDJ.cifre || {})[p] || { da: 0, nu: 0, ns: 0 }, al = (SDJ.votul_tau || {})[p], t = c.da + c.nu + c.ns;
+    var b = function (v, l) { return '<button type="button" data-v="' + v + '" aria-pressed="' + (al === v) + '">' + l + "</button>"; };
+    var pc = function (n) { return t ? Math.round(100 * n / t) : 0; };
+    e.innerHTML = '<span class="sdj-q">Ești de acord cu proiectul?</span><span class="sdj-b">' + b("da", "Da") + b("nu", "Nu") + b("ns", "Nu știu") + "</span>" +
+      (al && t ? '<span class="sdj-r"><span class="sdj-bar"><i class="da" style="width:' + pc(c.da) + '%"></i><i class="nu" style="width:' + pc(c.nu) + '%"></i><i class="ns" style="width:' + pc(c.ns) + '%"></i></span>' +
+        "<small>Da " + pc(c.da) + "% · Nu " + pc(c.nu) + "% · Nu știu " + pc(c.ns) + "% · " + t + (t === 1 ? " vot" : " voturi") + '. Sondaj informal, fără valoare juridică: părerea ta contează oficial doar dacă trimiți propuneri.</small></span>'
+        : '<small class="muted">' + (t ? t + (t === 1 ? " vot" : " voturi") + " până acum; " : "") + "vezi rezultatul după ce votezi.</small>");
+    e.hidden = false;
+    Array.prototype.forEach.call(e.querySelectorAll("button"), function (x) {
+      x.addEventListener("click", function () {
+        var v = x.getAttribute("data-v");
+        fetch(BASE + "sondaj.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ p: p, v: v }) }).then(function (r) { return r.json(); }).then(function (d) {
+          if (!d.ok) { alertaSdj(e, d.eroare); return; }
+          SDJ.cifre[p] = d.cifre; SDJ.votul_tau[p] = d.votul_tau;
+          Array.prototype.forEach.call(document.querySelectorAll('.sdj[data-p="' + p + '"]'), sdjDesen);
+        }).catch(function () { alertaSdj(e, "votul nu a putut fi trimis"); });
+      });
+    });
+  }
+  function alertaSdj(e, m) { var s = e.querySelector("small"); if (s) s.textContent = m || "eroare"; }
+  function sdjInit() {
+    var L = document.querySelectorAll(".sdj[data-p]"); if (!L.length) return;
+    (SDJ ? Promise.resolve(SDJ) : fetch(BASE + "sondaj.php", { cache: "no-store" }).then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (d) { SDJ = { cifre: d.cifre || {}, votul_tau: d.votul_tau || {} }; if (Array.isArray(SDJ.cifre)) SDJ.cifre = {}; if (Array.isArray(SDJ.votul_tau)) SDJ.votul_tau = {}; return SDJ; }))
+      .then(function () { Array.prototype.forEach.call(document.querySelectorAll(".sdj[data-p]"), sdjDesen); }).catch(function () { /* fără server (previzualizare): sondajele nu apar */ });
+  }
   function consLista(des, deschisa) {
     var zr = function (t) { var z = Math.ceil((new Date(t) - new Date(new Date().toISOString().slice(0, 10))) / 864e5); return z <= 0 ? "ultima zi" : z === 1 ? "mai e o zi" : "mai sunt " + z + " zile"; };
     return '<details class="cons-l"' + (deschisa ? " open" : "") + '><summary><span class="lbl">Proiecte în consultare publică</span><b>' + des.length + (des.length === 1 ? " proiect deschis" : " proiecte deschise") +
       '</b><span class="muted">poți trimite propuneri până la termen</span></summary><div class="cm-l">' + des.map(function (p) {
         return '<div class="cm"><div class="cm-t"><a href="' + esc(safeUrl(p.pagina) || "#consiliu/proiecte") + '" rel="noopener">' + esc(p.obiect) + "</a>" +
-          '<span class="cm-m">' + (p.nr ? "nr. " + esc(p.nr) + " · " : "") + "până pe <b>" + esc(zi(p.termen)) + "</b> · " + zr(p.termen) + "</span></div>" +
+          '<span class="cm-m">' + (p.nr ? "nr. " + esc(p.nr) + " · " : "") + "până pe <b>" + esc(zi(p.termen)) + "</b> · " + zr(p.termen) + "</span>" + sdjHtml(p, true) + "</div>" +
           '<div class="cm-a"><a class="btn ok" href="' + esc(mailPropuneri(p)) + '">✉ Trimite propuneri</a>' + (p.nr ? shareBtn("proiect-" + p.nr, "Proiect în consultare: " + p.obiect) : "") + "</div></div>";
       }).join("") + '</div><p class="cm-f"><a href="#consiliu/proiecte">Toate proiectele de hotărâre →</a></p></details>';
   }
@@ -3095,7 +3124,7 @@
       '<div class="t">' + esc(p.obiect) + '</div><div class="m">' + (safeUrl(p.pagina) ? '<a href="' + esc(p.pagina) + '" rel="noopener">anunțul și proiectul</a>' : "") +
       (p.adoptat ? '<a href="#consiliu/hcl/' + p.adoptat.an + "/" + p.adoptat.nr + '">hotărârea</a>' : "") + (p.termen && p.termen_din && !p.adoptat ? "<span>termen: " + esc(p.termen_din) + "</span>" : "") + "</div>" +
       (p.deschis && !p.adoptat ? '<div class="cons-mail"><a class="btn ok" href="' + esc(mailPropuneri(p)) + '">✉ Trimite propuneri pe e-mail</a><span class="muted">către secretarul general (' +
-        esc(p.email || SED.email || "secretariat@primariaradauti.ro") + "), până pe " + esc(zi(p.termen)) + ". Se deschide un model de scrisoare, gata de completat.</span></div>" : "") + "</div>";
+        esc(p.email || SED.email || "secretariat@primariaradauti.ro") + "), până pe " + esc(zi(p.termen)) + ". Se deschide un model de scrisoare, gata de completat.</span></div>" : "") + (p.deschis ? sdjHtml(p) : "") + "</div>";
   }
   function urmatoare(el, r) {
     var cap = head("Consiliul Local", "Ce se votează la ședința următoare și ce proiecte de hotărâre poți comenta acum.", r);
@@ -3115,6 +3144,7 @@
       "Termenul pentru propuneri e cel din anunțul primăriei; unde anunțul nu îl spune clar, arătăm 10 zile de la publicare. Verifică întotdeauna în anunț.</p></details></section>" +
       '<section class="card section"><h2>Proiecte în consultare publică <small class="muted">' + des.length + " deschise</small></h2>" +
       '<p class="note">Proiectele de hotărâre anunțate de primărie în ultimele două luni, cele mai noi întâi.</p>' + (C.length ? C.map(consCard).join("") : '<p class="empty">Niciun proiect anunțat în ultimele două luni.</p>') + "</section>";
+    sdjInit();
   }
   var NT_CUL = { rezumat: "var(--c1)", sedinta: "var(--c1)", consultare: "var(--c7)", hcl: "var(--c3)", pv: "var(--c3)", urbanism: "var(--c2)", achizitie: "var(--c4)", licitatie: "var(--c4)", atribuire: "var(--c4)", concurs: "var(--c5)", contract: "var(--c4)", buget: "var(--c6)" };
   var NT_GRUP = [["", "Toate"], ["consiliu", "Consiliul local", ["sedinta", "consultare", "hcl", "pv", "rezumat"]], ["bani", "Bani publici", ["achizitie", "licitatie", "atribuire", "contract", "buget"]],
@@ -3141,6 +3171,7 @@
         '<div class="seg nt-seg" role="group" aria-label="Ce noutăți">' + NT_GRUP.map(function (g, i) { return '<button type="button" data-g="' + g[0] + '" aria-pressed="' + (i === 0) + '">' + esc(g[1]) + "</button>"; }).join("") + "</div>" +
         '<div id="nou-l"></div><button class="more" id="nou-m" hidden>Arată mai multe</button></section>';
       if (flux) { el.innerHTML = h; flux.innerHTML = hf; } else el.innerHTML = h + hf;
+      sdjInit();
       if (!E.length) return;
       var box = flux || el, grup = "", shown = flux ? 6 : 10;
       function lista() {
