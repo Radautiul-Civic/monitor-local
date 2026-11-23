@@ -126,24 +126,29 @@ def strazi_osm(data_dir, retea=True):
         pass
     if not retea:
         return {}
-    try:
-        import requests
-        q = '[out:json][timeout:90];way["highway"]["name"](47.805,25.855,47.885,25.985);out tags geom;'
-        r = requests.post("https://overpass-api.de/api/interpreter", data={"data": q}, timeout=120,
-                          headers={"User-Agent": "MonitorLocal (monitor.radautiulcivic.ro)"})
-        r.raise_for_status()
-        out = {}
-        for w in r.json().get("elements") or []:
-            k = _cheie_strada((w.get("tags") or {}).get("name"))
-            g = [[round(pt["lat"], 5), round(pt["lon"], 5)] for pt in w.get("geometry") or []]
-            if k and len(g) >= 2:
-                out.setdefault(k, []).append(g)
-        if out:
-            with open(p, "w", encoding="utf-8") as f:
-                json.dump(out, f, separators=(",", ":"))
-        return out
-    except Exception:
-        return {}
+    import logging
+    import requests
+    q = '[out:json][timeout:90];way["highway"]["name"](47.805,25.855,47.885,25.985);out tags geom;'
+    for url in ("https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter",
+                "https://maps.mail.ru/osm/tools/overpass/api/interpreter"):
+        try:
+            r = requests.post(url, data={"data": q}, timeout=120,
+                              headers={"User-Agent": "MonitorLocal (monitor.radautiulcivic.ro)"})
+            r.raise_for_status()
+            out = {}
+            for w in r.json().get("elements") or []:
+                k = _cheie_strada((w.get("tags") or {}).get("name"))
+                g = [[round(pt["lat"], 5), round(pt["lon"], 5)] for pt in w.get("geometry") or []]
+                if k and len(g) >= 2:
+                    out.setdefault(k, []).append(g)
+            if out:
+                with open(p, "w", encoding="utf-8") as f:
+                    json.dump(out, f, separators=(",", ":"))
+                return out
+            logging.warning("Overpass %s: niciun drum în răspuns", url)
+        except Exception as e:   # noqa: BLE001
+            logging.warning("Overpass %s: %s", url, str(e)[:200])
+    return {}
 
 
 def nume_obiectiv(titlu):
@@ -493,7 +498,8 @@ def scrie(store, data_dir, azi=None):
                 if k in geo:
                     x["chei"].append(k)
         rez["strazi_geo"] = geo
-        stats["strazi_geo"] = len(geo)
+        stats["strazi_geo"] = {"osm_strazi": len(osm), "linii": sum(1 for g in geo.values() if "linii" in g),
+                               "puncte": sum(1 for g in geo.values() if "punct" in g)}
     except Exception as e:
         stats["strazi_geo"] = f"eroare: {e}"
     with open(os.path.join(data_dir, "teme.json"), "w", encoding="utf-8") as f:
