@@ -16,7 +16,7 @@ import requests
 from .parse import norm
 from .rezumat import API, MODEL, _json
 
-MAX_PE_RULARE = 4
+MAX_PE_RULARE = int(os.environ.get("MC_TAXE_AI_MAX", "15"))   # prima dată toate; apoi doar hotărârile noi
 MAX_CARACTERE = 160000
 
 # nivelurile comparate de la an la an: cheie -> (denumire, unitate)
