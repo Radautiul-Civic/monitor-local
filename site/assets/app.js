@@ -1934,8 +1934,8 @@
     el.innerHTML = cap + '<div class="grid">' + tile("Hotărâri despre terenuri și clădiri", nr(D.length), "", "din 2013 până azi") + tile("Vânzări", nr(pe.vanzare || 0), "", vAn + " în " + anC) +
       tile("Concesionări și închirieri", nr((pe.concesionare || 0) + (pe.inchiriere || 0)), "", "") + tile("Pe hartă", nr(D.filter(function (x) { return x.lat; }).length), "", "unde strada din titlu a putut fi găsită") + "</div>" +
       '<section class="card section"><h2>Pe tipuri</h2>' + hbl(Object.keys(FEL_PAT).filter(function (k) { return pe[k]; }).map(function (k) { return { l: FEL_PAT[k][0], v: pe[k] }; }), nr, D.length) + "</section>" +
-      '<section class="card section"><h2>Pe hartă</h2><p class="note">Poziția e cea a străzii (sau a adresei) din titlul hotărârii, găsită automat; e aproximativă.</p>' +
-      '<div class="legend">' + Object.keys(FEL_PAT).filter(function (k) { return pe[k]; }).map(function (k) { return '<span><i class="pm-l" style="--c:' + FEL_PAT[k][1] + '"><svg viewBox="0 0 24 24">' + PAT_IC[k] + "</svg></i>" + esc(FEL_PAT[k][0]) + "</span>"; }).join("") + "</div>" +
+      '<section class="card section"><h2>Pe hartă</h2><p class="note">Poziția e cea a străzii (sau a adresei) din titlul hotărârii, găsită automat; e aproximativă. Hotărârile despre aceeași stradă sunt așezate una lângă alta, în jurul punctului. Apasă pe un tip din legendă ca să-l ascunzi sau să-l arăți.</p>' +
+      '<div class="legend inv-lg pat-lg">' + Object.keys(FEL_PAT).filter(function (k) { return pe[k]; }).map(function (k) { return '<button type="button" class="on" data-k="' + k + '"><i class="pm-l" style="--c:' + FEL_PAT[k][1] + '"><svg viewBox="0 0 24 24">' + PAT_IC[k] + "</svg></i>" + esc(FEL_PAT[k][0]) + " (" + pe[k] + ")</button>"; }).join("") + "</div>" +
       '<div class="map" id="pat-map"></div></section>' +
       '<section class="card section"><h2>Toate hotărârile</h2><div id="pat-l"></div></section>';
     lista($("pat-l"), D, { placeholder: "Caută: stradă, număr cadastral, firmă", unitate: ["hotărâre", "hotărâri"], an: function (x) { return String(x.an); }, text: function (x) { return x.titlu + " " + (x.strada || "") + " " + (x.cadastral || ""); },
@@ -1948,13 +1948,20 @@
     incarcaLeaflet().then(function () {
       var Lf = window.L, m = Lf.map("pat-map", { scrollWheelZoom: false }).setView([47.8445, 25.9195], 14);
       Lf.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(m);
-      var g = Lf.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 36 }); m.addLayer(g);
-      var cs = getComputedStyle(document.documentElement);
-      D.filter(function (x) { return x.lat; }).forEach(function (x) {
-        var c = cs.getPropertyValue(FEL_PAT[x.fel][1].slice(4, -1)).trim() || "#2a78d6";
-        g.addLayer(Lf.marker([x.lat, x.lon], { icon: Lf.divIcon({ className: "pm-w", iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -12],
+      // fără grupare: fiecare hotărâre își are eticheta; cele de pe aceeași stradă (aceleași coordonate) sunt întinse în spirală, în pixeli
+      var cs = getComputedStyle(document.documentElement), straturi = {}, pePunct = {}, toate = [];
+      D.filter(function (x) { return x.lat; }).sort(function (a, b) { return (b.data || "") < (a.data || "") ? -1 : 1; }).forEach(function (x) {
+        var c = cs.getPropertyValue(FEL_PAT[x.fel][1].slice(4, -1)).trim() || "#2a78d6", kp = x.lat.toFixed(5) + "," + x.lon.toFixed(5), n = pePunct[kp] = (pePunct[kp] || 0) + 1;
+        var dx = 0, dy = 0;
+        if (n > 1) { var a = (n - 1) * 2.39996, rr = 15 * Math.sqrt(n - 1); dx = Math.round(rr * Math.cos(a)); dy = Math.round(rr * Math.sin(a)); }
+        var g = straturi[x.fel] = straturi[x.fel] || Lf.layerGroup().addTo(m);
+        var mk = Lf.marker([x.lat, x.lon], { icon: Lf.divIcon({ className: "pm-w", iconSize: [26, 26], iconAnchor: [13 - dx, 13 - dy], popupAnchor: [dx, dy - 12],
             html: '<span class="pm" style="--c:' + c + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + (PAT_IC[x.fel] || PAT_IC.domeniu) + "</svg></span>" }), title: FEL_PAT[x.fel][0] })
-          .bindPopup('<div class="pop-act"><b>' + esc(FEL_PAT[x.fel][0]) + "</b> · " + linkHcl(x) + " · " + esc(zi(x.data)) + '<div class="pop-scop">' + esc(x.titlu.slice(0, 260)) + "</div></div>", popOpt(m)));
+          .bindPopup('<div class="pop-act"><b>' + esc(FEL_PAT[x.fel][0]) + "</b> · " + linkHcl(x) + " · " + esc(zi(x.data)) + '<div class="pop-scop">' + esc(x.titlu.slice(0, 260)) + "</div></div>", popOpt(m));
+        g.addLayer(mk); toate.push(mk);
+      });
+      Array.prototype.forEach.call(el.querySelectorAll(".pat-lg button"), function (b) {
+        b.addEventListener("click", function () { var k = b.getAttribute("data-k"), on = b.classList.toggle("on"); if (straturi[k]) { if (on) straturi[k].addTo(m); else m.removeLayer(straturi[k]); } });
       });
     }).catch(function () { $("pat-map").innerHTML = '<p class="empty">Harta nu s-a putut încărca.</p>'; });
   }

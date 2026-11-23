@@ -733,3 +733,5 @@ th.srt[aria-sort="descending"]::after{content:"▼";opacity:.9}
 th.srt:focus-visible{outline:2px solid var(--sec,var(--c1));outline-offset:-2px}
 .cs-f{margin:6px 0 10px;align-items:center}
 .cs-f .cs-h{font-size:.82rem}
+.pat-lg .pm-l{margin-right:2px}
+.pat-lg button:not(.on) .pm-l{filter:grayscale(1)}
