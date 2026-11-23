@@ -2190,8 +2190,8 @@
     var cdn = "https://cdnjs.cloudflare.com/ajax/libs/";
     function css(u) { var l = document.createElement("link"); l.rel = "stylesheet"; l.href = u; document.head.appendChild(l); }
     function js(u) { return new Promise(function (ok, nu) { var s = document.createElement("script"); s.src = u; s.onload = ok; s.onerror = nu; document.head.appendChild(s); }); }
-    css(cdn + "leaflet/1.9.4/leaflet.min.css"); css(cdn + "leaflet.markercluster/1.5.3/MarkerCluster.min.css"); css(cdn + "leaflet.markercluster/1.5.3/MarkerCluster.Default.min.css");
-    LEAF = js(cdn + "leaflet/1.9.4/leaflet.min.js").then(function () { return js(cdn + "leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"); });
+    css(cdn + "leaflet/1.9.4/leaflet.min.css");
+    LEAF = js(cdn + "leaflet/1.9.4/leaflet.min.js");   // fără grupare în cifre: punctele se văd toate (vezi puncteRasfirate)
     return LEAF;
   }
   function harta(el, r) {
@@ -2220,8 +2220,7 @@
       var cul = { ac: cs.getPropertyValue("--s1").trim() || "#2a78d6", cu: cs.getPropertyValue("--s2").trim() || "#eb6834", ap: cs.getPropertyValue("--plan").trim() || "#8a8f94" };
       var m = Lf.map("map", { scrollWheelZoom: false }).setView([47.8445, 25.9195], 14);
       Lf.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(m);
-      var grup = Lf.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 40 });
-      m.addLayer(grup);
+      var grup = Lf.layerGroup().addTo(m);
       function popup(x) {
         var a = x.a, f = safeUrl(a.registru_pdf);
         return "<b>" + (x.t === "ac" ? "AC " : "CU ") + esc(a.nr || "fără nr.") + " · " + esc(zi(a.data)) + "</b><br>" + esc(a.categorie || "") +
@@ -2237,10 +2236,8 @@
         });
         var pe = sel.filter(function (x) { return x.a.lat; });
         grup.clearLayers();
-        grup.addLayers(pe.map(function (x) {
-          var aprox = x.a.precizie === "stradă";
-          return Lf.circleMarker([x.a.lat, x.a.lon], { radius: 7, weight: 1.5, color: "#fff", fillColor: aprox ? cul.ap : cul[x.t], fillOpacity: aprox ? 0.75 : 0.95 }).bindPopup(actPopup(x), popOpt(m));
-        }));
+        puncteRasfirate(Lf, pe.map(function (x) { var aprox = x.a.precizie === "stradă"; return { lat: x.a.lat, lon: x.a.lon, cul: aprox ? cul.ap : cul[x.t], aprox: aprox, pop: actPopup(x) }; }), { popOpt: popOpt(m) })
+          .forEach(function (mk) { grup.addLayer(mk); });
         $("m-n").textContent = nr(pe.length) + " pe hartă, din " + nr(sel.length) + (sel.length - pe.length ? " (" + nr(sel.length - pe.length) + " fără adresă găsită încă)" : "");
       }
       ["m-t", "m-a", "m-c"].forEach(function (id) { $(id).addEventListener("change", deseneaza); });
@@ -3309,6 +3306,19 @@
     ["proiectant", "Proiectant"], ["executant", "Executant"], ["data_inceperii", "Începerea lucrărilor"], ["data_finalizarii", "Finalizarea lucrărilor"],
     ["data_expirarii", "Valabil până la"], ["observatii", "Observații"]];
   // fereastra de pe hartă încape în hartă și pe telefon (harta are acolo ~340 px lățime)
+  // puncte fără grupare în cifre: cele cu aceleași coordonate (de obicei poziția străzii) sunt așezate în spirală în jurul punctului
+  function puncteRasfirate(Lf, L2, opt) {   // L2: [{lat, lon, cul, aprox, pop}] -> [marker]
+    var pe = {}, out = [];
+    L2.forEach(function (x) { var k = x.lat.toFixed(5) + "," + x.lon.toFixed(5); (pe[k] = pe[k] || []).push(x); });
+    Object.keys(pe).forEach(function (k) {
+      pe[k].forEach(function (x, i) {
+        var a = i * 2.39996, r = (opt && opt.pas || 9) * Math.sqrt(i), dx = Math.round(r * Math.cos(a)), dy = Math.round(r * Math.sin(a)), d = (opt && opt.d) || 14;
+        out.push(Lf.marker([x.lat, x.lon], { icon: Lf.divIcon({ className: "pt-dot" + (x.aprox ? " aprox" : ""), html: '<i style="background:' + x.cul + '"></i>', iconSize: [d, d], iconAnchor: [d / 2 - dx, d / 2 - dy], popupAnchor: [dx, dy - d / 2] }), keyboard: false })
+          .bindPopup(x.pop, opt && opt.popOpt));
+      });
+    });
+    return out;
+  }
   function popOpt(m) {
     var z = m.getSize(), w = Math.max(200, Math.min(380, z.x - 56));
     return { maxWidth: w, minWidth: Math.min(260, w), maxHeight: Math.max(220, Math.min(360, z.y - 90)), autoPanPadding: [12, 12], className: "pop-mic" };
@@ -3472,14 +3482,11 @@
         var cul = { ac: cs.getPropertyValue("--s1").trim() || "#2a78d6", cu: cs.getPropertyValue("--s2").trim() || "#eb6834" };
         var m = Lf.map("s-map", { scrollWheelZoom: false }), pts = [];
         Lf.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(m);
-        // mai multe acte pe aceeași adresă: grupul le desface în evantai la apăsare
-        var grup = Lf.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 18, spiderfyOnMaxZoom: true, disableClusteringAtZoom: 19 });
-        m.addLayer(grup);
-        acte.forEach(function (x) {
-          if (!x.a.lat) return; pts.push([x.a.lat, x.a.lon]);
-          grup.addLayer(Lf.circleMarker([x.a.lat, x.a.lon], { radius: 8, weight: 1.5, color: "#fff", fillColor: cul[x.t], fillOpacity: 0.9 })
-            .bindPopup(actPopup(x), popOpt(m)));
-        });
+        // mai multe acte pe aceeași adresă: așezate în spirală în jurul punctului, toate vizibile
+        var grup = Lf.layerGroup().addTo(m);
+        acte.forEach(function (x) { if (x.a.lat) pts.push([x.a.lat, x.a.lon]); });
+        puncteRasfirate(Lf, acte.filter(function (x) { return x.a.lat; }).map(function (x) { return { lat: x.a.lat, lon: x.a.lon, cul: cul[x.t], aprox: x.a.precizie === "stradă", pop: actPopup(x) }; }), { popOpt: popOpt(m), d: 16, pas: 10 })
+          .forEach(function (mk) { grup.addLayer(mk); });
         if (pts.length === 1) m.setView(pts[0], 17); else m.fitBounds(pts, { padding: [24, 24], maxZoom: 17 });
       }).catch(function () { if ($("s-map")) $("s-map").innerHTML = '<p class="empty" style="padding:16px">Harta nu s-a putut încărca.</p>'; });
     }
