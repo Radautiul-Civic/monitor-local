@@ -2154,7 +2154,7 @@
             var nume = k && tk(k.nume) !== tk(o.c.nume) && tk(k.nume).length === tk(o.c.nume).length ? k.nume : o.c.nume;
             var link = o.c.id && s ? '<a href="#consiliu/consilieri/' + encodeURIComponent(o.c.id) + '"><strong>' + esc(nume) + "</strong></a>" : "<strong>" + esc(nume) + "</strong>";
             var nou = val ? '<span class="tag">validat ' + esc(zi(val.data)) + "</span>" : k && k.nou ? '<span class="tag">din ' + esc(zi(k.nou.din)) + "</span>" : "";
-            return "<tr>" + (inc ? "" : '<td class="n nrc">' + (i + 1) + "</td>") + '<td class="cs-n"><span class="cs-nm">' + avatar(k, o.c.nume) + "<span>" + link + (nou ? "<br>" + nou : "") + "</span></span></td>" +
+            return "<tr>" + (inc ? "" : '<td class="n nrc">' + (i + 1) + "</td>") + '<td class="cs-n"><span class="cs-nm">' + avatar(k, o.c.nume, false, true) + "<span>" + link + (nou ? "<br>" + nou : "") + "</span></span></td>" +
               '<td class="cs-p">' + (k && k.sigla ? '<img src="' + FTDATA + esc(k.sigla) + '" alt="" loading="lazy" onerror="this.remove()">' : "") + esc((k && k.partid) || "") + "</td>" +
               (inc ? '<td class="nw">' + p.map(function (x) { return esc(zi(x[0])) + " - " + esc(zi(x[1])); }).join("<br>") + '</td><td class="inc">' + esc(zi(o.inc.d)) +
                 (o.inc.h ? " · " + linkHcl(o.inc.h) : "") + (o.inc.t ? '<details class="more-t"><summary>detalii</summary><div class="muted">' + esc(o.inc.t) + "</div></details>" : "") + "</td>" : "") +
@@ -2232,9 +2232,9 @@
   function incarcaComp() { return COMP ? Promise.resolve(COMP) : get(DATA + "componenta.json").then(function (d) { COMP = d; return d; }).catch(function () { COMP = { consilieri: [] }; return COMP; }); }
   function compDe(id) { return id ? ((COMP || {}).consilieri || []).filter(function (x) { return x.id === id; })[0] : null; }
   function initiale(n) { return (n || "").split(/[\s-]+/).filter(Boolean).slice(0, 2).map(function (w) { return w.charAt(0); }).join("").toUpperCase(); }
-  function avatar(x, nume, mare) {
+  function avatar(x, nume, mare, faraSigla) {
     return '<span class="av' + (mare ? " mare" : "") + '">' + (x && x.foto ? '<img src="' + FTDATA + esc(x.foto) + '" alt="" loading="lazy" onerror="this.outerHTML=\'<i>' + esc(initiale(nume)) + '</i>\'">' : "<i>" + esc(initiale(nume)) + "</i>") +
-      (x && x.sigla ? '<img class="av-p" src="' + FTDATA + esc(x.sigla) + '" alt="' + esc(x.partid || "partid") + '" title="' + esc(x.partid || "") + '" loading="lazy" onerror="this.remove()">' : "") + "</span>";
+      (x && x.sigla && !faraSigla ? '<img class="av-p" src="' + FTDATA + esc(x.sigla) + '" alt="' + esc(x.partid || "partid") + '" title="' + esc(x.partid || "") + '" loading="lazy" onerror="this.remove()">' : "") + "</span>";
   }
   function declaratii(x) {
     if (!x) return "";
