@@ -2540,7 +2540,7 @@
       });
       incetati.sort(function (a, b) { return a.inc.d < b.inc.d ? -1 : 1; });
       var tabel = function (L2, inc) {
-        return '<div class="tw"><table class="cs-t srt-t"><thead><tr>' + (inc ? "" : '<th class="n" data-ns="1">Nr.</th>') + th("nume", "Consilier") + "<th>Partid</th>" + (inc ? "<th>În consiliu</th><th>Mandat încetat</th>" : "") + '<th class="n" title="Nota de activitate, de la 1 la 10 (vezi mai jos cum se calculează)">Nota</th>' +
+        return '<div class="tw"><table class="cs-t srt-t"><thead><tr>' + (inc ? "" : '<th class="n" data-ns="1">Nr.</th>') + th("nume", "Consilier") + "<th>Partid</th>" + (inc ? "<th>În consiliu</th><th>Mandat încetat</th>" : "") + (areNota(V) ? '<th class="n" title="Nota de activitate, de la 1 la 10 (vezi mai jos cum se calculează)">Nota</th>' : "") +
           th("prez", "Prezență") + th("absente", "Absențe") + th("imp", "Împotrivă / abțineri") + '<th class="n">Nu a votat</th><th class="n">Pentru (dedus)</th><th class="n">Necunoscut</th><th class="n">Rapoarte de activitate</th></tr></thead><tbody>' +
           L2.map(function (o, i) {
             var s = o.s, k = o.k || (curent ? compDe(o.c.id) : null), val = evMand(o.c).filter(function (e) { return e.fel === "validare"; })[0];
@@ -2555,7 +2555,7 @@
               '<td class="cs-p">' + (k && k.sigla ? '<img src="' + FTDATA + esc(k.sigla) + '" alt="" loading="lazy" onerror="this.remove()">' : "") + esc((k && k.partid) || "") + "</td>" +
               (inc ? '<td class="nw" data-v="' + esc((p[0] || [""])[0]) + '">' + p.map(function (x) { return esc(zi(x[0])) + " - " + esc(zi(x[1])); }).join("<br>") + '</td><td class="inc" data-v="' + esc(o.inc.d || "") + '">' + esc(zi(o.inc.d)) +
                 (o.inc.h ? " · " + linkHcl(o.inc.h) : "") + (o.inc.t ? '<details class="more-t"><summary>detalii</summary><div class="muted">' + esc(o.inc.t) + "</div></details>" : "") + "</td>" : "") +
-              '<td class="n" data-v="' + (nt ? nt.nota : -1) + '">' + (nt ? '<span class="nota-p" style="background:' + culoareNota(nt.nota) + '" title="prezență ' + pctN(nt.P) + ", intervenții în " + pctN(nt.INT) + " din ședințe, " + nt.init.length + ' inițiative">' + dec(nt.nota.toFixed(1)) + "</span>" : '<span class="muted">-</span>') + "</td>" +
+              (!areNota(V) ? "" : '<td class="n" data-v="' + (nt ? nt.nota : -1) + '">' + (nt ? '<span class="nota-p" style="background:' + culoareNota(nt.nota) + '" title="prezență ' + pctN(nt.P) + ", intervenții în " + pctN(nt.INT) + " din ședințe, " + nt.init.length + ' inițiative">' + dec(nt.nota.toFixed(1)) + "</span>" : '<span class="muted">-</span>') + "</td>") +
               (s ? '<td class="n" data-v="' + (s.sedinte ? ratPrez(s) : -1) + '">' + pctPrez(s) + '</td><td class="n" data-v="' + s.absent + '">' + nr(s.absent) + '</td><td class="n" data-v="' + (s.I + s.A) + '">' + nr(s.I) + " / " + nr(s.A) +
                 '</td><td class="n" data-v="' + s.N + '">' + nr(s.N) + '</td><td class="n" data-v="' + s.P + '">' + nr(s.P) + '</td><td class="n" data-v="' + s["?"] + '">' + nr(s["?"]) + "</td>"
                 : '<td class="n muted" colspan="6">încă fără procese-verbale publicate</td>') +
