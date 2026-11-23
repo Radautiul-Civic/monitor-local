@@ -1798,10 +1798,10 @@
     el.innerHTML = cap + '<div class="grid">' + tile("Obiective de investiții", nr(D.length), "", "din hotărârile consiliului local") +
       tile("Valoarea aprobată", lei(tot), "", "la " + cuV + " obiective cu valoarea citită din hotărâre") +
       tile("Străzi și asfaltări", nr(str.length), "", nr(Object.keys(nStr).length) + " străzi numite în obiective") + tile("Finalizate", nr(nr_("finalizat")), "", "după hotărârile de finalizare sau de trecere în inventar") + "</div>" +
-      '<section class="card section"><h2>Pe categorii</h2><p class="note">Categoria e dată automat, după cuvintele din numele obiectivului (asfalt, trotuar, școală, canalizare...). Un obiectiv are o singură categorie, cea mai potrivită. Apasă pe o categorie ca să vezi obiectivele.</p>' +
+      (!D.some(function (x) { return x.categorie; }) ? "" : '<section class="card section"><h2>Pe categorii</h2><p class="note">Categoria e dată automat, după cuvintele din numele obiectivului (asfalt, trotuar, școală, canalizare...). Un obiectiv are o singură categorie, cea mai potrivită. Apasă pe o categorie ca să vezi obiectivele.</p>' +
       '<div class="sx-2"><div><h3 class="an-h">Câte obiective</h3>' + hbl(cats.map(function (k) { return { l: numeCat(k), v: pc[k].n, href: "javascript:void(0)", k: k }; }), nr, D.length).replace(/href="javascript:void\(0\)"/g, 'href="#" data-cat') + "</div>" +
       '<div><h3 class="an-h">Valoarea aprobată</h3>' + hbl(cats.filter(function (k) { return pc[k].v; }).sort(function (a, b) { return pc[b].v - pc[a].v; }).map(function (k) { return { l: numeCat(k), v: pc[k].v }; }), lei, tot) + "</div></div>" +
-      (ani.length > 2 ? '<h3 class="an-h">Obiective noi pe ani, după prima hotărâre</h3>' + legend(cats.map(function (k) { return [numeCat(k), CAT_INV[k]]; })) + '<div class="chart" id="ch-inv"></div>' : "") + "</section>" +
+      (ani.length > 2 ? '<h3 class="an-h">Obiective noi pe ani, după prima hotărâre</h3>' + legend(cats.map(function (k) { return [numeCat(k), CAT_INV[k]]; })) + '<div class="chart" id="ch-inv"></div>' : "") + "</section>") +
       (peHarta.length ? '<section class="card section"><h2>Pe hartă</h2><p class="note">Străzile pomenite în numele obiectivelor, desenate după OpenStreetMap (sau, unde strada nu a fost găsită acolo, un punct pe stradă). Arată unde s-a lucrat, nu exact tronsonul. Apasă pe categoriile de mai jos ca să le ascunzi sau să le arăți.</p>' +
         '<div class="legend inv-lg">' + cats.filter(function (k) { return peHarta.some(function (x) { return x.categorie === k; }); }).map(function (k) { return '<button type="button" class="on" data-k="' + k + '"><i style="background:' + CAT_INV[k] + '"></i>' + esc(numeCat(k)) + "</button>"; }).join("") + "</div>" +
         '<div class="map" id="inv-map"></div></section>' : "") +
@@ -1824,7 +1824,7 @@
     Array.prototype.forEach.call(el.querySelectorAll("[data-cat]"), function (a, i) {
       a.addEventListener("click", function (e) { e.preventDefault(); var sel = $("inv-l").querySelector('select[aria-label="Categoria"]'); if (sel) { sel.value = cats[i]; sel.dispatchEvent(new Event("change", { bubbles: true })); } $("inv-sec").scrollIntoView({ behavior: "smooth" }); });
     });
-    if (ani.length > 2) chart($("ch-inv"), { cats: ani, stacked: true, label: "Obiective de investiții noi pe ani, pe categorii",
+    if (ani.length > 2 && $("ch-inv")) chart($("ch-inv"), { cats: ani, stacked: true, label: "Obiective de investiții noi pe ani, pe categorii",
       series: cats.map(function (k) { return { name: numeCat(k), color: CAT_INV[k], values: ani.map(function (a) { return D.filter(function (x) { return (x.categorie || "alta") === k && (x.prima || "").slice(0, 4) === a; }).length; }) }; }),
       tooltip: function (i) { var a = ani[i]; return "<b>" + a + "</b><br>" + cats.map(function (k) { var n = D.filter(function (x) { return (x.categorie || "alta") === k && (x.prima || "").slice(0, 4) === a; }).length; return n ? numeCat(k) + ": " + n : ""; }).filter(Boolean).join("<br>"); } });
     if (!peHarta.length) return;
