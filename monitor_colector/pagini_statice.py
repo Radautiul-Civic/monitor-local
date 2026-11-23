@@ -171,12 +171,9 @@ def construieste(db, data_dir, out_dir):
     comp = {x.get("id"): x for x in C.get("consilieri") or [] if x.get("id")}
     for c in V.get("consilieri") or []:
         k = comp.get(c["id"]) or {}
-        dec = "".join(f"<li>{_lk(d['url'], 'Declarația de avere ' + d['text'])}</li>" for d in k.get("avere") or []) + \
-              "".join(f"<li>{_lk(d['url'], 'Declarația de interese ' + d['text'])}</li>" for d in k.get("interese") or [])
         corp = _sectiune("Pe scurt", _tabel([("Partidul", ESC(k.get("partid"))), ("Mandatele", ESC(", ".join(c.get("mandate") or []))),
                                              ("În consiliu", ESC("; ".join(f"{zi(p[0])} - {zi(p[1])}" for p in c.get("perioade") or [])))]))
-        corp += _sectiune("Declarații de avere și de interese", f"<ul>{dec}</ul>" if dec else "")
-        scrie(f"p/consilier/{c['id']}.html", pagina(f"{c['nume']}, consilier local Rădăuți", "Prezența la ședințe, voturile și declarațiile consilierului local, din documentele publice ale primăriei.",
+        scrie(f"p/consilier/{c['id']}.html", pagina(f"{c['nume']}, consilier local Rădăuți", "Prezența la ședințe și voturile consilierului local, din documentele publice ale primăriei.",
                                                     corp, f"#consiliu/consilieri/{c['id']}", f"p/consilier/{c['id']}.html"))
 
     # ---- investiții

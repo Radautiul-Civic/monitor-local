@@ -171,6 +171,11 @@ def main(argv=None):
                 stats["componenta"] = componenta.scrie(config.DATA_DIR)
             except Exception as e:
                 stats["componenta"] = f"eroare: {e}"
+            try:   # declarațiile consilierilor lângă SICAP și urbanism (doar intern)
+                from . import declaratii
+                stats["declaratii"] = declaratii.scrie(store, config.DATA_DIR)
+            except Exception as e:
+                stats["declaratii"] = f"eroare: {e}"
             try:   # teme: investiții, patrimoniu, dispoziții, finanțări, taxe locale, rapoarte
                 from . import teme
                 stats["teme"] = teme.scrie(store, config.DATA_DIR)

@@ -50,9 +50,8 @@ def scrie(data_dir):
              ", ".join(v.get("nume_abtineri") or []), s.get("pdf")] for s in V.get("sedinte") or [] for v in s.get("voturi") or []))
     comp = {x.get("id"): x for x in C.get("consilieri") or []}
     fisier("consilieri.csv", "Consilierii locali găsiți în procesele-verbale, cu perioadele în consiliu și partidul (pentru mandatul actual)",
-           ["id", "nume", "partid", "mandate", "perioade", "declaratii_avere", "declaratii_interese"],
-           ([c["id"], c["nume"], (comp.get(c["id"]) or {}).get("partid"), ", ".join(c.get("mandate") or []), "; ".join(f"{p[0]} - {p[1]}" for p in c.get("perioade") or []),
-             " ".join(d["url"] for d in (comp.get(c["id"]) or {}).get("avere") or []), " ".join(d["url"] for d in (comp.get(c["id"]) or {}).get("interese") or [])]
+           ["id", "nume", "partid", "mandate", "perioade"],
+           ([c["id"], c["nume"], (comp.get(c["id"]) or {}).get("partid"), ", ".join(c.get("mandate") or []), "; ".join(f"{p[0]} - {p[1]}" for p in c.get("perioade") or [])]
             for c in V.get("consilieri") or []))
     for t, nume, desc in (("ac", "autorizatii_construire.csv", "Autorizațiile de construire și desființare, din registrele primăriei"),
                           ("cu", "certificate_urbanism.csv", "Certificatele de urbanism, din registrele primăriei")):

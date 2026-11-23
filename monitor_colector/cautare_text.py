@@ -57,6 +57,8 @@ def documente(db):
              for r in db.execute("SELECT wp_id, source, title, date FROM posts")}
     out = []
     for r in db.execute("SELECT url, wp_id, origin, link_text, text_path FROM documents WHERE text_path IS NOT NULL ORDER BY rowid"):
+        if (posts.get(r["wp_id"]) or {}).get("fel") in config.SURSE_DOAR_INTERN:
+            continue   # declarațiile de avere și de interese: doar în zona internă
         x = hcl_url.get(r["url"]) or hcl_wp.get(r["wp_id"]) or pv.get(r["wp_id"]) or posts.get(r["wp_id"])
         if not x:
             x = {"fel": "arhiva" if r["origin"] == "arhiva" else "altele",

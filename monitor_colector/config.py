@@ -29,7 +29,13 @@ CATEGORIES = {
     "angajari": "angajari",                        # id 6, 109 postări la 22.11.2026 (concursuri, din noiembrie 2024)
     # registrul dispozițiilor primarului (id 53, 82 postări), cu dispozițiile de convocare a consiliului
     "dispozitii": "registrul-pentru-evidenta-dispozitiilor-autoritatii-executive",
+    # declarațiile de avere și de interese ale consilierilor locali (analiza lor rămâne doar în zona internă)
+    "decl_avere_cl": "declaratii-de-avere-consilieri-local",
+    "decl_interese_cl": "declaratii-de-interese-consilieri-locali",
 }
+
+# Surse care nu intră în indexul public de căutare și nici în paginile publice (decizie 23.11.2026: declarațiile doar intern)
+SURSE_DOAR_INTERN = ("decl_avere_cl", "decl_interese_cl")
 
 # Categorii din API-ul WordPress al arhivei (site-ul vechi): sursa internă -> slug.
 # ID-urile postărilor din arhivă se salvează mutate (concursuri.ID_ARHIVA + id), ca să nu se suprapună cu cele de pe site.

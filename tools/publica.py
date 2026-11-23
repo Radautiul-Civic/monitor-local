@@ -113,7 +113,7 @@ def texte_de_urcat(base):
 
 # Decizie (22.11.2026): versiunea publică are tot ce are cea internă, mai puțin litigiile. Documentele sunt luate
 # de pe site-ul primăriei și se publică așa cum sunt acolo.
-SCOASE_DIN_PUBLIC = ("litigii.json", "arhiva-stare.json", "arhiva-manifest.json", "arhiva-manifest.csv", "sicap-de-verificat.txt")
+SCOASE_DIN_PUBLIC = ("litigii.json", "declaratii.json", "arhiva-stare.json", "arhiva-manifest.json", "arhiva-manifest.csv", "sicap-de-verificat.txt")
 
 
 def _fara_litigii_indicatori(ind):
@@ -148,8 +148,21 @@ def public_date():
     di = os.path.join(d, "intern-date")   # voturi, consilieri etc.; litigiile rămân interne
     if os.path.isdir(di):
         for n in sorted(os.listdir(di)):
-            if n.endswith(".json") and n != "litigii.json":
+            if n.endswith(".json") and n not in ("litigii.json", "declaratii.json"):
                 out[n] = os.path.join(di, n)
+    # componența: fără linkurile la declarațiile de avere și de interese (decizie 23.11.2026: doar intern)
+    try:
+        with open(os.path.join(d, "componenta.json"), encoding="utf-8") as f:
+            comp = json.load(f)
+        for x in comp.get("consilieri") or []:
+            x.pop("avere", None)
+            x.pop("interese", None)
+        p = os.path.join(d, "_public", "componenta.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(comp, f, ensure_ascii=False, separators=(",", ":"))
+        out["componenta.json"] = p
+    except (OSError, ValueError):
+        pass
     return out
 
 

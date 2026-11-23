@@ -1345,6 +1345,8 @@ class TestPublicare(unittest.TestCase):
         json.dump({"ac": [{"nr": "1", "lat": 47.8, "lon": 25.9, "precizie": "adresă"}], "cu": []}, open(os.path.join(d, "urbanism.json"), "w"))
         open(os.path.join(d, "intern-date", "litigii.json"), "w").write("{}")
         open(os.path.join(d, "intern-date", "voturi.json"), "w").write("{}")
+        open(os.path.join(d, "intern-date", "declaratii.json"), "w").write("{}")
+        json.dump({"consilieri": [{"id": "a", "nume": "A", "avere": [{"url": "u"}], "interese": [{"url": "v"}]}]}, open(os.path.join(d, "componenta.json"), "w"))
         open(os.path.join(d, "voturi-proba.txt"), "w").write("x")
         old = publica.ROOT
         publica.ROOT = tmp
@@ -1352,8 +1354,12 @@ class TestPublicare(unittest.TestCase):
             pub, intern = publica.public_date(), publica.intern_date()
         finally:
             publica.ROOT = old
-        self.assertEqual(sorted(pub), ["buget.json", "indicatori.json", "liste.json", "sicap-explorer.json", "sicap.json",
+        self.assertEqual(sorted(pub), ["buget.json", "componenta.json", "indicatori.json", "liste.json", "sicap-explorer.json", "sicap.json",
                                        "urbanism.json", "voturi.json"])
+        # declarațiile (analiza și linkurile) rămân doar în zona internă
+        self.assertEqual(json.load(open(pub["componenta.json"])), {"consilieri": [{"id": "a", "nume": "A"}]})
+        self.assertIn("declaratii.json", intern)
+        self.assertIn("avere", json.load(open(intern["componenta.json"]))["consilieri"][0])
         self.assertEqual(json.load(open(pub["urbanism.json"]))["ac"][0]["lat"], 47.8)   # harta e și publică
         ind = json.load(open(pub["indicatori.json"]))
         self.assertNotIn("litigii", ind)
@@ -1842,3 +1848,12 @@ class TestPaginiStatice(unittest.TestCase):
             self.assertEqual(r["hotarari.csv"], 1)
             self.assertTrue(open(os.path.join(d, "deschise", "hotarari.csv"), encoding="utf-8-sig").read().startswith("an;nr;data_adoptarii"))
         self.assertEqual(P.extras_hcl("ROMÂNIA ... adoptă prezenta hotărâre:\nArt. 1 Se aprobă X."), "Art. 1 Se aprobă X.")
+
+
+class TestDeclaratii(unittest.TestCase):
+    def test_firme(self):
+        from monitor_colector import declaratii as D
+        t = ("Subsemnata POPESCU MARIA, având funcția de consilier local. Asociat: Unitatea - denumirea - S.C. BEST STYLE CONSTRUCT S.R.L. Rădăuți. "
+             "Membru: SC „NORD GAZ” SRL. Cont la Banca Transilvania S.A.")
+        self.assertEqual([f["nucleu"] for f in D.firme_din_text(t)], ["best style construct", "nord gaz"])
+        self.assertEqual(D._nucleu('s.c."best style construct"s.r.l.'), "best style construct")

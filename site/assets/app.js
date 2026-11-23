@@ -37,7 +37,7 @@
   var ALIAS = { decizii: function (h) { return ["consiliu"].concat(h.slice(1)); },
     urbanism: function (h) { return ["primarie", "urbanism"].concat(h.slice(1)); } };
   SECTIUNI.push({ id: "texte", nume: "Textele documentelor" });
-  if (INTERN) { SECTIUNI.push({ id: "rezumate", nume: "Rezumate" }); SECTIUNI.push({ id: "mesaje", nume: "Mesaje" }); SECTIUNI.push({ id: "arhiva", nume: "Arhiva" }); }
+  if (INTERN) { SECTIUNI.push({ id: "rezumate", nume: "Rezumate" }); SECTIUNI.push({ id: "declaratii", nume: "Declarații" }); SECTIUNI.push({ id: "mesaje", nume: "Mesaje" }); SECTIUNI.push({ id: "arhiva", nume: "Arhiva" }); }
   SECTIUNI.push({ id: "despre", nume: "Despre" });
 
   function route() {
@@ -524,7 +524,7 @@
     harta: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
     vorba: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>'
   };
-  var SEC_IC = { despre: "vorba", mesaje: "vorba", acasa: null, strada: "casa", consiliu: "hcl", primarie: "bani", achizitii: "cos", angajari: "munca", litigii: "hcl", cauta: "cauta", texte: "hcl", rezumate: "vorba", arhiva: "hcl" };
+  var SEC_IC = { declaratii: "hcl", despre: "vorba", mesaje: "vorba", acasa: null, strada: "casa", consiliu: "hcl", primarie: "bani", achizitii: "cos", angajari: "munca", litigii: "hcl", cauta: "cauta", texte: "hcl", rezumate: "vorba", arhiva: "hcl" };
   function ic(k) { return '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + (IC[k] || "") + "</svg>"; }
 
   function ghid() {   // pagina de start publică: ce găsește un cetățean, cu linkuri
@@ -2346,7 +2346,7 @@
       el.innerHTML = head(c.nume, "Consilier local" + (c.mandate.length ? (c.mandate.length === 1 ? ", mandatul " : ", mandatele ") + c.mandate.join(", ") : "") + ". În consiliu: " + c.perioade.map(function (p) { return zi(p[0]) + " - " + zi(p[1]); }).join("; ") + ".", r, compDe(c.id) && !compDe(c.id).iesit ? ["consilier-" + c.id, c.nume + ", consilier local în Rădăuți"] : null) + inapoi +
         (compDe(c.id) ? '<section class="card section cs-prof">' + avatar(compDe(c.id), c.nume, true) + '<div><b>' + esc(compDe(c.id).partid || "Consilier local") + "</b>" +
           '<div class="cs-d">' + (compDe(c.id).iesit ? '<span class="warn-t">Nu mai e consilier local. ' + esc(compDe(c.id).iesit.text || "") + "</span>" : "") +
-          (declaratii(compDe(c.id)) || '<span class="muted">Declarațiile nu sunt pe pagina primăriei.</span>') + "</div></div></section>" : "") +
+          (INTERN ? (declaratii(compDe(c.id)) || '<span class="muted">Declarațiile nu sunt pe pagina primăriei.</span>') + ' <a href="#declaratii">analiza declarațiilor</a>' : "") + "</div></div></section>" : "") +
         ((c.evenimente || []).length ? '<p class="note">' + c.evenimente.map(function (e) { return e.hcl ? (e.fel === "validare" ? "Mandat validat" : "Mandat încetat") + " prin " + linkHcl(e.hcl) + " din " + esc(zi(e.data)) : (e.fel === "validare" ? "A depus jurământul în " : "Mandat încetat în ") + linkSed(e.data, null); }).join(" · ") + ".</p>" : "") +
         '<div class="grid">' + tile("Prezență", pctPrez(st), "", nr(st.prezent) + " ședințe prezent, " + nr(st.absent) + " absent" + (st.necunoscut ? ", " + nr(st.necunoscut) + " necunoscut" : "")) +
         tile("Voturi împotrivă", nr(st.I), "", "") + tile("Abțineri", nr(st.A), "", "") + tile("Nu a votat", nr(st.N), "", "conflict de interese sau a ieșit din sală") + "</div>" +
@@ -2548,6 +2548,31 @@
         .then(function () { f.innerHTML = '<p class="ct-ok">Mulțumim! Am primit mesajul și ne uităm cât de repede putem.</p>'; })
         .catch(function (err) { o.textContent = "Nu s-a putut trimite: " + err.message; f.querySelector("button").disabled = false; });
     });
+  }
+  // ---------- Declarațiile consilierilor (doar intern): firmele din declarații, lângă SICAP și urbanism ----------
+  function declaratiiIntern(el) {
+    if (!INTERN) return;
+    var cap = head("Declarațiile consilierilor (intern)", "Firmele citite automat din declarațiile de avere și de interese ale consilierilor locali, puse lângă achizițiile din SICAP și registrele de urbanism. Doar pentru echipă.");
+    el.innerHTML = cap + '<p class="updated">Se încarcă...</p>';
+    get(DATA + "declaratii.json").then(function (D) {
+      var C = D.consilieri || [];
+      el.innerHTML = cap + '<p class="callout"><b>Atenție:</b> potrivirile sunt automate, după numele firmelor citite din declarații (textul scanat, cu greșeli). O potrivire nu înseamnă o neregulă: o firmă poate avea același nume cu alta, iar o relație declarată poate fi legală. Verifică întotdeauna în declarație, în SICAP și la Registrul Comerțului înainte de orice concluzie. Nimic de aici nu se publică.</p>' +
+        '<div class="grid">' + tile("Consilieri cu declarații", nr(C.filter(function (x) { return x.id; }).length), "", nr(C.reduce(function (a, x) { return a + x.declaratii.length; }, 0)) + " declarații") +
+        tile("Firme găsite în declarații", nr(C.reduce(function (a, x) { return a + x.firme.length; }, 0)), "", "citite automat") +
+        tile("Consilieri cu potriviri", nr(C.filter(function (x) { return x.potriviri; }).length), "", "o firmă din declarație apare în SICAP sau în urbanism") + "</div>" +
+        C.map(function (x) {
+          return '<section class="card section"><div class="h-row"><h2>' + (x.id ? '<a href="#consiliu/consilieri/' + encodeURIComponent(x.id) + '">' + esc(x.nume || x.id) + "</a>" : "Declarații nepotrivite cu un consilier") +
+            (x.potriviri ? ' <span class="nr-b">' + x.potriviri + " potriviri</span>" : "") + "</h2></div>" +
+            '<div class="m dc-l">' + x.declaratii.map(function (d) { return '<a class="lk" href="' + esc(safeUrl(d.url) || "#") + '" rel="noopener">' + (d.fel === "avere" ? "avere " : "interese ") + esc(d.an || "") + (d.citita ? "" : " (necitită)") + "</a>"; }).join(" ") + "</div>" +
+            (x.firme.length ? x.firme.map(function (f) {
+              return '<div class="doc"><div class="h"><span class="id">' + esc(f.nume) + "</span>" +
+                (f.sicap ? '<span class="rz par">SICAP: ' + nr(f.sicap.n) + " achiziții, " + lei(f.sicap.lei) + "</span>" : "") + (f.urbanism_n ? '<span class="rz ic">urbanism: ' + f.urbanism_n + " acte</span>" : "") + "</div>" +
+                (f.sicap ? '<div class="m"><a href="#achizitii/sicap/furnizor/' + encodeURIComponent(f.sicap.cui) + '">' + esc(f.sicap.nume) + " (CUI " + esc(f.sicap.cui) + ")</a><span>" + esc(f.sicap.institutii.join(", ")) + "</span></div>" : "") +
+                (f.urbanism_n ? '<div class="m">' + f.urbanism.slice(0, 5).map(function (u) { return "<span>" + (u.t === "ac" ? "AC " : "CU ") + esc(u.nr || "") + " · " + esc(zi(u.data)) + (u.strada ? " · " + esc(u.strada) : "") + "</span>"; }).join("") + "</div>" : "") +
+                '<details class="more-t"><summary>unde apare în declarație</summary>' + f.contexte.map(function (c) { return '<div class="muted">… ' + esc(c) + " …</div>"; }).join("") + "</details></div>";
+            }).join("") : '<p class="empty">Nicio firmă găsită în textul declarațiilor' + (x.declaratii.some(function (d) { return !d.citita; }) ? " (unele nu sunt încă citite)" : "") + ".</p>") + "</section>";
+        }).join("");
+    }).catch(function () { el.innerHTML = cap + '<section class="card section"><p class="empty">Analiza apare după următoarea colectare.</p></section>'; });
   }
   function mesajeIntern(el) {
     if (!INTERN) return;
@@ -3208,6 +3233,7 @@
     else if (id === "texte") texte(el);
     else if (id === "despre") despre(el);
     else if (id === "mesaje") mesajeIntern(el);
+    else if (id === "declaratii" && INTERN) declaratiiIntern(el);
     else if (id === "arhiva") arhivaIntern(el, r);
     if (id === "acasa") { noutatiCard(); anCard(); arhivaCard(); litNewsCard(); }
     $("actualizat").textContent = "Date actualizate la " + zi(IND.calculat_la) + ".";
