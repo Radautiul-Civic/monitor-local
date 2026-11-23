@@ -2128,28 +2128,52 @@
       var cheie = { nume: function (o) { return o.c.nume; }, absente: function (o) { return -o.s.absent; }, imp: function (o) { return -(o.s.I + o.s.A); }, prez: function (o) { var t = o.s.prezent + o.s.absent; return t ? o.s.prezent / t : 2; } }[ord] || function (o) { return o.c.nume; };
       rows.sort(function (a, b) { var x = cheie(a), y = cheie(b); return x < y ? -1 : x > y ? 1 : a.c.nume.localeCompare(b.c.nume); });
       var tAbs = rows.reduce(function (a, o) { return a + o.s.absent; }, 0), tImp = rows.reduce(function (a, o) { return a + o.s.I; }, 0), tAbt = rows.reduce(function (a, o) { return a + o.s.A; }, 0);
-      var th = function (k, t) { return '<th class="n"><a href="#consiliu/consilieri?m=' + encodeURIComponent(ales) + "&o=" + k + '">' + t + (ord === k ? " ▾" : "") + "</a></th>"; };
+      var th = function (k, t) { return '<th' + (k === "nume" ? "" : ' class="n"') + '><a href="#consiliu/consilieri?m=' + encodeURIComponent(ales) + "&o=" + k + '">' + t + (ord === k ? " ▾" : "") + "</a></th>"; };
+      var curent = ales === (M.length ? M[M.length - 1][0] : "");
+      var evMand = function (c) { return (c.evenimente || []).filter(function (e) { return e.data >= mm[1] && e.data < mm[2]; }); };
+      var incetare = function (o) {   // data și motivul încetării mandatului în legislatura aleasă (sau null)
+        var e = evMand(o.c).filter(function (x) { return x.fel !== "validare"; })[0], k = curent ? compDe(o.c.id) : null;
+        if (e) return { d: e.data, h: e.hcl, t: "" };
+        if (k && k.iesit) return { d: k.iesit.pana_la, t: k.iesit.text || "" };
+        return null;
+      };
+      rows.forEach(function (o) { o.inc = incetare(o); });
+      var activi = rows.filter(function (o) { return !o.inc; }), incetati = rows.filter(function (o) { return o.inc; });
+      if (curent) (COMP.consilieri || []).forEach(function (x) {   // consilieri noi, încă fără procese-verbale
+        if (!x.iesit && x.nou && !rows.some(function (o) { return o.c.id === x.id; })) activi.push({ c: { id: x.id, nume: x.nume, perioade: [], evenimente: [] }, s: null, k: x });
+      });
+      incetati.sort(function (a, b) { return a.inc.d < b.inc.d ? -1 : 1; });
+      var tabel = function (L2, inc) {
+        return '<div class="tw"><table class="cs-t"><thead><tr>' + (inc ? "" : '<th class="n">Nr.</th>') + th("nume", "Consilier") + "<th>Partid</th>" + (inc ? "<th>În consiliu</th><th>Mandat încetat</th>" : "") +
+          th("prez", "Prezență") + th("absente", "Absențe") + th("imp", "Împotrivă / abțineri") + '<th class="n">Nu a votat</th><th class="n">Pentru (dedus)</th><th class="n">Necunoscut</th></tr></thead><tbody>' +
+          L2.map(function (o, i) {
+            var s = o.s, k = o.k || (curent ? compDe(o.c.id) : null), val = evMand(o.c).filter(function (e) { return e.fel === "validare"; })[0];
+            var p = (o.c.perioade || []).filter(function (x) { return x[1] >= mm[1] && x[0] < mm[2]; });
+            // numele din procesele-verbale e citit automat (OCR); când diferă de cel de pe pagina primăriei, îl folosim pe al primăriei
+            var tk = function (n) { return norm(n || "").replace(/-/g, " ").split(/\s+/).filter(Boolean).sort().join(" "); };
+            var nume = k && tk(k.nume) !== tk(o.c.nume) && tk(k.nume).length === tk(o.c.nume).length ? k.nume : o.c.nume;
+            var link = o.c.id && s ? '<a href="#consiliu/consilieri/' + encodeURIComponent(o.c.id) + '"><strong>' + esc(nume) + "</strong></a>" : "<strong>" + esc(nume) + "</strong>";
+            var nou = val ? '<span class="tag">validat ' + esc(zi(val.data)) + "</span>" : k && k.nou ? '<span class="tag">din ' + esc(zi(k.nou.din)) + "</span>" : "";
+            return "<tr>" + (inc ? "" : '<td class="n nrc">' + (i + 1) + "</td>") + '<td class="cs-n"><span class="cs-nm">' + avatar(k, o.c.nume) + "<span>" + link + (nou ? "<br>" + nou : "") + "</span></span></td>" +
+              '<td class="cs-p">' + (k && k.sigla ? '<img src="' + FTDATA + esc(k.sigla) + '" alt="" loading="lazy" onerror="this.remove()">' : "") + esc((k && k.partid) || "") + "</td>" +
+              (inc ? '<td class="nw">' + p.map(function (x) { return esc(zi(x[0])) + " - " + esc(zi(x[1])); }).join("<br>") + '</td><td class="inc">' + esc(zi(o.inc.d)) +
+                (o.inc.h ? " · " + linkHcl(o.inc.h) : "") + (o.inc.t ? '<details class="more-t"><summary>detalii</summary><div class="muted">' + esc(o.inc.t) + "</div></details>" : "") + "</td>" : "") +
+              (s ? '<td class="n">' + pctPrez(s) + '</td><td class="n">' + nr(s.absent) + '</td><td class="n">' + nr(s.I) + " / " + nr(s.A) + '</td><td class="n">' + nr(s.N) + '</td><td class="n">' + nr(s.P) + '</td><td class="n">' + nr(s["?"]) + "</td>"
+                : '<td class="n muted" colspan="6">încă fără procese-verbale publicate</td>') + "</tr>";
+          }).join("") + "</tbody></table></div>";
+      };
       el.innerHTML = head("Consiliul Local", "Consilierii locali: prezența la ședințe și cum au votat, din procesele-verbale (extrase automat; pot avea erori).", r) +
         '<div class="card section sx-bar"><div class="filters"><label class="lbl-s">Mandatul <select id="c-m">' + M.slice().reverse().map(function (x) { return "<option" + (x[0] === ales ? " selected" : "") + ">" + esc(x[0]) + "</option>"; }).join("") + "</select></label></div></div>" +
-        (ales === (M.length ? M[M.length - 1][0] : "") && (COMP.consilieri || []).length ? '<section class="card section"><div class="h-row"><h2>Componența actuală</h2><a href="' + esc(safeUrl(COMP.sursa) || "#") + '" rel="noopener">pagina primăriei</a></div>' +
-          '<div class="cs-g">' + COMP.consilieri.filter(function (x) { return !x.iesit; }).sort(function (a, b) { return a.nume.localeCompare(b.nume, "ro"); }).map(function (x) {
-            var o = rows.filter(function (q) { return q.c.id === x.id; })[0];
-            return '<a class="cs" href="' + (x.id ? "#consiliu/consilieri/" + encodeURIComponent(x.id) : "#consiliu/consilieri") + '">' + avatar(x, x.nume, true) + "<b>" + esc(x.nume) + "</b>" +
-              '<span class="muted">' + esc(x.partid || "") + (o ? (x.partid ? " · " : "") + "prezență " + pctPrez(o.s) : x.nou ? (x.partid ? " · " : "") + "din " + esc(zi(x.nou.din)) : "") + "</span></a>";
-          }).join("") + "</div></section>" : "") +
-        '<div class="grid">' + tile("Consilieri găsiți în procesele-verbale", nr(rows.length), "", "în mandatul " + esc(ales)) + tile("Absențe", nr(tAbs), "", "în total, numite în procesele-verbale") +
+        '<div class="grid">' + tile("Consilieri în funcție", nr(activi.length), "", "în mandatul " + esc(ales) + (incetati.length ? "; " + incetati.length + " cu mandat încetat" : "")) + tile("Absențe", nr(tAbs), "", "în total, numite în procesele-verbale") +
         tile("Voturi împotrivă", nr(tImp), "", "date de consilieri numiți") + tile("Abțineri", nr(tAbt), "", "ale consilierilor numiți") + "</div>" +
-        '<section class="card section"><h2>Consilierii</h2><p class="note">Lista e reconstruită din procesele-verbale (președinții de ședință, absenții, cei prezenți online și cei care au votat împotrivă, s-au abținut sau nu au votat) și din hotărârile despre mandate: validări și încetări de mandat. ' +
-        "Începutul fiecărei legislaturi e prima hotărâre de organizare a noului consiliu (comisii de specialitate, viceprimar) de după alegeri. " +
-        "Procesele-verbale numesc doar consilierii care nu au votat „pentru”; votul „pentru” al fiecăruia îl deducem doar când știm sigur cine era în sală. Cifrele se verifică pe documente înainte de publicare.</p>" +
-        '<div class="tw"><table><thead><tr>' + th("nume", "Consilier") + "<th>Perioada</th>" + th("prez", "Prezență") + th("absente", "Absențe") + th("imp", "Împotrivă / abțineri") + '<th class="n">Nu a votat</th><th class="n">Pentru (dedus)</th><th class="n">Necunoscut</th></tr></thead><tbody>' +
-        rows.map(function (o) {
-          var s = o.s, p = o.c.perioade.filter(function (x) { return x[1] >= mm[1] && x[0] < mm[2]; });
-          var evs = (o.c.evenimente || []).filter(function (e) { return e.data >= mm[1] && e.data < mm[2]; });
-          return '<tr><td class="cs-n">' + avatar(compDe(o.c.id), o.c.nume) + '<a href="#consiliu/consilieri/' + encodeURIComponent(o.c.id) + '"><strong>' + esc(o.c.nume) + "</strong></a>" +
-            evs.map(function (e) { return ' <span class="tag">' + (e.fel === "validare" ? "validat " : "mandat încetat ") + esc(zi(e.data)) + "</span>"; }).join("") + "</td><td class=\"nw\">" + p.map(function (x) { return esc(zi(x[0])) + " - " + esc(zi(x[1])); }).join("<br>") +
-            '</td><td class="n">' + pctPrez(s) + '</td><td class="n">' + nr(s.absent) + '</td><td class="n">' + nr(s.I) + " / " + nr(s.A) + '</td><td class="n">' + nr(s.N) + '</td><td class="n">' + nr(s.P) + '</td><td class="n">' + nr(s["?"]) + "</td></tr>";
-        }).join("") + "</tbody></table></div></section>" +
+        '<section class="card section"><div class="h-row"><h2>' + (curent ? "Consilierii în funcție" : "Consilierii din mandatul " + esc(ales)) + ' <span class="nr-b">' + activi.length + "</span></h2>" +
+        (curent && safeUrl(COMP.sursa) ? '<a href="' + esc(COMP.sursa) + '" rel="noopener">componența pe site-ul primăriei</a>' : "") + "</div>" +
+        '<p class="note">Lista e reconstruită din procesele-verbale (președinții de ședință, absenții, cei prezenți online și cei care au votat împotrivă, s-au abținut sau nu au votat), din hotărârile despre mandate și, pentru mandatul actual, din pagina „Componența” a primăriei (fotografii, partide, declarații). ' +
+        "Procesele-verbale numesc doar consilierii care nu au votat „pentru”; votul „pentru” al fiecăruia îl deducem doar când știm sigur cine era în sală. Cifrele sunt extrase automat și se verifică pe documente.</p>" +
+        tabel(activi, false) + "</section>" +
+        (incetati.length ? '<section class="card section"><h2>Mandat încetat în această legislatură <span class="nr-b n">' + incetati.length + "</span></h2>" +
+          '<p class="note">Consilieri care au plecat din consiliu înainte de sfârșitul mandatului: demisie, incompatibilitate, pierderea calității de membru al partidului și alte cazuri prevăzute de lege. Locul lor e preluat de supleanți de pe aceeași listă.</p>' +
+          tabel(incetati, true) + "</section>" : "") +
         '<section class="card section"><h2>Absențe, pe consilieri</h2>' + hbl(rows.slice().sort(function (a, b) { return b.s.absent - a.s.absent; }).filter(function (o) { return o.s.absent; }).slice(0, 25).map(function (o) {
           return { l: o.c.nume, v: o.s.absent, href: "#consiliu/consilieri/" + encodeURIComponent(o.c.id) }; }), nr, tAbs) + "</section>";
       $("c-m").addEventListener("change", function () { location.hash = "#consiliu/consilieri?m=" + encodeURIComponent(this.value) + "&o=" + ord; });
@@ -2209,8 +2233,8 @@
   function compDe(id) { return id ? ((COMP || {}).consilieri || []).filter(function (x) { return x.id === id; })[0] : null; }
   function initiale(n) { return (n || "").split(/[\s-]+/).filter(Boolean).slice(0, 2).map(function (w) { return w.charAt(0); }).join("").toUpperCase(); }
   function avatar(x, nume, mare) {
-    return '<span class="av' + (mare ? " mare" : "") + '">' + (x && x.foto ? '<img src="' + FTDATA + esc(x.foto) + '" alt="" loading="lazy">' : "<i>" + esc(initiale(nume)) + "</i>") +
-      (x && x.sigla ? '<img class="av-p" src="' + FTDATA + esc(x.sigla) + '" alt="' + esc(x.partid || "partid") + '" title="' + esc(x.partid || "") + '" loading="lazy">' : "") + "</span>";
+    return '<span class="av' + (mare ? " mare" : "") + '">' + (x && x.foto ? '<img src="' + FTDATA + esc(x.foto) + '" alt="" loading="lazy" onerror="this.outerHTML=\'<i>' + esc(initiale(nume)) + '</i>\'">' : "<i>" + esc(initiale(nume)) + "</i>") +
+      (x && x.sigla ? '<img class="av-p" src="' + FTDATA + esc(x.sigla) + '" alt="' + esc(x.partid || "partid") + '" title="' + esc(x.partid || "") + '" loading="lazy" onerror="this.remove()">' : "") + "</span>";
   }
   function declaratii(x) {
     if (!x) return "";

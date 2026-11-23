@@ -641,3 +641,13 @@ ol.pasi-n li{margin:6px 0}
 .doc.rezolvat{opacity:.6}
 @media (max-width:640px){.ct-r{grid-template-columns:1fr}}
 .grid.two>.section{margin:0}
+/* consilierii: tabelul cu fotografii și partide */
+.cs-t td{vertical-align:middle}
+.cs-t .nrc{color:var(--muted);font-weight:600;width:2.5em}
+.cs-nm{display:flex;align-items:center;gap:2px;white-space:normal;min-width:190px}
+.cs-t .av{width:42px;height:42px}
+.cs-t .av i{font-size:.82rem}
+.cs-p{white-space:nowrap;font-size:.88rem;color:var(--ink-2)}
+.cs-p img{width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:6px;border-radius:4px;background:#fff}
+.cs-t td.inc{min-width:200px;font-size:.88rem}
+.cs-t td.inc .muted{font-size:.8rem;margin-top:2px}
