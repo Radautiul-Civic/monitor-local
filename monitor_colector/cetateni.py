@@ -29,6 +29,8 @@ FORMULAR_52 = "https://primariaradauti.ro/formular-pentru-colectarea-de-propuner
 R_DATA = r"(\d{1,2})\s*[.\-/]\s*(\d{1,2})\s*[.\-/]\s*(\d{4})"
 
 
+SICAP_PUB = "https://www.e-licitatie.ro/pub/"   # anunțurile din SICAP, deschise direct din noutăți
+
 def _d(m):
     try:
         return date(int(m.group(3)), int(m.group(2)), int(m.group(1))).isoformat()
@@ -257,14 +259,14 @@ def noutati(db, azi, conv, cons, concursuri=None, zile=120, prag_directe=50000):
         for r in db.execute("SELECT id, ca_id, nume, valoare, furnizor, data_finalizare FROM sicap_da WHERE data_finalizare >= ? AND valoare >= ?",
                             (lim, prag_directe)):
             ev.append(_ev(r["data_finalizare"][:10], "achizitie", f"{_lei(r['valoare'])}: {clean_title(r['nume'])[:150]}",
-                          f"{inst.get(r['ca_id'], '')}; furnizor {r['furnizor'] or '-'}", "#achizitii/sicap", None, f"da-{r['id']}"))
+                          f"{inst.get(r['ca_id'], '')}; furnizor {r['furnizor'] or '-'}", SICAP_PUB + f"direct-acquisition/view/{r['id']}", None, f"da-{r['id']}"))
         for r in db.execute("SELECT id, ca_id, titlu, valoare_estimata, data FROM sicap_cn WHERE data >= ?", (lim,)):
             ev.append(_ev(r["data"][:10], "licitatie", f"Licitație lansată: {clean_title(r['titlu'])[:160]}",
                           f"{inst.get(r['ca_id'], '')}" + (f"; valoare estimată {_lei(r['valoare_estimata'])}" if r["valoare_estimata"] else ""),
-                          "#achizitii/sicap", None, f"cn-{r['id']}"))
+                          SICAP_PUB + f"notices/c-notice/v2/view/{r['id']}", None, f"cn-{r['id']}"))
         for r in db.execute("SELECT id, ca_id, titlu, valoare, data FROM sicap_can WHERE data >= ?", (lim,)):
             ev.append(_ev(r["data"][:10], "atribuire", f"Contract atribuit: {clean_title(r['titlu'])[:160]}",
-                          f"{inst.get(r['ca_id'], '')}" + (f"; {_lei(r['valoare'])}" if r["valoare"] else ""), "#achizitii/sicap", None, f"can-{r['id']}"))
+                          f"{inst.get(r['ca_id'], '')}" + (f"; {_lei(r['valoare'])}" if r["valoare"] else ""), SICAP_PUB + f"notices/ca-notices/view-c/{r['id']}", None, f"can-{r['id']}"))
     except Exception:
         pass   # tabelele SICAP există doar după prima colectare
     for c in concursuri or []:
@@ -282,7 +284,7 @@ def noutati(db, azi, conv, cons, concursuri=None, zile=120, prag_directe=50000):
 def rss(ev, azi, n=60):
     items = []
     for e in ev[:n]:
-        link = SITE + e["link"] if e["link"] and e["link"].startswith("#") else (e["sursa"] or SITE)
+        link = SITE + e["link"] if e["link"] and e["link"].startswith("#") else (e["link"] or e["sursa"] or SITE)
         try:
             pub = format_datetime(datetime.fromisoformat(e["data"] + "T12:00:00+02:00"))
         except ValueError:

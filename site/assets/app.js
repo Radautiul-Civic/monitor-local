@@ -2917,7 +2917,7 @@
         var pz = "";
         $("nou-l").innerHTML = sel.slice(0, shown).map(function (e) {
           var cap = e.data !== pz ? '<div class="nt-zi">' + esc(ziSapt(e.data)) + esc(zi(e.data)) + "</div>" : ""; pz = e.data;
-          var t = e.link ? '<a href="' + esc(e.link) + '">' + esc(e.titlu) + "</a>" : esc(e.titlu);
+          var ext = /^https?:/.test(e.link || ""), t = e.link && (!ext || safeUrl(e.link)) ? '<a href="' + esc(e.link) + '"' + (ext ? ' rel="noopener" title="anunțul în SICAP (e-licitatie.ro)"' : "") + ">" + esc(e.titlu) + (ext ? " ↗" : "") + "</a>" : esc(e.titlu);
           return cap + '<div class="nt"><span class="nt-tip" style="--c:' + (NT_CUL[e.tip] || "var(--plan)") + '">' + esc((NOU.tipuri || {})[e.tip] || e.tip) + '</span><div class="nt-t">' + t +
             (safeUrl(e.sursa) ? ' <a class="nt-s" href="' + esc(e.sursa) + '" rel="noopener" title="documentul pe site-ul primăriei">sursa ↗</a>' : "") + (e.text ? '<div class="nt-x">' + esc(e.text) + "</div>" : "") + "</div></div>";
         }).join("") || '<p class="empty">Nimic în ultimele luni.</p>';
