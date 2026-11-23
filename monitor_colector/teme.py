@@ -590,6 +590,12 @@ def scrie(store, data_dir, azi=None):
             rez["indicatori_taxe"] = taxe_ai.indicatori_publici()
         except Exception as e:
             stats["taxe_ai"] = f"eroare: {e}"
+    # termoficarea: hotărârile pe subiect și prețurile pe perioade (data/termoficare.json; vezi termoficare.py)
+    try:
+        from . import termoficare
+        stats["termoficare"] = termoficare.scrie(db, data_dir)
+    except Exception as e:
+        stats["termoficare"] = f"eroare: {e}"
     # harta investițiilor: geometria străzilor pomenite (OpenStreetMap) și, ca rezervă, poziția străzii din registrele de urbanism
     try:
         osm, coord = strazi_osm(data_dir), geocod.coordonate(db)

@@ -142,7 +142,7 @@ def public_date():
     except (OSError, ValueError) as e:
         print(f"atenție: indicatori: {e}", file=sys.stderr)
     for name in ("liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json", "buget.json", "concursuri.json",
-                 "sedinte.json", "noutati.json", "noutati.xml", "acasa.json", "componenta.json", "teme.json"):
+                 "sedinte.json", "noutati.json", "noutati.xml", "acasa.json", "componenta.json", "teme.json", "termoficare.json"):
         if os.path.exists(os.path.join(d, name)):
             out[name] = os.path.join(d, name)
     di = os.path.join(d, "intern-date")   # voturi, consilieri etc.; litigiile rămân interne
@@ -171,7 +171,7 @@ def intern_date():
     d = os.path.join(ROOT, "data")
     out = {}
     for name in ("indicatori.json", "liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json", "buget.json", "concursuri.json",
-                 "sedinte.json", "noutati.json", "acasa.json", "componenta.json", "teme.json"):
+                 "sedinte.json", "noutati.json", "acasa.json", "componenta.json", "teme.json", "termoficare.json"):
         if os.path.exists(os.path.join(d, name)):
             out[name] = os.path.join(d, name)
     di = os.path.join(d, "intern-date")   # litigii cu numele părților, voturi

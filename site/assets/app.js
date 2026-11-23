@@ -26,7 +26,7 @@
     { id: "acasa", nume: "Acasă" },
     { id: "strada", nume: "Strada mea" },
     { id: "consiliu", nume: "Consiliul Local", def: "hcl", sub: [["urmatoare", "Ședința următoare"], ["proiecte", "Proiecte de hotărâre"], ["hcl", "Hotărâri adoptate"], ["sedinte", "Ședințe și procese-verbale"], ["consilieri", "Consilieri"]] },
-    { id: "primarie", nume: "Primărie", def: "urbanism", sub: [["buget", "Buget"], ["investitii", "Investiții"], ["taxe", "Taxe locale"], ["patrimoniu", "Terenuri și clădiri"],
+    { id: "primarie", nume: "Primărie", def: "urbanism", sub: [["buget", "Buget"], ["investitii", "Investiții"], ["taxe", "Taxe locale"], ["termoficare", "Termoficarea"], ["patrimoniu", "Terenuri și clădiri"],
       ["finantari", "Finanțări nerambursabile"], ["dispozitii", "Dispozițiile primarului"], ["rapoarte", "Rapoarte"], ["urbanism", "Urbanism"]] },
     { id: "achizitii", nume: "Achiziții publice", def: "sicap", sub: [["sicap", "SICAP"], ["contracte", "Contracte"]] },
     { id: "angajari", nume: "Concursuri și angajări", def: "statistici", sub: [["statistici", "Statistici"], ["concursuri", "Concursuri"], ["posturi", "Organigramă și posturi"]] }
@@ -72,7 +72,7 @@
   }
   // ilustrațiile secțiunilor (assets/img/sec/*.webp), pe paginile principale ale fiecărei secțiuni și subsecțiuni
   var ILU = { acasa: "acasa", strada: "strada", "consiliu/urmatoare": "consiliu", "consiliu/proiecte": "proiecte", "consiliu/sedinte": "sedinte", "consiliu/consilieri": "consilieri",
-    "primarie/buget": "buget", "primarie/investitii": "investitii", "primarie/taxe": "taxe", "primarie/patrimoniu": "patrimoniu", "primarie/finantari": "finantari",
+    "primarie/buget": "buget", "primarie/investitii": "investitii", "primarie/taxe": "taxe", "primarie/termoficare": "taxe", "primarie/patrimoniu": "patrimoniu", "primarie/finantari": "finantari",
     "primarie/dispozitii": "dispozitii", "primarie/rapoarte": "rapoarte", "primarie/urbanism": "urbanism", achizitii: "achizitii", litigii: "achizitii", angajari: "angajari",
     cauta: "cauta", texte: "cauta", despre: "despre" };
   function head(title, text, r, share) {
@@ -1779,6 +1779,61 @@
   // ---------- Primărie: teme care leagă documentele (date/teme.json) ----------
   var TEME = null;
   var TEME_PAG = { investitii: 1, taxe: 1, patrimoniu: 1, finantari: 1, dispozitii: 1, rapoarte: 1 };
+  // ---------- Termoficarea: prețurile pe perioade, cine plătește (populația, bugetul local) și toate hotărârile ----------
+  var TERMO = null;
+  var TERMO_FEL = { tarife: "Prețuri și tarife", pierderi: "Pierderi și subvenții acoperite din buget", gestiune: "Contractul și organizarea serviciului", investitii: "Investiții", alta: "Alte hotărâri" };
+  var LUNI_S = ["ian", "feb", "mar", "apr", "mai", "iun", "iul", "aug", "sep", "oct", "nov", "dec"];
+  function lunaScurt(d) { return d ? LUNI_S[+d.slice(5, 7) - 1] + " " + d.slice(2, 4) : ""; }
+  function perioada(p) { return zi(p.de_la) + (p.pana_la ? " - " + zi(p.pana_la) : " (începând cu)"); }
+  function termoficare(el, r) {
+    var cap = head("Termoficarea", "Căldura și apa caldă de la Servicii Comunale: cât costă, cât plătește populația, cât acoperă bugetul local și toate hotărârile consiliului.", r);
+    if (!TERMO) { el.innerHTML = cap + '<p class="updated">Se încarcă...</p>'; Promise.all([get(DATA + "termoficare.json").then(function (d) { TERMO = d; }).catch(function () { TERMO = { hotarari: [], preturi: [] }; }), incarcaSed()]).then(render); return; }
+    var P = (TERMO.preturi || []).filter(function (p) { return p.populatie_cu_tva || p.total_cu_tva; }), H = TERMO.hotarari || [];
+    var ult = P[P.length - 1], ant = P[P.length - 2];
+    var lei2 = function (v) { return v == null ? '<span class="muted">-</span>' : dec(v.toFixed(2)) + " lei"; };
+    var urm = []; (SED.urmatoare || []).forEach(function (c) { (c.ordinea_de_zi || []).forEach(function (p) { if (/energiei termice|termofic|agent termic|pierderi.*termic/i.test(norm(p.text || ""))) urm.push({ c: c, p: p }); }); });
+    var h = cap;
+    if (urm.length) h += '<section class="card section urm"><h2>Pe ordinea de zi</h2>' + urm.map(function (x) {
+      return '<div class="doc"><div class="h"><span class="rz ic">' + esc(ziSapt(x.c.data)) + esc(zi(x.c.data)) + (x.c.ora ? ", ora " + esc(x.c.ora) : "") + '</span><span class="tag">ședință ' + esc(TIP_SED[x.c.tip] || "") + '</span></div><div class="t">' + esc(x.p.text) + "</div></div>"; }).join("") +
+      '<p class="note"><a href="#consiliu/urmatoare">Toată ordinea de zi și cum poți participa →</a></p></section>';
+    if (ult) h += '<div class="grid">' + tile(ult.pana_la && ult.pana_la < new Date().toISOString().slice(0, 10) ? "Ultimul preț aprobat pentru populație" : "Plătește populația", ult.populatie_cu_tva != null ? dec(ult.populatie_cu_tva.toFixed(2)) : "-", "lei/MWh", perioada(ult) + (ult.pana_la && ult.pana_la < new Date().toISOString().slice(0, 10) ? "; a expirat, nu e încă aprobat unul nou" : ant && ant.populatie_cu_tva ? "; înainte " + dec(ant.populatie_cu_tva.toFixed(2)) + " lei" : "")) +
+      tile("Plătește bugetul local", ult.subventie_cu_tva != null ? dec(ult.subventie_cu_tva.toFixed(2)) : "-", "lei/MWh", "subvenția: diferența până la prețul întreg") +
+      tile("Prețul întreg", ult.total_cu_tva != null ? dec(ult.total_cu_tva.toFixed(2)) : "-", "lei/MWh", "producere, transport și distribuție" + (ult.tva ? ", cu TVA " + ult.tva + "%" : "")) + "</div>";
+    h += '<section class="card section"><h2>Cum se formează prețul</h2><ul class="pasi">' +
+      "<li><b>Prețul întreg</b> are două părți: <b>producerea</b> căldurii la centrala Servicii Comunale (prețul îl aprobă ANRE, autoritatea națională pentru energie) și <b>transportul și distribuția</b> prin rețeaua orașului. Peste ele se adaugă TVA-ul.</li>" +
+      "<li><b>Consiliul Local</b> aprobă prin hotărâre prețul local, cât plătește populația și cât din preț acoperă <b>bugetul local</b> (subvenția). Fără o hotărâre nouă când expiră cea veche, Servicii Comunale nu are cu ce preț să factureze.</li>" +
+      "<li>Firmele și instituțiile (consumatorii noncasnici) plătesc prețul întreg; subvenția e doar pentru populație.</li>" +
+      "<li>Prețurile sunt în <b>lei pe MWh</b> (1 Gcal = 1,163 MWh).</li></ul></section>";
+    if (P.length) {
+      h += '<section class="card section"><h2>Prețurile, perioadă cu perioadă</h2><p class="note">Din anexele hotărârilor de tarife, citite automat dintr-un document scanat; pot avea greșeli, iar fiecare perioadă duce la hotărâre. O perioadă modificată sau prelungită apare cu ultima hotărâre care a stabilit-o.</p>' +
+        legend([["Plătește populația", "#ec7a2c"], ["Plătește bugetul local", "#2a78d6"]]) + '<div class="chart" id="tf-ch"></div>' +
+        '<div class="tw"><table class="tx-t"><thead><tr><th>Perioada</th><th class="n">Populația</th><th class="n">Bugetul local</th><th class="n">Prețul întreg</th><th class="n">TVA</th><th class="n">Populația, față de perioada dinainte</th><th>Hotărârea</th></tr></thead><tbody>' +
+        P.slice().reverse().map(function (p, i, A) { var a = A[i + 1];
+          return "<tr><td>" + esc(perioada(p)) + '</td><td class="n"><b>' + lei2(p.populatie_cu_tva) + '</b></td><td class="n">' + lei2(p.subventie_cu_tva) + '</td><td class="n">' + lei2(p.total_cu_tva) + '</td><td class="n">' + (p.tva ? p.tva + "%" : "-") +
+            '</td><td class="n">' + (a ? variatie(a.populatie_cu_tva, p.populatie_cu_tva) : "") + "</td><td>" + (p.hcl ? linkHcl(p.hcl) : "") + "</td></tr>"; }).join("") + "</tbody></table></div></section>";
+    }
+    var pier = H.filter(function (x) { return x.fel === "pierderi"; });
+    if (pier.length) h += '<section class="card section"><h2>Pierderi acoperite din bugetul local</h2><p class="note">Pe lângă subvenția din preț, consiliul aprobă din când în când acoperirea pierderilor Servicii Comunale din termoficare.</p>' +
+      pier.map(function (x) { return '<div class="doc"><div class="h"><span class="id">' + linkHcl(x) + "</span>" + (x.data ? '<span class="muted">' + esc(zi(x.data)) + "</span>" : "") + (x.pierderi_lei ? '<span class="inv-v">' + lei(x.pierderi_lei) + "</span>" : "") + '</div><div class="t">' + esc(x.pe_scurt || x.titlu) + "</div></div>"; }).join("") + "</section>";
+    h += '<section class="card section"><h2>Toate hotărârile despre termoficare <span class="nr-b n">' + H.length + '</span></h2><div id="tf-l"></div></section>';
+    el.innerHTML = h;
+    if (P.length) chart($("tf-ch"), { cats: P.map(function (p) { return lunaScurt(p.de_la); }), stacked: true, label: "Prețul energiei termice pe perioade: partea populației și partea bugetului local",
+      series: [{ name: "Plătește populația", color: "#ec7a2c", values: P.map(function (p) { return p.populatie_cu_tva || 0; }) }, { name: "Plătește bugetul local", color: "#2a78d6", values: P.map(function (p) { return p.subventie_cu_tva || 0; }) }],
+      tooltip: function (i) { var p = P[i]; return "<b>" + esc(perioada(p)) + "</b><br>populația: " + lei2(p.populatie_cu_tva) + "/MWh<br>bugetul local: " + lei2(p.subventie_cu_tva) + "/MWh<br>prețul întreg: " + lei2(p.total_cu_tva) + "/MWh" + (p.tva ? " (TVA " + p.tva + "%)" : "") + (p.hcl ? "<br>HCL " + p.hcl.nr + "/" + p.hcl.an : ""); } });
+    function listaTf(vot) {
+      if (!$("tf-l")) return;
+      lista($("tf-l"), H, { placeholder: "Caută: tarif, pierderi, contract, ANRE", unitate: ["hotărâre", "hotărâri"], an: function (x) { return String(x.an); }, text: function (x) { return x.titlu + " " + (x.pe_scurt || ""); },
+        extraFilter: { html: '<select aria-label="Felul"><option value="">Toate felurile</option>' + Object.keys(TERMO_FEL).map(function (k) { return '<option value="' + k + '">' + TERMO_FEL[k] + "</option>"; }).join("") + "</select>", test: function (x, e) { return x.fel === e; } },
+        item: function (x) { var v = vot[x.an + "/" + x.nr];
+          return '<div class="doc"><div class="h"><span class="id">' + linkHcl(x) + '</span><span class="tag">' + esc(TERMO_FEL[x.fel] || "") + "</span>" + (x.data ? '<span class="muted">' + esc(zi(x.data)) + "</span>" : "") + '</div><div class="t">' + esc(x.titlu) + "</div>" +
+            (x.pe_scurt ? '<div class="m"><span>' + esc(x.pe_scurt) + "</span></div>" : "") + (v ? '<div class="m"><span class="muted">Votul: ' + votHtml(v) + "</span></div>" : "") + "</div>"; } });
+    }
+    listaTf({});
+    voturiIntern2(function (V) {   // apoi, cu voturile din procesele-verbale
+      var vot = {}; (V.sedinte || []).forEach(function (s) { (s.voturi || []).forEach(function (v) { if (v.hcl) vot[v.hcl.an + "/" + v.hcl.nr] = v; }); });
+      listaTf(vot);
+    });
+  }
   function temaPagina(el, r) {
     var titluri = { investitii: ["Investițiile orașului", "Obiectivele de investiții pe categorii (străzi, școli, apă și canal...), pe hartă și fiecare cu hotărârile, valoarea aprobată și achizițiile din SICAP."],
       taxe: ["Taxe și impozite locale", "Lista taxelor și impozitelor locale din hotărârile anuale, cum au evoluat de la an la an și toate hotărârile despre ele."],
@@ -3769,6 +3824,7 @@
     else if (id === "litigii" && INTERN) litigii(el, r);
     else if (id === "primarie") {
       if (r.sub === "buget") buget(el, r);
+      else if (r.sub === "termoficare") termoficare(el, r);
       else if (TEME_PAG[r.sub]) temaPagina(el, r);
       else if ((r.rest[0] || "harta") === "harta") harta(el, r);
       else registru(el, r, r.rest[0] === "ac" ? "ac" : "cu");
