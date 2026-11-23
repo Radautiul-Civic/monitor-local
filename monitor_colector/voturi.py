@@ -604,7 +604,7 @@ def extra_sedinta(text):
 
 
 # cine vorbește în ședință: paragrafele care încep cu „Dl X intervine/întreabă/precizează...” (OCR scrie des „DI” pentru „Dl”)
-R_VORBITOR = re.compile(r"^[ \t_|]*(?:D[lI1]\.?|D-[lI]\.?|D-ul|D-na|Dna\.?|Domnul|Doamna)[ \t]+(?:consilier\w*[ \t]+(?:local[ \t]+)?)?_?"
+R_VORBITOR = re.compile(r"^[ \t_|]*(?:D[lI1]\.?|D-[lI]\.?|D-ul|D-na|Dna\.?|Domnul|Doamna)[ \t]+(?:[Cc]onsilier\w*[ \t]+(?:[Ll]ocal[ \t]+)?)?_?"
                         r"([A-ZĂÂÎȘŞȚŢ][\w\-ăâîșşțţ]+(?:[ \t]*-[ \t]*[A-ZĂÂÎȘŞȚŢ][\w\-ăâîșşțţ]+|[ \t]+[A-ZĂÂÎȘŞȚŢ][\w\-ăâîșşțţ]+){0,2})[ \t,]+([a-zăâîșşțţ]+)",
                         re.M)
 # ce nu e o intervenție pe fond: anunțul că nu participă la vot, conducerea ședinței
