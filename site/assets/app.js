@@ -1915,6 +1915,55 @@
     var p = 100 * (b - a) / a; if (Math.abs(p) < 0.05) return '<span class="vr z">=</span>';
     return '<span class="vr ' + (p > 0 ? "up" : "dn") + '">' + (p > 0 ? "+" : "") + dec(+p.toFixed(1)) + "%</span>";
   }
+  // ---------- „Cât plătesc eu?”: estimarea impozitelor locale ale unei familii, pe ani, din nivelurile citite din hotărâri ----------
+  // Rădăuți e municipiu de rangul II: coeficienții de corecție pe zone (Codul fiscal, art. 457 alin. 6)
+  var COEF_ZONA = { A: 2.4, B: 2.3, C: 2.2, D: 2.1 };
+  var AUTO_TR = [[1600, "auto_pana_1600"], [2000, "auto_1601_2000"], [2600, "auto_2001_2600"], [3000, "auto_2601_3000"], [Infinity, "auto_peste_3000"]];
+  function calcHtml(ani) {
+    if (!ani.length) return "";
+    var inp = function (id, lbl, val, extra) { return '<label class="cx-f"><span>' + lbl + '</span><input type="number" inputmode="decimal" min="0" id="' + id + '" value="' + val + '"' + (extra || "") + "></label>"; };
+    return '<section class="card section cx"><h2>Cât plătești? Calculează-ți impozitele</h2>' +
+      '<p class="note">Scrie datele casei, ale terenului și ale mașinii tale și vezi cât ar fi impozitele locale în fiecare an pentru care am citit hotărârea, și cât s-a schimbat. E o <b>estimare</b>: folosește nivelurile extrase automat din hotărâri și formula simplificată din Codul fiscal (clădire din beton cu instalații, persoană fizică, fără scutiri). Suma exactă o afli de la Direcția de taxe și impozite locale sau din Ghișeul.ro.</p>' +
+      '<div class="cx-g"><fieldset><legend>Casa sau apartamentul</legend>' + inp("cx-mp", "Suprafața construită desfășurată (m²)", 80) +
+      '<label class="cx-f"><span>Zona din oraș</span><select id="cx-z"><option>A</option><option selected>B</option><option>C</option><option>D</option></select></label>' +
+      '<label class="cx-f"><span>Vechimea clădirii</span><select id="cx-v"><option value="1">sub 30 de ani</option><option value="0.9">30-50 de ani</option><option value="0.7">50-100 de ani</option><option value="0.5">peste 100 de ani</option></select></label></fieldset>' +
+      '<fieldset><legend>Terenul de sub casă</legend>' + inp("cx-t", "Suprafața terenului (m²)", 0) + '<label class="cx-f"><span>Zona</span><select id="cx-tz"><option value="a">A</option><option value="b" selected>B</option></select></label></fieldset>' +
+      '<fieldset><legend>Mașina și gunoiul</legend>' + inp("cx-cc", "Capacitatea cilindrică a autoturismului (cm³; 0 dacă nu ai)", 1400) + inp("cx-p", "Câte persoane în casă (pentru salubrizare)", 3) +
+      '<label class="cx-c"><input type="checkbox" id="cx-b" checked> plătesc tot până la 31 martie (bonificație)</label></fieldset></div>' +
+      '<div id="cx-r" aria-live="polite"></div></section>';
+  }
+  function calcLeaga(ani, valI) {
+    if (!$("cx-r")) return;
+    var v = function (id) { var x = parseFloat(($(id).value || "0").replace(",", ".")); return isFinite(x) && x > 0 ? x : 0; };
+    function rand() {
+      var mp = v("cx-mp"), z = $("cx-z").value, vech = +$("cx-v").value, t = v("cx-t"), tz = $("cx-tz").value, cc = v("cx-cc"), pers = v("cx-p"), bon = $("cx-b").checked;
+      var R = ani.map(function (a) {
+        var o = { a: a, parti: [], lipsa: [] }, add = function (nume, val, det) { if (val == null) o.lipsa.push(nume); else o.parti.push([nume, val, det]); };
+        if (mp) { var vm = valI(a, "valoare_cladire_beton"), cota = valI(a, "cladiri_rezidentiale_pf");
+          add("Clădirea", vm != null && cota != null ? mp * vm * COEF_ZONA[z] * vech * cota / 100 : null, vm != null && cota != null ? dec(mp) + " m² × " + dec(vm) + " lei/m² × " + dec(COEF_ZONA[z]) + (vech < 1 ? " × " + dec(vech) : "") + " × " + dec(cota) + "%" : ""); }
+        if (t) { var vt = valI(a, "teren_intravilan_zona_" + tz); add("Terenul", vt != null ? t / 10000 * vt : null, vt != null ? dec(t) + " m² × " + dec(vt) + " lei/ha" : ""); }
+        if (cc) { var k = AUTO_TR.filter(function (x) { return cc <= x[0]; })[0][1], va = valI(a, k); add("Autoturismul", va != null ? Math.ceil(cc / 200) * va : null, va != null ? Math.ceil(cc / 200) + " × 200 cm³ × " + dec(va) + " lei" : ""); }
+        if (pers) { var vs = valI(a, "salubrizare_pf"); add("Salubrizarea", vs != null ? pers * vs * 12 : null, vs != null ? dec(pers) + " pers. × " + dec(vs) + " lei × 12 luni" : ""); }
+        var imp = o.parti.filter(function (p) { return p[0] !== "Salubrizarea"; }).reduce(function (s, p) { return s + p[1]; }, 0), b = bon ? valI(a, "bonificatie") : null;
+        o.bon = b && imp ? imp * b / 100 : 0;
+        o.total = o.parti.reduce(function (s, p) { return s + p[1]; }, 0) - o.bon;
+        return o;
+      }).filter(function (o) { return o.parti.length; });
+      if (!R.length) { $("cx-r").innerHTML = '<p class="empty">Pentru datele alese nu avem nivelurile din hotărâri.</p>'; return; }
+      var ult = R[R.length - 1], pr = R[R.length - 2], f2 = function (x) { return dec(Math.round(x)) + " lei"; };
+      var h = '<div class="cx-tot"><div><span class="muted">În ' + ult.a + ", în total</span><b>" + f2(ult.total) + "</b>" + (pr ? '<span>față de ' + f2(pr.total) + " în " + pr.a + " " + variatie(pr.total, ult.total) + "</span>" : "") + "</div>" +
+        '<ul class="cx-p">' + ult.parti.map(function (p) { return "<li><b>" + esc(p[0]) + ":</b> " + f2(p[1]) + ' <small class="muted">' + esc(p[2]) + "</small></li>"; }).join("") +
+        (ult.bon ? '<li><b>Bonificație:</b> -' + f2(ult.bon) + "</li>" : "") + (ult.lipsa.length ? '<li class="muted">Fără ' + esc(ult.lipsa.join(", ").toLowerCase()) + ": nivelul nu a putut fi citit din hotărâre.</li>" : "") + "</ul></div>";
+      if (R.length > 1) h += '<h3 class="an-h">Pe ani</h3><div class="chart" id="cx-ch"></div><div class="tw"><table class="tx-t"><thead><tr><th>Anul</th>' + ["Clădirea", "Terenul", "Autoturismul", "Salubrizarea"].map(function (n) { return '<th class="n">' + n + "</th>"; }).join("") + '<th class="n">Total</th><th class="n">Față de anul dinainte</th></tr></thead><tbody>' +
+        R.slice().reverse().map(function (o, i, A) { var g = function (n) { var p = o.parti.filter(function (x) { return x[0] === n; })[0]; return p ? f2(p[1]) : '<span class="muted">-</span>'; }, ant = A[i + 1];
+          return "<tr><td>" + o.a + "</td>" + ["Clădirea", "Terenul", "Autoturismul", "Salubrizarea"].map(function (n) { return '<td class="n">' + g(n) + "</td>"; }).join("") + '<td class="n"><b>' + f2(o.total) + '</b></td><td class="n">' + (ant ? variatie(ant.total, o.total) : "") + "</td></tr>"; }).join("") + "</tbody></table></div>";
+      $("cx-r").innerHTML = h;
+      if ($("cx-ch")) chart($("cx-ch"), { cats: R.map(function (o) { return o.a; }), series: [], h: 170, label: "Impozitele estimate pe ani", line: { color: "var(--c1)", values: R.map(function (o) { return Math.round(o.total); }) },
+        tooltip: function (i) { return "<b>" + R[i].a + "</b>: " + f2(R[i].total) + "<br>" + R[i].parti.map(function (p) { return esc(p[0]) + ": " + f2(p[1]); }).join("<br>"); } });
+    }
+    Array.prototype.forEach.call(document.querySelectorAll(".cx input, .cx select"), function (e) { e.addEventListener("input", rand); e.addEventListener("change", rand); });
+    rand();
+  }
   function pagTaxe(el, cap, D) {
     var ani = Object.keys(D).sort(), IND = (TEME || {}).indicatori_taxe || {}, cuAi = ani.filter(function (a) { return D[a].ai && (Object.keys(D[a].ai.indicatori || {}).length || (D[a].ai.taxe || []).length); });
     var valI = function (a, k) { var o = D[a] && D[a].ai && D[a].ai.indicatori[k]; return o ? o.valoare : null; };
@@ -1925,6 +1974,7 @@
     if (ult) {
       var pr = cuAi[cuAi.length - 2], tl = function (k, sub) { var v = valI(ult, k); return v == null ? "" : tile(IND[k].nume.split(":")[0], valTaxa(v, ""), IND[k].unitate, (sub || "") + (pr && valI(pr, k) != null ? " " + pr + ": " + valTaxa(valI(pr, k), IND[k].unitate) : "")); };
       h += '<div class="grid">' + tl("indexare", "") + tl("cladiri_rezidentiale_pf", "locuințe, persoane fizice;") + tl("auto_pana_1600", "autoturism mic;") + tl("salubrizare_pf", "") + "</div>";
+      h += calcHtml(cuAi);
       h += '<p class="note">Valorile din lista și graficele de mai jos sunt <b>extrase automat</b>, cu un model de inteligență artificială, din textul scanat al hotărârii anuale; pot avea greșeli. Fiecare an duce la hotărâre: verifică acolo înainte să folosești o cifră.</p>';
       if (serii.length) h += '<section class="card section"><h2>Cum au evoluat</h2><p class="note">Câteva niveluri, în fiecare an pentru care hotărârea a putut fi citită. Treci cu mouse-ul (sau atinge) peste grafic pentru valoare și citatul din hotărâre.</p><div class="tx-g">' +
         serii.map(function (k, n) { var A = cuAi.filter(function (a) { return valI(a, k) != null; }), v0 = valI(A[0], k), v1 = valI(A[A.length - 1], k);
@@ -1953,6 +2003,7 @@
         tooltip: function (i) { var o = D[A[i]].ai.indicatori[k]; return "<b>" + A[i] + "</b>: " + valTaxa(o.valoare, IND[k].unitate) + (o.citat ? '<br><i>„' + esc(o.citat) + "”</i>" : "") + (D[A[i]].hcl ? "<br>HCL " + D[A[i]].hcl.nr + "/" + D[A[i]].hcl.an : ""); } });
     });
     if (!ult) return;
+    calcLeaga(cuAi, valI);
     function desen() {
       var a = $("tx-an").value, c = $("tx-cat").value, q = norm($("tx-q").value).trim(), i = cuAi.indexOf(a), pa = i > 0 ? cuAi[i - 1] : null;
       var prev = {}; if (pa) (D[pa].ai.taxe || []).forEach(function (t) { prev[norm(t.categorie + "|" + t.denumire)] = t; });
