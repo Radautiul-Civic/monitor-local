@@ -1820,3 +1820,25 @@ class TestTeme(unittest.TestCase):
         D = T.dispozitii(db)
         self.assertEqual(D["pe_ani"]["2026"]["numar_maxim"], 807)
         self.assertEqual(D["pe_ani"]["2026"]["pe_feluri"], {"convocare": 1, "buget": 1})
+
+
+class TestPaginiStatice(unittest.TestCase):
+    def test_pagini_si_csv(self):
+        import tempfile
+        from monitor_colector import pagini_statice as P, date_deschise as DD
+        with tempfile.TemporaryDirectory() as d:
+            json.dump({"hcl": [{"an": 2026, "nr": 201, "data": "2026-10-30", "titlu": "Hotărâre privind ceva", "pdf": "https://x.ro/a.pdf"}], "pv": [], "proiecte": []},
+                      open(os.path.join(d, "liste.json"), "w"))
+            json.dump({"ac": [{"nr": "1", "data": "2026-01-01", "strada": "Putnei", "scop": "casă"}, {"nr": "2", "data": "2026-02-01", "strada": "Putnei", "scop": "gard"}], "cu": []},
+                      open(os.path.join(d, "urbanism.json"), "w"))
+            pagini = P.construieste(None, d, os.path.join(d, "static"))
+            self.assertIn("p/hcl/2026-201.html", pagini)
+            self.assertIn("p/sedinta/2026-10-30.html", pagini)
+            self.assertIn("p/strada/putnei.html", pagini)
+            h = open(os.path.join(d, "static", "p/hcl/2026-201.html"), encoding="utf-8").read()
+            self.assertIn('<link rel="canonical" href="https://monitor.radautiulcivic.ro/p/hcl/2026-201.html">', h)
+            self.assertIn('href="../../#consiliu/hcl/2026/201"', h)
+            r = DD.scrie(d)
+            self.assertEqual(r["hotarari.csv"], 1)
+            self.assertTrue(open(os.path.join(d, "deschise", "hotarari.csv"), encoding="utf-8-sig").read().startswith("an;nr;data_adoptarii"))
+        self.assertEqual(P.extras_hcl("ROMÂNIA ... adoptă prezenta hotărâre:\nArt. 1 Se aprobă X."), "Art. 1 Se aprobă X.")

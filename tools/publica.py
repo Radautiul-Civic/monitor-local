@@ -241,6 +241,27 @@ def distribuie_de_urcat():
 
 
 MANIFEST_CONSILIERI = os.path.join(ROOT, "data", "publicat-consilieri.json")
+MANIFEST_STATIC = os.path.join(ROOT, "data", "publicat-static.json")
+
+
+def static_de_urcat():
+    """Paginile statice (data/static/p/...) și sitemap.xml/robots.txt (în rădăcina site-ului), doar cele schimbate."""
+    import hashlib
+    d = os.path.join(ROOT, "data", "static")
+    if not os.path.isdir(d):
+        return [], None
+    done = _manifest(MANIFEST_STATIC)
+    files = []
+    for dirpath, _, names in os.walk(d):
+        rel = os.path.relpath(dirpath, d).replace(os.sep, "/")
+        for n in sorted(names):
+            p = os.path.join(dirpath, n)
+            with open(p, "rb") as f:
+                h = hashlib.sha1(f.read()).hexdigest()
+            key = (rel + "/" + n) if rel != "." else n
+            if done.get(key) != h:
+                files.append((p, "" if rel == "." else rel, n, key, h))
+    return sorted(files, key=lambda x: (x[1] != "", x[3])), done
 
 
 RAPOARTE = ("indicatori.md", "urbanism-registre.txt", "sicap-de-verificat.txt", "sicap-castigatori-proba.json",
@@ -322,7 +343,14 @@ def main():
     files = files[:len(files) - len(cf)] + [(p, r, n, "distribuie", k, h) for p, r, n, k, h in df] + files[len(files) - len(cf):]
     kf, manifeste["consilieri"] = _folder_de_urcat("consilieri", "date/consilieri", MANIFEST_CONSILIERI)
     files = files[:len(files) - len(cf)] + [(p, r, n, "consilieri", k, h) for p, r, n, k, h in kf] + files[len(files) - len(cf):]
-    cai = {"texte": MANIFEST, "cautare": MANIFEST_CAUTARE, "distribuie": MANIFEST_DISTRIBUIE, "consilieri": MANIFEST_CONSILIERI}
+    of_, manifeste["deschise"] = _folder_de_urcat("deschise", "date/deschise", os.path.join(ROOT, "data", "publicat-deschise.json"))
+    files = files[:len(files) - len(cf)] + [(p, r, n, "deschise", k, h) for p, r, n, k, h in of_] + files[len(files) - len(cf):]
+    # paginile statice (mii, la prima rulare): înaintea căutării, în același buget de timp
+    sf, manifeste["static"] = static_de_urcat()
+    print(f"pagini statice: {len(sf)} fișiere noi sau modificate")
+    files = files[:len(files) - len(cf)] + [(p, r, n, "static", k, h) for p, r, n, k, h in sf] + files[len(files) - len(cf):]
+    cai = {"texte": MANIFEST, "cautare": MANIFEST_CAUTARE, "distribuie": MANIFEST_DISTRIBUIE, "consilieri": MANIFEST_CONSILIERI, "static": MANIFEST_STATIC,
+           "deschise": os.path.join(ROOT, "data", "publicat-deschise.json")}
 
     def salveaza():
         for m, d in manifeste.items():
@@ -341,7 +369,7 @@ def main():
                 pass
         _cwd[0] = None
         for i, (local, rel, name, man, key, sig) in enumerate(files):
-            if man == "cautare":
+            if man in ("cautare", "static"):
                 if not golit:
                     golit = True
                     golire_cloudflare()

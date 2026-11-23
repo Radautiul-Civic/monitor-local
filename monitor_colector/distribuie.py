@@ -143,6 +143,7 @@ def pagina(e):
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="{esc(_scurt(titlu, 200))}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="robots" content="noindex">
 <link rel="canonical" href="{url}">
 <script>location.replace({json.dumps(tinta)});</script>
 <style>body{{font:17px/1.5 system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 16px;color:#1a1c1e}}a{{color:#1c5cab}}</style>

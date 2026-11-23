@@ -196,6 +196,16 @@ def main(argv=None):
                 stats["distribuie"] = distribuie.scrie(store, config.DATA_DIR)
             except Exception as e:
                 stats["distribuie"] = f"eroare: {e}"
+            try:   # date deschise: CSV-uri pentru descărcare
+                from . import date_deschise
+                stats["date_deschise"] = date_deschise.scrie(config.DATA_DIR)
+            except Exception as e:
+                stats["date_deschise"] = f"eroare: {e}"
+            try:   # pagini statice pentru motoarele de căutare (p/...), sitemap.xml, robots.txt
+                from . import pagini_statice
+                stats["pagini_statice"] = pagini_statice.scrie(store, config.DATA_DIR)
+            except Exception as e:
+                stats["pagini_statice"] = f"eroare: {e}"
             try:   # indexul pentru căutarea în textul documentelor (pagina internă)
                 from . import cautare_text
                 stats["cautare_text"] = cautare_text.construieste(store, config.DATA_DIR)

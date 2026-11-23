@@ -1344,6 +1344,30 @@
     draw();
   }
 
+  // fișa firmei: pe lângă SICAP, autorizațiile și certificatele de urbanism cerute de ea și hotărârile care o pomenesc
+  var FORME = /\b(s\.?\s?c\.?|s\.?\s?r\.?\s?l\.?|s\.?\s?a\.?|s\.?\s?n\.?\s?c\.?|p\.?\s?f\.?\s?a\.?|i\.?\s?i\.?|i\.?\s?f\.?|societatea|comerciala|companie)(?=\s|$|[,.;)])/g;
+  function firmaRx(nume) {
+    var t = norm(nume).replace(/[„”"'«»(),.;:&-]+/g, " ").replace(FORME, " ").split(/\s+/).filter(function (w) { return w.length >= 3; });
+    if (!t.length || !t.some(function (w) { return w.length >= 4; })) return null;
+    var esc_ = function (w) { return w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); };
+    // un singur cuvânt (ex. „ASFALT”): doar urmat de forma juridică, ca să nu prindem cuvântul obișnuit
+    // la începutul numelui (sau după „S.C.”/ghilimele) și urmat imediat de forma juridică
+    return t.length === 1 ? new RegExp("(^|s\\.?\\s?c\\.?[\\s\"„,.]*|[\"„]\\s*)" + esc_(t[0]) + "[\\s,.\"”]+(s\\.?\\s?r\\.?\\s?l|s\\.?\\s?a)\\b") : new RegExp("(^|[^a-z0-9])" + t.map(esc_).join("[\\s,.&-]+") + "([^a-z0-9]|$)");
+  }
+  function firmaAlte(el, nume) {
+    var rx = firmaRx(nume); if (!el || !rx) return;
+    if (!URB) { get(DATA + "urbanism.json").then(function (d) { URB = d; firmaAlte(el, nume); }).catch(function () { URB = { cu: [], ac: [] }; }); return; }
+    var acte = []; ["ac", "cu"].forEach(function (t) { (URB[t] || []).forEach(function (a) { if (a.pj && rx.test(norm(a.solicitant))) acte.push({ t: t, a: a }); }); });
+    var H = (L.hcl || []).filter(function (h) { return rx.test(norm(h.titlu)); });
+    var C = (L.contracte || []).filter(function (c) { return rx.test(norm(c.titlu)); });
+    if (!acte.length && !H.length && !C.length) return;
+    el.innerHTML = '<section class="card section"><h2>Alte legături cu orașul</h2><p class="note">Găsite după numele firmei în registrele de urbanism, în titlurile hotărârilor și ale contractelor publicate pe site. Verifică în documente: o firmă cu nume asemănător poate apărea și ea.</p>' +
+      (acte.length ? "<h3>Autorizații de construire și certificate de urbanism (" + acte.length + ")</h3>" + acte.slice(0, 30).map(function (x) {
+        return '<div class="doc"><div class="h"><span class="id">' + (x.t === "ac" ? "AC " : "CU ") + esc(x.a.nr || "") + " · " + esc(zi(x.a.data)) + '</span><span class="tag">' + esc(x.a.categorie || "") + "</span>" + (x.a.strada ? '<span class="muted">' + esc(x.a.strada) + "</span>" : "") +
+          '</div><div class="t">' + esc((x.a.scop || "").slice(0, 240)) + '</div><div class="m">' + (safeUrl(x.a.registru_pdf) ? '<a class="lk" href="' + esc(x.a.registru_pdf) + '" rel="noopener">registrul</a>' : "") + "</div></div>"; }).join("") : "") +
+      (H.length ? "<h3>Hotărâri ale consiliului local (" + H.length + ")</h3>" + H.slice(0, 30).map(function (h) { return doc(linkHcl(h), h.titlu, h.data ? "adoptată " + zi(h.data) : "", h); }).join("") : "") +
+      (C.length ? "<h3>Contracte publicate pe site-ul primăriei (" + C.length + ")</h3>" + C.slice(0, 30).map(function (c) { return doc("Contract", c.titlu, c.postat ? "publicat " + zi(c.postat) : "", c); }).join("") : "") + "</section>";
+  }
   function sxFurnizor(el, r, cui) {
     var f = SX.fcui[cui];
     var inapoi = '<p class="back"><a href="#achizitii/sicap">← Toate achizițiile</a></p>';
@@ -1384,8 +1408,9 @@
       if (ne.length) h += '<p class="callout">' + ne.length + (ne.length === 1 ? " achiziție directă nu s-a încheiat" : " achiziții directe nu s-au încheiat") + " (" + esc(Array.from(new Set(ne.map(function (x) { return (x.stare || "").toLowerCase(); }))).join(", ")) + "), în valoare de " + lei(ne.reduce(function (a, x) { return a + (x.lei || 0); }, 0)) + ". Nu sunt bani primiți și nu intră în totaluri; apar în lista de mai jos, marcate.</p>";
       if (ab.length) h += '<p class="callout">' + ab.length + (ab.length === 1 ? " achiziție are" : " achiziții au") + " în SICAP o valoare de peste 10 ori pragul legal (în total " + lei(ab.reduce(function (a, x) { return a + (x.lei || 0); }, 0)) + "), aproape sigur o greșeală de introducere. Nu intră în totalurile de mai sus; apar în lista de mai jos, marcate.</p>";
       if (!SX.castigatori) h += '<p class="note">Contractele atribuite prin licitație nu au încă furnizorul câștigător în datele noastre; apar după următoarea colectare.</p>';
-      h += '<section class="card section"><h2>Toate achizițiile de la acest furnizor</h2><div id="sx-l"></div></section>';
+      h += '<div id="fn-alte"></div><section class="card section"><h2>Toate achizițiile de la acest furnizor</h2><div id="sx-l"></div></section>';
       el.innerHTML = h;
+      firmaAlte($("fn-alte"), Fn[1] || "");
       chart($("ch-fa"), { cats: A, stacked: true, label: "Valoarea pe ani",
         series: serii.map(function (s) { return { name: s.name, color: s.color, values: A.map(function (y) { var g = gA[y]; return g ? rot(s.k.reduce(function (a, k) { return a + (g.pe[k] || 0); }, 0), u) : 0; }) }; }),
         labelValue: function (i) { var g = gA[A[i]]; return g && g.v ? eti(g.v, u) : ""; },
@@ -2499,12 +2524,18 @@
       "<li><b>Voturile</b> sunt extrase automat din procesele-verbale, deci pot avea erori; fiecare vot are alături fragmentul de text din care a fost extras.</li>" +
       "<li><b>Rezumatele ședințelor</b> sunt scrise cu ajutorul inteligenței artificiale din înregistrare și documente, apoi citite, corectate și aprobate de un om din echipă înainte de publicare.</li>" +
       "<li><b>Greșelile</b> le corectăm când le aflăm. Spune-ne dacă vezi una.</li></ol></section>" +
+      '<section class="card section" id="date-deschise"><h2>Date deschise</h2><p class="note">Datele monitorului, în fișiere CSV pe care le deschizi în Excel sau LibreOffice (separator „;”, UTF-8), actualizate zilnic. Le poți folosi liber, cu mențiunea sursei: Monitor local, Asociația Rădăuțiul Civic. Datele sunt extrase automat din documente publice; verifică în documentul-sursă înainte de a cita o cifră.</p><div id="dd-l"><p class="updated">Se încarcă lista...</p></div></section>' +
       '<section class="card section ct" id="contact"><h2>Ai găsit o greșeală? Scrie-ne</h2>' +
       '<p class="note">Mesajul ajunge doar la echipa monitorului. Numele și e-mailul sunt opționale; le folosim doar ca să-ți putem răspunde.</p>' +
       '<form id="ct-f" novalidate><label>Mesajul<textarea id="ct-m" rows="5" required maxlength="4000" placeholder="Ce ai observat? Dacă e despre un document anume, spune-ne care."></textarea></label>' +
       '<div class="ct-r"><label>Numele (opțional)<input id="ct-n" maxlength="120" autocomplete="name"></label><label>E-mailul (opțional)<input id="ct-e" type="email" maxlength="200" autocomplete="email"></label></div>' +
       '<label class="ct-h" aria-hidden="true">Site<input id="ct-s" tabindex="-1" autocomplete="off"></label>' +
       '<div class="ct-a"><button class="btn ok" type="submit">Trimite mesajul</button><span id="ct-o" role="status"></span></div></form></section>';
+    get(FTDATA + "deschise/index.json").then(function (I) {
+      $("dd-l").innerHTML = '<ul class="src">' + I.map(function (x) {
+        return '<li><a href="' + FTDATA + "deschise/" + esc(x.fisier) + '" download><b>' + esc(x.fisier) + "</b></a><span>" + esc(x.descriere) + " · " + nr(x.randuri) + " rânduri" + (x.octeti ? " · " + gb(x.octeti) : "") + "</span></li>";
+      }).join("") + "</ul>";
+    }).catch(function () { $("dd-l").innerHTML = '<p class="empty">Fișierele apar după următoarea colectare.</p>'; });
     var f = $("ct-f"), o = $("ct-o"), pag = (document.referrer || "").indexOf(location.host) >= 0 ? document.referrer : "";
     f.addEventListener("submit", function (e) {
       e.preventDefault();
