@@ -9,6 +9,9 @@ on:
       cheie:
         description: "Cheia publică RSA (PEM) cu care se criptează; „sterge” șterge ramura cu datele"
         required: true
+      texte:
+        description: "Opțional, pentru dezvoltare: baza de date și textele documentelor din aceste surse (ex. hcl,dispozitii), tot criptate"
+        default: ""
 
 permissions:
   contents: write
@@ -26,6 +29,8 @@ jobs:
         if: inputs.cheie != 'sterge'
         with:
           python-version: "3.12"
+      - run: pip install requests
+        if: inputs.cheie != 'sterge'
       - name: "Datele colectate (doar citire)"
         if: inputs.cheie != 'sterge'
         uses: actions/cache/restore@v4
@@ -37,6 +42,7 @@ jobs:
         if: inputs.cheie != 'sterge'
         env:
           CHEIE: ${{ inputs.cheie }}
+          TEXTE: ${{ inputs.texte }}
         run: |
           python - <<'PY'
           import os, sys, tarfile
@@ -49,6 +55,30 @@ jobs:
                   p = os.path.join("data", d, "index.json")
                   if os.path.exists(p):
                       t.add(p, arcname="s/index.json")
+              surse = [x for x in os.environ.get("TEXTE", "").split(",") if x]
+              if surse:
+                  import sqlite3, json
+                  sys.path.insert(0, ".")
+                  t.add("data/monitor.sqlite", arcname="db/monitor.sqlite")
+                  db = sqlite3.connect("data/monitor.sqlite")
+                  q = "SELECT d.text_path FROM documents d JOIN posts p ON p.wp_id=d.wp_id WHERE d.text_path IS NOT NULL AND p.source IN (%s)" % ",".join("?" * len(surse))
+                  n = 0
+                  for (tp,) in db.execute(q, surse):
+                      if os.path.exists(tp):
+                          t.add(tp, arcname="db/" + tp); n += 1
+                  # documentele hotărârilor din arhivă (fără postare)
+                  if "hcl" in surse:
+                      for (tp,) in db.execute("SELECT text_path FROM documents WHERE wp_id IS NULL AND text_path IS NOT NULL"):
+                          if os.path.exists(tp):
+                              t.add(tp, arcname="db/" + tp); n += 1
+                  print(n, "texte")
+                  try:
+                      from monitor_colector import collect
+                      cat = [dict(c) if isinstance(c, dict) else c for c in collect.discover()]
+                      open("/tmp/categorii.json", "w").write(json.dumps(cat, ensure_ascii=False, default=str))
+                      t.add("/tmp/categorii.json", arcname="db/categorii.json")
+                  except Exception as e:
+                      print("categorii:", e)
           print(os.path.getsize("/tmp/date.tar.gz"), "octeți")
           PY
           printf '%s\n' "$CHEIE" | sed 's/\\n/\n/g' > /tmp/pub.pem
