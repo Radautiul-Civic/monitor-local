@@ -672,3 +672,15 @@ h3.an-h{margin:18px 0 4px;font-size:.95rem;color:var(--ink-2)}
 .sx-col-h{min-height:0}
 @media (max-width:900px){.sx-cols{grid-template-columns:repeat(2,minmax(0,1fr))}.sx-cols>.sx-col,.sx-cols>.sx-col:nth-child(n+4){grid-column:span 1}.sx-cols>.sx-col:last-child{grid-column:1/-1}}
 @media (max-width:640px){.sx-cols{grid-template-columns:minmax(0,1fr);overflow:visible}.sx-cols>.sx-col,.sx-cols>.sx-col:nth-child(n+4),.sx-cols>.sx-col:last-child{grid-column:auto}.sx-col-l.sx-feed-l{max-height:320px}}
+
+/* ferestrele de pe hartă: textul se rupe, iar pe telefon eticheta stă deasupra valorii */
+.pop-act{overflow-wrap:anywhere;word-break:break-word}
+.pop-act td{min-width:0}
+.leaflet-popup-content{margin:12px 14px}
+@media (max-width:640px){
+  .pop-act table,.pop-act tbody,.pop-act tr,.pop-act th,.pop-act td{display:block;width:auto}
+  .pop-act tr{padding:4px 0;border-bottom:1px solid #eee}
+  .pop-act th{white-space:normal;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#777;padding:0}
+  .pop-act td{padding:0 0 2px}
+  .leaflet-popup-content{margin:10px 12px;font-size:13px}
+}

@@ -1840,7 +1840,7 @@
       var g = Lf.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 36 }); m.addLayer(g);
       D.filter(function (x) { return x.lat; }).forEach(function (x) {
         g.addLayer(Lf.circleMarker([x.lat, x.lon], { radius: 7, color: "#fff", weight: 1.5, fillOpacity: .9, fillColor: getComputedStyle(document.documentElement).getPropertyValue(FEL_PAT[x.fel][1].slice(4, -1)).trim() || "#2a78d6" })
-          .bindPopup("<b>" + esc(FEL_PAT[x.fel][0]) + "</b> · " + linkHcl(x) + " · " + esc(zi(x.data)) + "<br>" + esc(x.titlu.slice(0, 260))));
+          .bindPopup('<div class="pop-act"><b>' + esc(FEL_PAT[x.fel][0]) + "</b> · " + linkHcl(x) + " · " + esc(zi(x.data)) + '<div class="pop-scop">' + esc(x.titlu.slice(0, 260)) + "</div></div>", popOpt(m)));
       });
     }).catch(function () { $("pat-map").innerHTML = '<p class="empty">Harta nu s-a putut încărca.</p>'; });
   }
@@ -1938,7 +1938,7 @@
         grup.clearLayers();
         grup.addLayers(pe.map(function (x) {
           var aprox = x.a.precizie === "stradă";
-          return Lf.circleMarker([x.a.lat, x.a.lon], { radius: 7, weight: 1.5, color: "#fff", fillColor: aprox ? cul.ap : cul[x.t], fillOpacity: aprox ? 0.75 : 0.95 }).bindPopup(actPopup(x), { maxWidth: 380, maxHeight: 360 });
+          return Lf.circleMarker([x.a.lat, x.a.lon], { radius: 7, weight: 1.5, color: "#fff", fillColor: aprox ? cul.ap : cul[x.t], fillOpacity: aprox ? 0.75 : 0.95 }).bindPopup(actPopup(x), popOpt(m));
         }));
         $("m-n").textContent = nr(pe.length) + " pe hartă, din " + nr(sel.length) + (sel.length - pe.length ? " (" + nr(sel.length - pe.length) + " fără adresă găsită încă)" : "");
       }
@@ -2799,6 +2799,11 @@
     ["sup_construita", "Suprafața construită"], ["sup_desfasurata", "Suprafața desfășurată"], ["nr_ap", "Apartamente"], ["valoare", "Valoarea lucrărilor"],
     ["proiectant", "Proiectant"], ["executant", "Executant"], ["data_inceperii", "Începerea lucrărilor"], ["data_finalizarii", "Finalizarea lucrărilor"],
     ["data_expirarii", "Valabil până la"], ["observatii", "Observații"]];
+  // fereastra de pe hartă încape în hartă și pe telefon (harta are acolo ~340 px lățime)
+  function popOpt(m) {
+    var z = m.getSize(), w = Math.max(200, Math.min(380, z.x - 56));
+    return { maxWidth: w, minWidth: Math.min(260, w), maxHeight: Math.max(220, Math.min(360, z.y - 90)), autoPanPadding: [12, 12], className: "pop-mic" };
+  }
   function actPopup(x) {
     var a = x.a, f = safeUrl(a.registru_pdf), pg = safeUrl(a.registru_pagina);
     var rand = function (k, e) { var v = a[k]; if (v == null || v === "") return ""; if (k === "valoare") v = lei(v); else if (/^data_/.test(k)) v = zi(v); else if (/^sup_/.test(k)) v = v + " mp"; return "<tr><th>" + esc(e) + "</th><td>" + esc(v) + "</td></tr>"; };
@@ -2876,7 +2881,7 @@
         acte.forEach(function (x) {
           if (!x.a.lat) return; pts.push([x.a.lat, x.a.lon]);
           grup.addLayer(Lf.circleMarker([x.a.lat, x.a.lon], { radius: 8, weight: 1.5, color: "#fff", fillColor: cul[x.t], fillOpacity: 0.9 })
-            .bindPopup(actPopup(x), { maxWidth: 380, maxHeight: 360, autoPanPadding: [20, 20] }));
+            .bindPopup(actPopup(x), popOpt(m)));
         });
         if (pts.length === 1) m.setView(pts[0], 17); else m.fitBounds(pts, { padding: [24, 24], maxZoom: 17 });
       }).catch(function () { if ($("s-map")) $("s-map").innerHTML = '<p class="empty" style="padding:16px">Harta nu s-a putut încărca.</p>'; });
