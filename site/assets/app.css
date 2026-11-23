@@ -713,3 +713,13 @@ h3.an-h{margin:18px 0 4px;font-size:.95rem;color:var(--ink-2)}
 .vr.z{color:var(--ink-2)}
 .tx-t td.n,.tx-t th.n{text-align:right;white-space:nowrap}
 .tx-t td:first-child{max-width:520px}
+
+/* ilustrațiile secțiunilor, în dreapta titlului */
+.ph-top{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:28px;align-items:center}
+.ph-ilu{margin:0;border-radius:16px;overflow:hidden;aspect-ratio:3/2;border:1px solid var(--line);box-shadow:0 6px 20px rgba(20,30,50,.08);background:var(--line)}
+.ph-ilu img{width:100%;height:100%;object-fit:cover;display:block}
+@media (max-width:820px){.ph-top{grid-template-columns:minmax(0,1fr) 200px;gap:18px}}
+@media (max-width:640px){.ph-top{grid-template-columns:1fr;gap:12px}.ph-ilu{order:-1;aspect-ratio:auto;height:130px}.ph-ilu img{object-position:center 60%}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ph-ilu img{filter:brightness(.88)}}
+:root[data-theme="dark"] .ph-ilu img{filter:brightness(.88)}
+.tile .val small{overflow-wrap:anywhere}

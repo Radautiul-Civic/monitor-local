@@ -70,11 +70,20 @@
     if (i < 40 || i > text.length - 30 || (tag >= 0 && tag < i)) return "<p>" + text + "</p>";
     return "<p>" + text.slice(0, i + 1) + '</p><details class="info"><summary>Mai mult despre pagină</summary><p>' + text.slice(i + 2) + "</p></details>";
   }
+  // ilustrațiile secțiunilor (assets/img/sec/*.webp), pe paginile principale ale fiecărei secțiuni și subsecțiuni
+  var ILU = { acasa: "acasa", strada: "strada", "consiliu/urmatoare": "consiliu", "consiliu/proiecte": "proiecte", "consiliu/sedinte": "sedinte", "consiliu/consilieri": "consilieri",
+    "primarie/buget": "buget", "primarie/investitii": "investitii", "primarie/taxe": "taxe", "primarie/patrimoniu": "patrimoniu", "primarie/finantari": "finantari",
+    "primarie/dispozitii": "dispozitii", "primarie/rapoarte": "rapoarte", "primarie/urbanism": "urbanism", achizitii: "achizitii", litigii: "achizitii", angajari: "angajari",
+    cauta: "cauta", texte: "cauta", despre: "despre" };
   function head(title, text, r, share) {
-    var sid = r ? r.s.id : (route().s || {}).id, icn = SEC_IC[sid];
-    var foto = sid === "consiliu" && r && !r.rest.length && !share ? '<figure class="ph-foto"><picture><source type="image/webp" srcset="' + BASE + 'assets/img/consiliu.webp">' +
+    var rr = r || route(), sid = (rr.s || {}).id, icn = SEC_IC[sid];
+    var ilu = !share && (!rr.rest.length || rr.sub === "urbanism") ? (ILU[sid + "/" + rr.sub] || ILU[sid]) : null;
+    if (sid === "consiliu" && rr.sub === "hcl") ilu = null;   // la hotărâri rămâne fotografia reală a consiliului
+    var foto = sid === "consiliu" && rr.sub === "hcl" && r && !r.rest.length && !share ? '<figure class="ph-foto"><picture><source type="image/webp" srcset="' + BASE + 'assets/img/consiliu.webp">' +
       '<img src="' + BASE + 'assets/img/consiliu.jpg" alt="Ședință a Consiliului Local al Municipiului Rădăuți" width="1024" height="541" loading="lazy"></picture></figure>' : "";
-    var h = foto + '<div class="page-head' + (foto ? " cu-foto" : "") + '"><div class="ph-t">' + (icn ? '<span class="ph-ic">' + ic(icn) + "</span>" : "") + "<h1>" + esc(title) + "</h1>" + (share ? shareBtn(share[0], share[1]) : "") + "</div>" + scurtText(text);
+    var h = foto + '<div class="page-head' + (foto ? " cu-foto" : "") + (ilu ? " cu-ilu" : "") + '">' + (ilu ? '<div class="ph-top"><div class="ph-main">' : "") +
+      '<div class="ph-t">' + (icn ? '<span class="ph-ic">' + ic(icn) + "</span>" : "") + "<h1>" + esc(title) + "</h1>" + (share ? shareBtn(share[0], share[1]) : "") + "</div>" + scurtText(text) +
+      (ilu ? '</div><figure class="ph-ilu"><img src="' + BASE + "assets/img/sec/" + ilu + '.webp" alt="" width="720" height="480" decoding="async"></figure></div>' : "");
     if (r && r.s.sub && r.s.sub.length > 1) h += '<div class="subnav">' + r.s.sub.map(function (x) {
       return '<a href="#' + r.s.id + "/" + x[0] + '"' + (x[0] === r.sub ? ' aria-current="page"' : "") + ">" + esc(x[1]) + "</a>";
     }).join("") + "</div>";
