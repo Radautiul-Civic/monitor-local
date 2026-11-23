@@ -1916,6 +1916,7 @@
           pe[k].map(function (t) { var p = prev[norm(t.categorie + "|" + t.denumire)];
             return "<tr><td>" + esc(t.denumire) + '</td><td class="n">' + valTaxa(t.valoare, t.unitate) + "</td>" + (pa ? '<td class="n">' + (p ? valTaxa(p.valoare, p.unitate) : '<span class="muted">-</span>') + '</td><td class="n">' + (p && p.unitate === t.unitate ? variatie(p.valoare, t.valoare) : "") + "</td>" : "") + "</tr>"; }).join("") +
           "</tbody></table></div>"; }).join("") : '<p class="empty">Nicio taxă găsită.</p>');
+      Array.prototype.forEach.call($("tx-l").querySelectorAll("table"), sortabil);
     }
     ["tx-an", "tx-cat"].forEach(function (id) { $(id).addEventListener("change", desen); });
     $("tx-q").addEventListener("input", desen);
@@ -1977,6 +1978,7 @@
     if (P.length) chart($("ch-fin"), { cats: P.map(function (x) { return x.anul_programului; }), stacked: true, label: "Finanțări nerambursabile pe ani",
       series: dk.map(function (k) { return { name: DOM_FIN[k][0], color: DOM_FIN[k][1], values: P.map(function (x) { return Math.round(((x.domenii || {})[k] || 0) / 1000); }) }; }),
       labelValue: function (i) { return Math.round(P[i].total / 1000); }, tooltip: function (i) { return "<b>" + P[i].anul_programului + "</b>: " + lei(P[i].total) + "<br>" + Object.keys(P[i].domenii || {}).map(function (k) { return (DOM_FIN[k] || [k])[0] + ": " + lei(P[i].domenii[k]); }).join("<br>"); } });
+    Array.prototype.forEach.call(el.querySelectorAll("table.fin-t"), sortabil);
     if (P.length) chart($("ch-fin2"), { cats: P.map(function (x) { return x.anul_programului; }), grouped: true, label: "Finanțări nerambursabile pe categorii și ani (mii lei)",
       series: dk.map(function (k) { return { name: DOM_FIN[k][0], color: DOM_FIN[k][1], values: P.map(function (x) { return Math.round(((x.domenii || {})[k] || 0) / 1000); }) }; }),
       tooltip: function (i) { return "<b>" + P[i].anul_programului + "</b><br>" + dk.map(function (k) { var v = (P[i].domenii || {})[k]; return v ? DOM_FIN[k][0] + ": " + lei(v) : ""; }).filter(Boolean).join("<br>"); } });
@@ -2375,6 +2377,34 @@
     });
     return st;
   }
+  // tabel sortabil: click pe capul unei coloane (data-ns="1" = nesortabilă); valoarea din data-v, altfel textul celulei
+  function sortabil(tb) {
+    var ths = tb.querySelectorAll("thead th"), body = tb.tBodies[0]; if (!body) return;
+    var val = function (tr, i) {   // celula din coloana i, ținând cont de colspan (o celulă întinsă peste coloană = fără valoare)
+      var k = 0, td = null;
+      for (var j = 0; j < tr.cells.length; j++) { var c = tr.cells[j], w = c.colSpan || 1; if (i < k + w) { td = w === 1 ? c : null; break; } k += w; }
+      if (!td) return ""; var v = td.getAttribute("data-v"); return v != null ? v : td.textContent.trim();
+    };
+    Array.prototype.forEach.call(ths, function (th, i) {
+      if (th.getAttribute("data-ns")) return;
+      th.classList.add("srt"); th.tabIndex = 0; th.setAttribute("aria-sort", "none"); th.title = "Sortează";
+      var go = function () {
+        var rows = Array.prototype.slice.call(body.rows), num = rows.some(function (tr) { return val(tr, i) !== ""; }) && rows.every(function (tr) { var v = val(tr, i); return v === "" || !isNaN(+v); });
+        var dir = th.getAttribute("aria-sort") === (num ? "descending" : "ascending") ? (num ? 1 : -1) : (num ? -1 : 1);
+        rows.sort(function (a, b) {
+          var x = val(a, i), y = val(b, i);
+          if (num) { x = x === "" ? -Infinity : +x; y = y === "" ? -Infinity : +y; return (x - y) * dir || (a.getAttribute("data-n") || "").localeCompare(b.getAttribute("data-n") || "", "ro"); }
+          return String(x).localeCompare(String(y), "ro") * dir;
+        });
+        rows.forEach(function (tr) { body.appendChild(tr); });
+        Array.prototype.forEach.call(ths, function (t) { if (t !== th && t.classList.contains("srt")) t.setAttribute("aria-sort", "none"); });
+        th.setAttribute("aria-sort", dir > 0 ? "ascending" : "descending");
+        Array.prototype.forEach.call(body.querySelectorAll("td.nrc"), function (td, k) { td.textContent = k + 1; });
+      };
+      th.addEventListener("click", go);
+      th.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+    });
+  }
   function pctPrez(st) { var t = st.prezent + st.absent; return t ? Math.round(100 * st.prezent / t) + "%" : "-"; }
   function linkCons(V, nume) {   // numele unui consilier din PV, cu link la profil (dacă îl recunoaștem)
     var k = norm(nume).replace(/-/g, " ").split(/\s+/).filter(function (w) { return w.length > 1; }).sort().join(" ");
@@ -2395,7 +2425,7 @@
       var cheie = { nume: function (o) { return o.c.nume; }, absente: function (o) { return -o.s.absent; }, imp: function (o) { return -(o.s.I + o.s.A); }, prez: function (o) { var t = o.s.prezent + o.s.absent; return t ? o.s.prezent / t : 2; } }[ord] || function (o) { return o.c.nume; };
       rows.sort(function (a, b) { var x = cheie(a), y = cheie(b); return x < y ? -1 : x > y ? 1 : a.c.nume.localeCompare(b.c.nume); });
       var tAbs = rows.reduce(function (a, o) { return a + o.s.absent; }, 0), tImp = rows.reduce(function (a, o) { return a + o.s.I; }, 0), tAbt = rows.reduce(function (a, o) { return a + o.s.A; }, 0);
-      var th = function (k, t) { return '<th' + (k === "nume" ? "" : ' class="n"') + '><a href="#consiliu/consilieri?m=' + encodeURIComponent(ales) + "&o=" + k + '">' + t + (ord === k ? " ▾" : "") + "</a></th>"; };
+      var th = function (k, t) { return "<th" + (k === "nume" ? "" : ' class="n"') + ">" + t + "</th>"; };
       var curent = ales === (M.length ? M[M.length - 1][0] : "");
       var evMand = function (c) { return (c.evenimente || []).filter(function (e) { return e.data >= mm[1] && e.data < mm[2]; }); };
       var incetare = function (o) {   // data și motivul încetării mandatului în legislatura aleasă (sau null)
@@ -2411,7 +2441,7 @@
       });
       incetati.sort(function (a, b) { return a.inc.d < b.inc.d ? -1 : 1; });
       var tabel = function (L2, inc) {
-        return '<div class="tw"><table class="cs-t"><thead><tr>' + (inc ? "" : '<th class="n">Nr.</th>') + th("nume", "Consilier") + "<th>Partid</th>" + (inc ? "<th>În consiliu</th><th>Mandat încetat</th>" : "") +
+        return '<div class="tw"><table class="cs-t srt-t"><thead><tr>' + (inc ? "" : '<th class="n" data-ns="1">Nr.</th>') + th("nume", "Consilier") + "<th>Partid</th>" + (inc ? "<th>În consiliu</th><th>Mandat încetat</th>" : "") +
           th("prez", "Prezență") + th("absente", "Absențe") + th("imp", "Împotrivă / abțineri") + '<th class="n">Nu a votat</th><th class="n">Pentru (dedus)</th><th class="n">Necunoscut</th><th class="n">Rapoarte de activitate</th></tr></thead><tbody>' +
           L2.map(function (o, i) {
             var s = o.s, k = o.k || (curent ? compDe(o.c.id) : null), val = evMand(o.c).filter(function (e) { return e.fel === "validare"; })[0];
@@ -2421,13 +2451,15 @@
             var nume = k && tk(k.nume) !== tk(o.c.nume) && tk(k.nume).length === tk(o.c.nume).length ? k.nume : o.c.nume;
             var link = o.c.id && s ? '<a href="#consiliu/consilieri/' + encodeURIComponent(o.c.id) + '"><strong>' + esc(nume) + "</strong></a>" : "<strong>" + esc(nume) + "</strong>";
             var nou = val ? '<span class="tag">validat ' + esc(zi(val.data)) + "</span>" : k && k.nou ? '<span class="tag">din ' + esc(zi(k.nou.din)) + "</span>" : "";
-            return "<tr>" + (inc ? "" : '<td class="n nrc">' + (i + 1) + "</td>") + '<td class="cs-n"><span class="cs-nm">' + avatar(k, o.c.nume, false, true) + "<span>" + link + (nou ? "<br>" + nou : "") + "</span></span></td>" +
+            var tot = s ? s.prezent + s.absent : 0, nRap = rapoarteCons(o.c).length;
+            return '<tr data-n="' + esc(norm(nume)) + '" data-p="' + esc((k && k.partid) || "") + '">' + (inc ? "" : '<td class="n nrc">' + (i + 1) + "</td>") + '<td class="cs-n" data-v="' + esc(nume) + '"><span class="cs-nm">' + avatar(k, o.c.nume, false, true) + "<span>" + link + (nou ? "<br>" + nou : "") + "</span></span></td>" +
               '<td class="cs-p">' + (k && k.sigla ? '<img src="' + FTDATA + esc(k.sigla) + '" alt="" loading="lazy" onerror="this.remove()">' : "") + esc((k && k.partid) || "") + "</td>" +
-              (inc ? '<td class="nw">' + p.map(function (x) { return esc(zi(x[0])) + " - " + esc(zi(x[1])); }).join("<br>") + '</td><td class="inc">' + esc(zi(o.inc.d)) +
+              (inc ? '<td class="nw" data-v="' + esc((p[0] || [""])[0]) + '">' + p.map(function (x) { return esc(zi(x[0])) + " - " + esc(zi(x[1])); }).join("<br>") + '</td><td class="inc" data-v="' + esc(o.inc.d || "") + '">' + esc(zi(o.inc.d)) +
                 (o.inc.h ? " · " + linkHcl(o.inc.h) : "") + (o.inc.t ? '<details class="more-t"><summary>detalii</summary><div class="muted">' + esc(o.inc.t) + "</div></details>" : "") + "</td>" : "") +
-              (s ? '<td class="n">' + pctPrez(s) + '</td><td class="n">' + nr(s.absent) + '</td><td class="n">' + nr(s.I) + " / " + nr(s.A) + '</td><td class="n">' + nr(s.N) + '</td><td class="n">' + nr(s.P) + '</td><td class="n">' + nr(s["?"]) + "</td>"
+              (s ? '<td class="n" data-v="' + (tot ? s.prezent / tot : -1) + '">' + pctPrez(s) + '</td><td class="n" data-v="' + s.absent + '">' + nr(s.absent) + '</td><td class="n" data-v="' + (s.I + s.A) + '">' + nr(s.I) + " / " + nr(s.A) +
+                '</td><td class="n" data-v="' + s.N + '">' + nr(s.N) + '</td><td class="n" data-v="' + s.P + '">' + nr(s.P) + '</td><td class="n" data-v="' + s["?"] + '">' + nr(s["?"]) + "</td>"
                 : '<td class="n muted" colspan="6">încă fără procese-verbale publicate</td>') +
-              '<td class="n">' + (function () { var n_ = rapoarteCons(o.c).length; return n_ ? '<a href="#consiliu/consilieri/' + encodeURIComponent(o.c.id) + '">' + n_ + "</a>" : '<span class="muted">0</span>'; })() + "</td></tr>";
+              '<td class="n" data-v="' + nRap + '">' + (function () { var n_ = nRap; return n_ ? '<a href="#consiliu/consilieri/' + encodeURIComponent(o.c.id) + '">' + n_ + "</a>" : '<span class="muted">0</span>'; })() + "</td></tr>";
           }).join("") + "</tbody></table></div>";
       };
       el.innerHTML = head("Consiliul Local", "Consilierii locali: prezența la ședințe și cum au votat, din procesele-verbale (extrase automat; pot avea erori).", r) +
@@ -2438,13 +2470,22 @@
         (curent && safeUrl(COMP.sursa) ? '<a href="' + esc(COMP.sursa) + '" rel="noopener">componența pe site-ul primăriei</a>' : "") + "</div>" +
         '<p class="note">Lista e reconstruită din procesele-verbale (președinții de ședință, absenții, cei prezenți online și cei care au votat împotrivă, s-au abținut sau nu au votat), din hotărârile despre mandate și, pentru mandatul actual, din pagina „Componența” a primăriei (fotografii, partide, declarații). ' +
         "Procesele-verbale numesc doar consilierii care nu au votat „pentru”; votul „pentru” al fiecăruia îl deducem doar când știm sigur cine era în sală. Cifrele sunt extrase automat și se verifică pe documente.</p>" +
+        '<div class="filters cs-f"><input type="search" id="cs-q" placeholder="Caută un consilier" aria-label="Caută un consilier"><select id="cs-p" aria-label="Partidul"><option value="">Toate partidele</option>' +
+        Object.keys(activi.concat(incetati).reduce(function (a, o) { var k = o.k || (curent ? compDe(o.c.id) : null); if (k && k.partid) a[k.partid] = 1; return a; }, {})).sort().map(function (p_) { return "<option>" + esc(p_) + "</option>"; }).join("") +
+        '</select><span class="muted cs-h">Apasă pe capul unei coloane ca să sortezi după ea.</span></div>' +
         tabel(activi, false) + "</section>" +
         (incetati.length ? '<section class="card section"><h2>Mandat încetat în această legislatură <span class="nr-b n">' + incetati.length + "</span></h2>" +
           '<p class="note">Consilieri care au plecat din consiliu înainte de sfârșitul mandatului: demisie, incompatibilitate, pierderea calității de membru al partidului și alte cazuri prevăzute de lege. Locul lor e preluat de supleanți de pe aceeași listă.</p>' +
           tabel(incetati, true) + "</section>" : "") +
         '<section class="card section"><h2>Absențe, pe consilieri</h2>' + hbl(rows.slice().sort(function (a, b) { return b.s.absent - a.s.absent; }).filter(function (o) { return o.s.absent; }).slice(0, 25).map(function (o) {
           return { l: o.c.nume, v: o.s.absent, href: "#consiliu/consilieri/" + encodeURIComponent(o.c.id) }; }), nr, tAbs) + "</section>";
-      $("c-m").addEventListener("change", function () { location.hash = "#consiliu/consilieri?m=" + encodeURIComponent(this.value) + "&o=" + ord; });
+      $("c-m").addEventListener("change", function () { location.hash = "#consiliu/consilieri?m=" + encodeURIComponent(this.value); });
+      Array.prototype.forEach.call(el.querySelectorAll("table.srt-t"), sortabil);
+      var filtru = function () {
+        var q = norm($("cs-q").value).trim(), p_ = $("cs-p").value;
+        Array.prototype.forEach.call(el.querySelectorAll("table.cs-t tbody tr"), function (tr) { tr.hidden = !!((q && (tr.dataset.n || "").indexOf(q) < 0) || (p_ && tr.dataset.p !== p_)); });
+      };
+      $("cs-q").addEventListener("input", filtru); $("cs-p").addEventListener("change", filtru);
     });
   }
   // rapoartele de activitate ale unui consilier (din pagina „Rapoarte de activitate” a primăriei), după numele din titlu

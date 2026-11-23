@@ -723,3 +723,13 @@ h3.an-h{margin:18px 0 4px;font-size:.95rem;color:var(--ink-2)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ph-ilu img{filter:brightness(.88)}}
 :root[data-theme="dark"] .ph-ilu img{filter:brightness(.88)}
 .tile .val small{overflow-wrap:anywhere}
+
+/* tabele sortabile */
+th.srt{cursor:pointer;user-select:none;white-space:normal}
+th.srt:hover{color:var(--ink)}
+th.srt::after{content:"↕";opacity:.35;margin-left:4px;font-size:.85em}
+th.srt[aria-sort="ascending"]::after{content:"▲";opacity:.9}
+th.srt[aria-sort="descending"]::after{content:"▼";opacity:.9}
+th.srt:focus-visible{outline:2px solid var(--sec,var(--c1));outline-offset:-2px}
+.cs-f{margin:6px 0 10px;align-items:center}
+.cs-f .cs-h{font-size:.82rem}
