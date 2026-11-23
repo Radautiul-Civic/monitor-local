@@ -46,6 +46,26 @@ def _obiect(t):
     return t[:1].upper() + t[1:]
 
 
+IMP_RX = [(r"buget|rectific", 5), (r"impozit|tax[ae]|tarif|pret|majorar", 5), (r"vanzar|vinde|concesion|inchiri|schimb de teren|dezmembr|alipir", 4),
+          (r"investit|indicator|modernizar|reabilit|construir|asfalt|extinder", 4), (r"imprumut|credit|finantar|cofinant|pnrr|fonduri", 4),
+          (r"\bpuz\b|\bpug\b|\bpud\b|urbanis", 3), (r"strategi|regulament|organigram|stat de functii|salariz", 3),
+          (r"asociati|societat|servicii comunale|aga\b|consiliul de administratie", 2)]
+IMP_NU = r"proces(ul)?.verbal|presedinte(lui)? de sedinta|ordinii de zi|informar|raport(ul)? (de activitate|privind activitatea)|diverse|intrebari|interpelari"
+
+
+def importante(od, n=5):
+    """Punctele cele mai importante de pe ordinea de zi (buget, taxe, terenuri, investiții...), în ordinea lor; la fel ca pe site."""
+    from .parse import norm
+    sc = []
+    for i, p in enumerate(od):
+        t = norm(p.get("text") or "")
+        s = 0 if re.search(IMP_NU, t) else sum(w for rx, w in IMP_RX if re.search(rx, t))
+        if s:
+            sc.append((s, i, p))
+    sc = sorted(sc, key=lambda x: (-x[0], x[1]))[:n]
+    return [p for _, _, p in sorted(sc, key=lambda x: x[1])]
+
+
 def elemente(sed, hcl, rezumate=None, azi=None):
     """Ce se poate distribui: [{cheie, tip, eticheta, titlu, descriere, jos, link}]."""
     azi = azi or date.today()
@@ -61,8 +81,9 @@ def elemente(sed, hcl, rezumate=None, azi=None):
         if r.get("rezumat"):
             descr, et, tip = r["rezumat"], "Rezumatul ședinței", "rezumat"
         else:
-            descr = "Pe ordinea de zi: " + "; ".join(_obiect(p["text"]) for p in od[:4]) + ("..." if len(od) > 4 else "") if od else \
-                "Ordinea de zi e în dispoziția de convocare."
+            imp = importante(od, 4) or od[:4]
+            descr = (f"{len(od)} puncte pe ordinea de zi. Printre cele mai importante: " if len(od) > 4 else "Pe ordinea de zi: ") + \
+                "; ".join(_obiect(p["text"]) for p in imp) if od else "Ordinea de zi e în dispoziția de convocare."
             et, tip = "Ședința Consiliului Local", "sedinta"
         out.append({"cheie": f"sedinta-{d}", "tip": tip, "eticheta": et,
                     "titlu": f"Ședința {TIP_SED.get(c.get('tip'), '')} a Consiliului Local din {zi(d)}".replace("  ", " "),

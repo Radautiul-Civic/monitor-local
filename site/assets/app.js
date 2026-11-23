@@ -2840,7 +2840,7 @@
         ((s.absenti || []).length ? '<p class="note">Prezenți ' + s.prezenti + (s.in_functie ? " din " + s.in_functie : "") + ". Absenți: " + s.absenti.map(function (n) { return linkCons(V, n); }).join(", ") + ".</p>" : "") +
         (s.presedinte ? '<p class="note">Președinte de ședință: ' + linkCons(V, s.presedinte) + ".</p>" : "") + s.voturi.map(function (v) {
         return '<div class="m" style="display:block;margin:6px 0"><strong>' + (v.punct ? "Punctul " + v.punct + ": " : "") + "</strong>" + esc((v.titlu || "proiect neidentificat").slice(0, 200)) +
-          (v.hcl ? " " + linkHcl(v.hcl) : "") + "<br>" + votHtml(v) + "</div>"; }).join("") + "</section>";
+          (v.hcl ? " " + linkHcl(v.hcl) : "") + "<br>" + votHtml(v) + "</div>"; }).join("") + postBox(postDupa(data, s, H, V), "Text gata de postat: cum s-a votat") + "</section>";
     });
   }
 
@@ -3048,6 +3048,37 @@
   function catePana(s) { var n = Math.round((new Date(s + "T12:00:00") - new Date(new Date().toISOString().slice(0, 10) + "T12:00:00")) / 864e5); return n === 0 ? "azi" : n === 1 ? "mâine" : n > 1 ? "peste " + n + " zile" : ""; }
   function incarcaSed() { return SED ? Promise.resolve(SED) : get(DATA + "sedinte.json").then(function (d) { SED = d; return d; }).catch(function () { SED = { urmatoare: [], recente: [], consultare: [] }; return SED; }); }
   function incarcaNou() { return NOU ? Promise.resolve(NOU) : get(DATA + "noutati.json").then(function (d) { NOU = d; return d; }).catch(function () { NOU = { evenimente: [], tipuri: {} }; return NOU; }); }
+  // ---------- Texte gata de postat: înainte de ședință (punctele importante) și după (cum s-a votat) ----------
+  var IMP_RX = [[/buget|rectific/, 5], [/impozit|tax[ae]|tarif|pret|majorar/, 5], [/vanzar|vinde|concesion|inchiri|schimb de teren|dezmembr|alipir/, 4], [/investit|indicator|modernizar|reabilit|construir|asfalt|extinder/, 4],
+    [/imprumut|credit|finantar|cofinant|pnrr|fonduri/, 4], [/\bpuz\b|\bpug\b|\bpud\b|urbanis/, 3], [/strategi|regulament|organigram|stat de functii|salariz/, 3], [/asociati|societat|servicii comunale|aga\b|consiliul de administratie/, 2]];
+  var IMP_NU = /proces(ul)?.verbal|presedinte(lui)? de sedinta|ordinii de zi|informar|raport(ul)? (de activitate|privind activitatea)|diverse|intrebari|interpelari/;
+  function importante(od, n) {
+    return od.map(function (p, i) { var t = norm(p.text || ""), sc = 0; if (!IMP_NU.test(t)) IMP_RX.forEach(function (x) { if (x[0].test(t)) sc += x[1]; }); return { p: p, i: i, sc: sc }; })
+      .filter(function (x) { return x.sc > 0; }).sort(function (a, b) { return b.sc - a.sc || a.i - b.i; }).slice(0, n).sort(function (a, b) { return a.i - b.i; }).map(function (x) { return x.p; });
+  }
+  function scurt(t, n) { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length <= n ? t : t.slice(0, n).replace(/\s+\S*$/, "") + "..."; }
+  function obiectPunct(t) { return scurt(String(t || "").replace(/^\s*(proiect(ul)?\s+de\s+hot[aă]r[aâ]re\s*)?(\(?\s*nr\.?[^,;]*?\)?\s*)?(privind|pentru)\s+/i, "").replace(/\s*[-–]\s*ini[tţț]iat.*$/i, ""), 150); }
+  function postInainte(c) {
+    var od = c.ordinea_de_zi || [], I = importante(od, 5);
+    return ziSapt(c.data).replace(/, $/, "").replace(/^./, function (x) { return x.toUpperCase(); }) + ", " + zi(c.data) + (c.ora ? ", ora " + c.ora : "") + ": ședința " + (TIP_SED[c.tip] || "") + " a Consiliului Local Rădăuți." +
+      (od.length ? " Pe ordinea de zi sunt " + od.length + (od.length === 1 ? " punct" : od.length < 20 ? " puncte" : " de puncte") + "." + (I.length ? " Printre cele mai importante:\n" + I.map(function (p) { return "• " + obiectPunct(p.text); }).join("\n") : "") : "") +
+      "\n\nȘedințele sunt publice: poți veni să asculți. Toată ordinea de zi și proiectele, pe Monitor local: " + SITE + "s/sedinta-" + c.data + ".html";
+  }
+  function postDupa(data, s, H, V) {
+    var t = "Ședința Consiliului Local Rădăuți din " + zi(data) + ": " + (H.length ? H.length + (H.length === 1 ? " hotărâre adoptată" : H.length < 20 ? " hotărâri adoptate" : " de hotărâri adoptate") : "hotărârile nu sunt încă publicate") + ".";
+    if (s) {
+      var resp = s.voturi.filter(function (v) { return v.rezultat === "respins"; }), alt = s.voturi.filter(function (v) { return (v.nume_impotriva || []).length || (v.nume_abtineri || []).length; });
+      if (resp.length) t += "\nRespinse: " + resp.map(function (v) { return obiectPunct(v.titlu || (v.punct ? "punctul " + v.punct : "un proiect neidentificat")); }).join("; ") + ".";
+      if (alt.length) t += "\nNu toți au votat pentru:\n" + alt.slice(0, 6).map(function (v) {
+        return "• " + obiectPunct(v.titlu || (v.punct ? "punctul " + v.punct : "un proiect neidentificat")) + ": " + ((v.nume_impotriva || []).length ? "împotrivă " + v.nume_impotriva.join(", ") : "") + ((v.nume_impotriva || []).length && (v.nume_abtineri || []).length ? "; " : "") + ((v.nume_abtineri || []).length ? "abțineri " + v.nume_abtineri.join(", ") : ""); }).join("\n") + (alt.length > 6 ? "\n• și încă " + (alt.length - 6) : "");
+      else if (s.voturi.length) t += " Toate proiectele votate au trecut fără voturi împotrivă numite în procesul-verbal.";
+      if ((s.absenti || []).length) t += "\nAu lipsit: " + s.absenti.join(", ") + ".";
+    }
+    return t + "\n\nVoturile și hotărârile, pe Monitor local: " + SITE + "#consiliu/sedinte/" + data + "\n(Cifrele sunt citite automat din procesul-verbal; verifică în document.)";
+  }
+  function postBox(text, titlu) {
+    return '<details class="post"><summary>' + esc(titlu || "Text gata de postat") + '</summary><textarea readonly rows="8">' + esc(text) + '</textarea><button type="button" class="btn-s" onclick="var t=this.previousElementSibling;t.select();try{navigator.clipboard.writeText(t.value)}catch(e){document.execCommand(\'copy\')}this.textContent=\'Copiat\'">Copiază textul</button></details>';
+  }
   function sedCard(c, mare) {
     var od = c.ordinea_de_zi || [], doc = safeUrl(c.pdf) || safeUrl(c.pagina);
     return '<article class="lc ' + (c.viitoare ? "ic" : "n") + '"><div class="lc-h"><span class="tag">Ședință ' + esc(TIP_SED[c.tip] || "") + "</span>" +
@@ -3062,7 +3093,7 @@
       }).join("") + "</ol>" + (!mare && od.length > 5 ? '<p class="note"><a href="#consiliu/urmatoare">Toate cele ' + od.length + " puncte</a></p>" : "") :
         '<p class="lc-m">Ordinea de zi e în dispoziția de convocare' + (doc ? "" : ".") + "</p>") +
       '<div class="lc-a">' + (doc ? '<a href="' + esc(doc) + '" rel="noopener">dispoziția de convocare (documentul primăriei)</a>' : "") +
-      (od.length ? '<span class="muted">Ordinea de zi e citită automat din dispoziție; verifică în document.</span>' : "") + "</div></article>";
+      (od.length ? '<span class="muted">Ordinea de zi e citită automat din dispoziție; verifică în document.</span>' : "") + "</div>" + (c.viitoare && mare ? postBox(postInainte(c), "Text gata de postat pe Facebook sau WhatsApp") : "") + "</article>";
   }
   // e-mailul cu propuneri la un proiect în consultare, adresat secretarului general (Legea nr. 52/2003)
   function mailPropuneri(p) {

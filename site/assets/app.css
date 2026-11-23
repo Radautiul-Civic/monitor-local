@@ -777,3 +777,6 @@ details.metoda li{margin:4px 0}
 .sdj-r{display:flex;flex-direction:column;gap:4px;flex-basis:100%}
 .sdj-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--line);max-width:420px}
 .sdj-bar .da{background:#1baf7a}.sdj-bar .nu{background:#d64545}.sdj-bar .ns{background:#9aa3ad}
+details.post{margin-top:12px;border-top:1px dashed var(--line);padding-top:8px}
+details.post summary{cursor:pointer;font-weight:600;font-size:.9rem}
+details.post textarea{width:100%;box-sizing:border-box;margin:8px 0;font:inherit;font-size:.88rem;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);resize:vertical}
