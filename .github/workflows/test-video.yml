@@ -1,0 +1,34 @@
+name: Test detectare înregistrări (Facebook)
+
+# Verifică dacă lista de videoclipuri a unei pagini publice de Facebook se poate citi fără autentificare, din rularea automată.
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Adresa paginii"
+        default: "https://www.facebook.com/profile.php?id=61559725245078&sk=videos"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - run: pip install -q yt-dlp requests
+      - env:
+          URL: ${{ inputs.url }}
+        run: |
+          echo "== yt-dlp flat playlist"; yt-dlp --flat-playlist --print "%(id)s | %(title)s | %(url)s" "$URL" 2>&1 | head -30 || true
+          echo "== yt-dlp /videos"; yt-dlp --flat-playlist --print "%(id)s | %(title)s" "https://www.facebook.com/61559725245078/videos" 2>&1 | head -30 || true
+          echo "== html"; python - <<'PY'
+          import os, re, requests
+          for u in (os.environ["URL"], "https://www.facebook.com/61559725245078/videos", "https://mbasic.facebook.com/profile.php?id=61559725245078&v=timeline"):
+              try:
+                  r = requests.get(u, timeout=30, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36", "Accept-Language": "ro"})
+                  ids = sorted(set(re.findall(r"/videos/(\d{10,})", r.text)))
+                  print(u, r.status_code, len(r.text), "login" in r.url, ids[:10], len(re.findall(r"Sedinta Consiliului", r.text)))
+              except Exception as e:
+                  print(u, "eroare", e)
+          PY
