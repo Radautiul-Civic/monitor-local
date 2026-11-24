@@ -32,6 +32,13 @@ jobs:
               except Exception as e:
                   print("eroare", e); continue
               print("status", r.status_code, "final", r.url, "server", r.headers.get("server"), "powered", r.headers.get("x-powered-by"))
+              if "json" in r.headers.get("content-type", ""):
+                  try:
+                      for c in r.json():
+                          print("   ", c.get("id"), c.get("slug"), "|", c.get("count"), "|", (c.get("name") or "")[:80])
+                  except Exception as e:
+                      print(r.text[:1500])
+                  continue
               s = BeautifulSoup(r.text, "html.parser")
               g = s.find("meta", attrs={"name": "generator"})
               print("generator", g and g.get("content"), "| wp-content" if "wp-content" in r.text else "", "| .nsf" if ".nsf" in r.text else "", "| /files/info" if "/files/info" in r.text else "")
