@@ -851,3 +851,16 @@ details.alerte .al-f{margin-top:8px;max-width:640px}
 .chart .seg-lbl{fill:#fff;font-size:10px;font-weight:650;font-variant-numeric:tabular-nums;pointer-events:none}
 .chart .ln-lbl{font-size:10px;font-weight:650;font-variant-numeric:tabular-nums;paint-order:stroke;stroke:var(--surface);stroke-width:3px;pointer-events:none}
 .chart.chart-lat{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.sapt-h{display:flex;align-items:center;gap:12px}
+.sapt-h>div{flex:1;text-align:center}
+.sapt-h .lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--accent);font-weight:650}
+.sapt-h h2{margin:2px 0 0}
+.sapt-h .ghost{visibility:hidden}
+.sapt-g{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:22px;margin-top:10px}
+@media (max-width:760px){.sapt-g{grid-template-columns:1fr}}
+.sapt-g h3{font-size:.95rem;margin:10px 0 6px}
+.sapt-l{list-style:none;margin:0;padding:0}
+.sapt-l li{padding:7px 0;border-bottom:1px solid var(--line);font-size:.92rem}
+.sapt-l li a{color:var(--ink);text-decoration:none;display:block}
+.sapt-l li a:hover b{color:var(--accent)}
+.sapt-l.mic li{font-size:.85rem}
