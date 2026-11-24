@@ -881,3 +881,5 @@ details.alerte .al-f{margin-top:8px;max-width:640px}
 .sc-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.sc-c{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface-2)}
 .sc-c h3{margin:0 0 6px;font-size:1rem}.sc-c p{margin:0 0 6px}
 .sc-l{margin:8px 0 0;padding-left:18px}.sc-l li{margin:6px 0;font-size:.93rem}
+.sp-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.sp-dl{margin:4px 0 6px}.sp-dl dt{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-top:6px}.sp-dl dd{margin:1px 0 0}
