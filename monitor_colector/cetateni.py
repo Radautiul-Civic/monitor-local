@@ -298,6 +298,58 @@ def rss(ev, azi, n=60):
             + "".join(items) + "</channel></rss>\n")
 
 
+def _ics_text(t):
+    return (t or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+
+def _ics_linie(l):
+    """Liniile iCalendar au cel mult 75 de octeți; restul continuă pe rândul următor, după un spațiu."""
+    b, out = l.encode("utf-8"), []
+    while len(b) > 75:
+        k = 75
+        while k and (b[k] & 0xC0) == 0x80:   # nu tăiem un caracter UTF-8 în două
+            k -= 1
+        out.append(b[:k].decode("utf-8"))
+        b = b" " + b[k:]
+    out.append(b.decode("utf-8"))
+    return "\r\n".join(out)
+
+
+def ics(sed, azi):
+    """Calendarul abonabil: ședințele consiliului local (cu ora) și termenele de propuneri la proiectele în consultare."""
+    acum = datetime.now().strftime("%Y%m%dT%H%M%SZ")
+    ev = []
+    for c in (sed.get("urmatoare") or []) + (sed.get("recente") or []):
+        if not c.get("data"):
+            continue
+        d = c["data"].replace("-", "")
+        tip = {"ordinara": "ordinară", "extraordinara": "extraordinară", "extraordinara_de_indata": "convocată de îndată"}.get(c.get("tip"), "")
+        puncte = "\n".join(f"{p['nr']}. {p['text'][:200]}" for p in c.get("ordinea_de_zi") or [])
+        if c.get("ora") and re.match(r"\d{1,2}:\d{2}$", c["ora"]):
+            h, m = c["ora"].split(":")
+            cand = [f"DTSTART;TZID=Europe/Bucharest:{d}T{int(h):02d}{m}00", f"DURATION:PT2H"]
+        else:
+            cand = [f"DTSTART;VALUE=DATE:{d}"]
+        ev.append(["BEGIN:VEVENT", f"UID:sedinta-{d}@monitor.radautiulcivic.ro", f"DTSTAMP:{acum}", *cand,
+                   "SUMMARY:" + _ics_text(f"Consiliul Local Rădăuți: ședință {tip}".strip()), "LOCATION:" + _ics_text("Primăria Municipiului Rădăuți"),
+                   "DESCRIPTION:" + _ics_text((puncte or "Ordinea de zi apare în dispoziția de convocare.") + "\n\n" + (c.get("pagina") or "")),
+                   "URL:" + (c.get("pagina") or SITE), "END:VEVENT"])
+    for p in sed.get("consultare") or []:
+        if not p.get("termen") or p.get("adoptat"):
+            continue
+        d = p["termen"].replace("-", "")
+        ev.append(["BEGIN:VEVENT", f"UID:termen-{p.get('nr') or zlib.crc32(p['titlu'].encode('utf-8'))}-{d}@monitor.radautiulcivic.ro", f"DTSTAMP:{acum}",
+                   f"DTSTART;VALUE=DATE:{d}", "SUMMARY:" + _ics_text("Ultima zi pentru propuneri: " + (p.get("obiect") or p["titlu"])[:150]),
+                   "DESCRIPTION:" + _ics_text(f"Propunerile se trimit la {p.get('email') or EMAIL_PROPUNERI}.\n\n{p.get('pagina') or ''}"),
+                   "URL:" + (p.get("pagina") or SITE), "END:VEVENT"])
+    cap = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Asociatia Radautiul Civic//Monitor local//RO", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+           "X-WR-CALNAME:" + _ics_text("Consiliul Local Rădăuți"), "X-WR-TIMEZONE:Europe/Bucharest", "REFRESH-INTERVAL;VALUE=DURATION:PT6H",
+           "BEGIN:VTIMEZONE", "TZID:Europe/Bucharest", "BEGIN:STANDARD", "DTSTART:19701025T040000", "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU",
+           "TZOFFSETFROM:+0300", "TZOFFSETTO:+0200", "END:STANDARD", "BEGIN:DAYLIGHT", "DTSTART:19700329T030000", "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU",
+           "TZOFFSETFROM:+0200", "TZOFFSETTO:+0300", "END:DAYLIGHT", "END:VTIMEZONE"]
+    return "\r\n".join(_ics_linie(l) for l in cap + [x for e in ev for x in e] + ["END:VCALENDAR"]) + "\r\n"
+
+
 def export(store, azi=None, concursuri=None):
     azi = azi or date.today()
     db = store.db
@@ -326,4 +378,6 @@ def scrie(store, data_dir=config.DATA_DIR, concursuri=None):
         json.dump({"generat_la": azi.isoformat(), "tipuri": NUME_TIP, "evenimente": ev}, f, ensure_ascii=False, separators=(",", ":"))
     with open(os.path.join(data_dir, "noutati.xml"), "w", encoding="utf-8") as f:
         f.write(rss(ev, azi))
+    with open(os.path.join(data_dir, "calendar.ics"), "w", encoding="utf-8", newline="") as f:
+        f.write(ics(sed, azi))
     return {"convocari_viitoare": len(sed["urmatoare"]), "consultare": len(sed["consultare"]), "noutati": len(ev)}

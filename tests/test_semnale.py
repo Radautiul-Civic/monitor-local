@@ -39,3 +39,18 @@ def test_semnale(tmp_path):
     assert fel == ["fragmentare", "sub_prag"]
     i26 = [x for x in r["indice"] if x["an"] == "2026"][0]
     assert i26["componente"]["achizitii"] == 90 and i26["detalii"]["normative"] == 3
+
+
+def test_calendar_ics():
+    from monitor_colector import cetateni
+    sed = {"urmatoare": [{"data": "2026-11-27", "ora": "10:00", "tip": "ordinara", "pagina": "https://primariaradauti.ro/x/",
+                          "ordinea_de_zi": [{"nr": 1, "text": "Proiect privind taxele, impozitele; și altele " * 5}]}],
+           "recente": [{"data": "2026-11-24", "ora": None, "tip": "extraordinara_de_indata", "ordinea_de_zi": []}],
+           "consultare": [{"titlu": "Anunț", "obiect": "Taxe 2027", "nr": "99582", "termen": "2026-11-30", "pagina": "https://primariaradauti.ro/a/", "email": "x@primariaradauti.ro"}]}
+    t = cetateni.ics(sed, date(2026, 11, 24))
+    linii = t.split("\r\n")
+    assert t.startswith("BEGIN:VCALENDAR") and t.endswith("END:VCALENDAR\r\n")
+    assert all(len(l.encode("utf-8")) <= 75 for l in linii)
+    assert t.count("BEGIN:VEVENT") == 3
+    assert "DTSTART;TZID=Europe/Bucharest:20261127T100000" in t and "DTSTART;VALUE=DATE:20261124" in t
+    assert "taxele\\, impozitele\;" in t.replace("\r\n ", "")

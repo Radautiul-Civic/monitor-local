@@ -911,6 +911,10 @@
     $("cal-azi").addEventListener("click", function () { ym = azi.slice(0, 7); ziSel = urm[0] && urm[0].slice(0, 7) === ym ? urm[0] : null; arata(); });
     arata();
   }
+  function calendarUrl(schema) {
+    var u = new URL(FTDATA + "calendar.ics", location.href).href;
+    return schema === "webcal" ? u.replace(/^https?:/, "webcal:") : u;
+  }
   // ---------- Consiliul Local → Ședințe: ședințele convocate, calendarul și istoricul (procese-verbale, voturi, grafice) ----------
   function sedintePagina(el, r) {
     var cap = head("Consiliul Local", "Când se întrunește consiliul, ce se votează și ce s-a hotărât: ședințele convocate, calendarul și toate ședințele de până acum.", r);
@@ -918,6 +922,8 @@
     var U = SED.urmatoare || [], des = (SED.consultare || []).filter(function (p) { return p.deschis; });
     el.innerHTML = cap + '<div id="sp-cal-w"></div><section class="card section" id="sp-urm"><h2>' + (U.length ? (U.length > 1 ? "Ședințele convocate" : "Ședința următoare") : "Nicio ședință convocată deocamdată") + "</h2>" +
       (U.length ? U.slice().sort(function (a, b) { return a.data < b.data ? -1 : 1; }).map(function (c) { return sedCard(c, true); }).join("") : '<p>Primăria n-a publicat încă o dispoziție de convocare pentru o ședință viitoare. Ședințele ordinare au loc de regulă o dată pe lună; convocarea apare cu câteva zile înainte.</p>') +
+      '<p class="cal-ab"><a class="btn" href="' + esc(calendarUrl("webcal")) + '">📅 Adaugă ședințele în calendarul tău</a> <a class="lk" href="' + esc(calendarUrl("https")) + '" download="consiliul-local-radauti.ics">descarcă fișierul</a>' +
+        '<br><small class="muted">Ședințele convocate și termenele de propuneri apar singure în calendarul telefonului (Google, Apple, Outlook) și se actualizează de câteva ori pe zi.</small></p>' +
       '<p class="note">Ședințele sunt publice: poți veni să asculți. ' + (des.length ? 'Acum sunt <a href="#consiliu/proiecte">' + des.length + (des.length === 1 ? " proiect" : " proiecte") + " în consultare publică</a>, la care poți trimite propuneri." : "") + "</p></section>" +
       '<div id="sp-ist-w"></div>';
     calendar($("sp-cal-w"), r);
