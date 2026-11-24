@@ -69,6 +69,20 @@ elif fel == "termo":   # seria prețurilor la termoficare (date publice, data/te
     for h in d.get("hotarari") or []:
         if h.get("pierderi_lei"):
             print("PIERDERI", h["an"], h["nr"], h["pierderi_lei"], h.get("pe_scurt", "")[:120])
+elif fel == "stare":   # verificare după colectare: ce chei au fișierele publice și câte rapoarte au rămas fără an
+    import json
+    t = json.load(open("data/teme.json", encoding="utf-8"))
+    print("teme.json", t.get("generat_la"), sorted(t))
+    print("salubrizare:", json.dumps(t.get("salubrizare"), ensure_ascii=False)[:400])
+    print("servicii:", sorted(t.get("servicii") or {}))
+    tf = json.load(open("data/termoficare.json", encoding="utf-8"))
+    print("termoficare.json", sorted(tf), "| pierderi:", json.dumps(tf.get("pierderi"), ensure_ascii=False)[:200])
+    L = (t.get("rapoarte") or {}).get("lista") or []
+    for f in sorted({x.get("fel") for x in L}, key=str):
+        g = [x for x in L if x.get("fel") == f]
+        print("rapoarte", f, len(g), "fără an:", sum(1 for x in g if not x.get("an")))
+    for x in [x for x in L if x.get("fel") == "consilieri" and not x.get("an")][:12]:
+        print("  fără an:", (x.get("titlu") or "")[:110])
 elif fel == "rapoarte":   # titlurile rapoartelor publice (pagina „Rapoarte” a primăriei) și felul dat de monitor
     import json
     d = json.load(open("data/teme.json", encoding="utf-8")).get("rapoarte") or {}
