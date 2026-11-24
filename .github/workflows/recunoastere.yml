@@ -1,0 +1,52 @@
+name: Recunoaștere site-uri primării (temporar)
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: "adrese separate prin spațiu"
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  r:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - run: pip install -q requests beautifulsoup4
+      - env:
+          URLS: ${{ inputs.urls }}
+        run: |
+          python - <<'PY'
+          import os, re, requests
+          from bs4 import BeautifulSoup
+          from urllib.parse import urljoin, urlparse
+          H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36", "Accept-Language": "ro"}
+          KW = re.compile(r"hot[aă]r|hcl|consiliu|sedin|ședin|proiect|proces|monitorul|mol\b|dispozi|transparen|buget|achizi|urbanism|certificat|autoriza", re.I)
+          for u in os.environ["URLS"].split():
+              print("\n==========", u)
+              try:
+                  r = requests.get(u, headers=H, timeout=40)
+              except Exception as e:
+                  print("eroare", e); continue
+              print("status", r.status_code, "final", r.url, "server", r.headers.get("server"), "powered", r.headers.get("x-powered-by"))
+              s = BeautifulSoup(r.text, "html.parser")
+              g = s.find("meta", attrs={"name": "generator"})
+              print("generator", g and g.get("content"), "| wp-content" if "wp-content" in r.text else "", "| .nsf" if ".nsf" in r.text else "", "| /files/info" if "/files/info" in r.text else "")
+              base = r.url
+              for p in ("/wp-json/", "/sitemap.xml", "/robots.txt"):
+                  try:
+                      x = requests.get(urljoin(base, p), headers=H, timeout=30)
+                      print(" ", p, x.status_code, len(x.text), x.headers.get("content-type", "")[:30])
+                  except Exception as e:
+                      print(" ", p, "eroare", e)
+              seen = set()
+              for a in s.find_all("a", href=True):
+                  t = " ".join(a.get_text(" ").split())[:70]
+                  h = urljoin(base, a["href"])
+                  if (KW.search(t) or KW.search(a["href"])) and h not in seen and urlparse(h).netloc.endswith(urlparse(base).netloc.replace("www.", "")):
+                      seen.add(h); print("   ", t, "->", h)
+                  if len(seen) > 45: break
+          PY
