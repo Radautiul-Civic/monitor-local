@@ -831,10 +831,10 @@
     var cap = head("Consiliul Local", "Când se întrunește consiliul, ce se votează și ce s-a hotărât: ședințele convocate, calendarul și toate ședințele de până acum.", r);
     if (!SED) { el.innerHTML = cap + '<p class="updated">Se încarcă...</p>'; incarcaSed().then(render); return; }
     var U = SED.urmatoare || [], des = (SED.consultare || []).filter(function (p) { return p.deschis; });
-    el.innerHTML = cap + '<section class="card section" id="sp-urm"><h2>' + (U.length ? (U.length > 1 ? "Ședințele convocate" : "Ședința următoare") : "Nicio ședință convocată deocamdată") + "</h2>" +
+    el.innerHTML = cap + '<div id="sp-cal-w"></div><section class="card section" id="sp-urm"><h2>' + (U.length ? (U.length > 1 ? "Ședințele convocate" : "Ședința următoare") : "Nicio ședință convocată deocamdată") + "</h2>" +
       (U.length ? U.slice().sort(function (a, b) { return a.data < b.data ? -1 : 1; }).map(function (c) { return sedCard(c, true); }).join("") : '<p>Primăria n-a publicat încă o dispoziție de convocare pentru o ședință viitoare. Ședințele ordinare au loc de regulă o dată pe lună; convocarea apare cu câteva zile înainte.</p>') +
       '<p class="note">Ședințele sunt publice: poți veni să asculți. ' + (des.length ? 'Acum sunt <a href="#consiliu/proiecte">' + des.length + (des.length === 1 ? " proiect" : " proiecte") + " în consultare publică</a>, la care poți trimite propuneri." : "") + "</p></section>" +
-      '<div id="sp-cal-w"></div><div id="sp-ist-w"></div>';
+      '<div id="sp-ist-w"></div>';
     calendar($("sp-cal-w"), r);
     sedinte($("sp-ist-w"), r, true);
     var anc = { urmatoare: "sp-urm", calendar: "sp-cal" }[(r.path || "").split("/")[1]];
