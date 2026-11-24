@@ -53,9 +53,12 @@ MANIFEST = os.path.join(ROOT, "data", "publicat-intern.json")
 def intern_protejat(url=INTERN_URL):
     """True doar dacă folderul intern cere autentificare (HTTP 401)."""
     try:
-        urlopen(Request(url, headers={"User-Agent": "MonitorLocal-publicare"}), timeout=30)
+        r = urlopen(Request(url, headers={"User-Agent": "MonitorLocal-publicare"}), timeout=30)
+        print(f"verificare {url}: HTTP {r.status}, fără parolă", file=sys.stderr)
         return False
     except HTTPError as e:
+        if e.code != 401:
+            print(f"verificare {url}: HTTP {e.code}", file=sys.stderr)
         return e.code == 401
     except Exception as e:
         print(f"nu pot verifica {url}: {e}", file=sys.stderr)
