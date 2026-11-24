@@ -612,6 +612,13 @@ def scrie(store, data_dir, azi=None):
             rez["indicatori_taxe"] = taxe_ai.indicatori_publici()
         except Exception as e:
             stats["taxe_ai"] = f"eroare: {e}"
+    # salubrizarea: cât plătește populația, din hotărârile verificate de echipă (surse/salubrizare/tarife.json)
+    try:
+        with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), "surse", "salubrizare", "tarife.json"), encoding="utf-8") as f:
+            rez["salubrizare"] = json.load(f)
+        stats["salubrizare"] = len(rez["salubrizare"].get("casnici") or [])
+    except (OSError, ValueError) as e:
+        stats["salubrizare"] = f"eroare: {e}"
     # termoficarea: hotărârile pe subiect și prețurile pe perioade (data/termoficare.json; vezi termoficare.py)
     try:
         from . import termoficare

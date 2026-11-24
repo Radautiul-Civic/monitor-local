@@ -1,0 +1,15 @@
+{
+  "despre": "Cât plătesc locuitorii pentru ridicarea gunoiului menajer, verificat de echipă în textul hotărârilor consiliului local. Sumele sunt în lei, cu TVA unde e cazul.",
+  "casnici": [
+    {"de_la": "2017-10-01", "lei_persoana_luna": 8.98, "fel": "pret", "cine": "prețul serviciului Servicii Comunale, plătit operatorului",
+     "hcl": {"an": 2017, "nr": 197}, "nota": "63,44 lei/mc, cu TVA de 19%, respectiv 8,98 lei de persoană pe lună"},
+    {"de_la": "2025-06-01", "lei_persoana_luna": 21.60, "reziduale": 14.40, "reciclabile": 6.00, "biodegradabile": 1.20, "separare_incorecta": 43.20, "fel": "taxa",
+     "cine": "taxa specială de salubrizare, plătită la primărie", "hcl": {"an": 2025, "nr": 116},
+     "nota": "hotărârea stabilește 18 lei (12 reziduale, 5 reciclabile, 1 biodegradabile) și aprobă pentru 2025 o majorare de 20%; nivelul aplicat în 2025 e cel din HCL 290/2025"},
+    {"de_la": "2026-01-01", "lei_persoana_luna": 24.10, "reziduale": 11.85, "reciclabile": 11.24, "biodegradabile": 1.01, "separare_incorecta": 72.30, "fel": "taxa",
+     "cine": "taxa specială de salubrizare, plătită la primărie", "hcl": {"an": 2025, "nr": 290}}
+  ],
+  "noncasnici": [
+    {"de_la": "2026-01-01", "lei_tona": 1000, "hcl": {"an": 2025, "nr": 290}, "nota": "taxa pentru firme și instituții, după cantitatea estimată de deșeuri"}
+  ]
+}

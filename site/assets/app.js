@@ -4139,7 +4139,8 @@
     "servicii/iluminat": { titlu: "Iluminatul public", text: "Becurile și stâlpii de pe străzi: contractul pentru întreținerea iluminatului, tarifele, extinderile de rețea și modernizările aprobate de consiliul local.",
       rx: "iluminat", sx: "iluminat|corpuri de iluminat|stalp\\w* .{0,20}iluminat", fel: [["Contractul și tarifele", "contract|tarif|gestiun|studiu\\w* de oportunitate|prestari"], ["Investiții: extinderi și modernizări", "."]] },
     "servicii/hotarari": { titlu: "Toate hotărârile despre Servicii Comunale", text: "Hotărârile consiliului local despre societate și serviciile pe care le face pentru oraș, pe teme.", rx: RX_SC, fel: FEL_SC, sx: false, cui: "2563140", faraSicap: true },
-    salubrizare: { titlu: "Salubrizarea", text: "Colectarea gunoiului menajer e organizată la nivelul județului Suceava și o face un operator regional, nu Servicii Comunale. Aici: hotărârile consiliului local despre salubrizare (regulamentul județean, taxa, cantitățile minime pentru firme), investițiile și cheltuielile orașului.",
+    salubrizare: { titlu: "Salubrizarea", text: "Ridicarea gunoiului menajer e organizată la nivelul județului Suceava: din 2025 o face operatorul regional al zonei Rădăuți, iar până atunci a făcut-o Servicii Comunale. Aici: cât plătește populația, hotărârile consiliului local despre salubrizare (regulamentul județean, taxa, cantitățile minime pentru firme), investițiile și cheltuielile orașului.",
+      extra: salubTarifeHtml, dupa: salubTarifeDeseneaza,
       rx: "salubriz|deseu|gunoi|colectar\\w* selectiv|insul\\w* ecologic|asociati\\w* de dezvoltare intercomunitara|ecologizar", nu: "salubrizare stradala", sx: "deseu|gunoi|salubriz|ecologiz|pubel|europubel|insul\\w* ecologic", capitol: "Protecția mediului (salubritate, canalizare)",
       fel: [["Regulamente și organizarea serviciului", "regulament|asociati|delegar|contract|norme"], ["Taxe și tarife", "tax|tarif|cantitat"], ["Investiții", "."]] },
     "teme/drumuri": { titlu: "Străzi și trotuare", text: "Asfaltări, modernizări, trotuare, semnalizare și sensuri giratorii: ce a aprobat consiliul local, ce s-a cumpărat și cât cheltuie orașul pe transporturi.",
@@ -4203,6 +4204,7 @@
       (T.I.length ? tile("Obiective de investiții", nr(T.I.length), "", vI ? "valoare aprobată: <strong>" + lei(vI) + "</strong>" : "") : "") +
       (T.S.length ? tile(C.grupInst ? "Achiziții ale școlilor" : "Achiziții în SICAP", lei(vS), "", nr(T.S.length) + " achiziții și contracte din 2018") : "") +
       (anB ? tile("Bugetul orașului, " + anB, lei(DB[anB].ch[C.capitol]), "", "la capitolul „" + esc(C.capitol.replace(/ \(.*/, "")) + "”" + (M.populatie ? ", adică <strong>" + lei(DB[anB].ch[C.capitol] / M.populatie) + "</strong> pe locuitor" : "")) : "") + "</div>";
+    if (C.extra) h += C.extra(T);
     if (T.urm.length || T.cons.length || T.P.length) {
       h += '<section class="card section"><h2>' + (T.urm.length || T.cons.length ? "Ce e în lucru acum" : "Proiecte puse în consultare în ultimul an") + '</h2><ul class="sc-l">' +
         T.urm.map(function (o) { return '<li><b>' + esc(zi(o.data)) + "</b>, pe ordinea de zi a ședinței " + esc(TIP[o.tip] || "") + ': <a href="#consiliu/sedinte/' + esc(o.data) + '">' + esc(o.text.slice(0, 220)) + "</a></li>"; }).join("") +
@@ -4210,7 +4212,6 @@
         (T.cons.length ? "" : T.P.slice(0, 5).map(function (p) { return "<li>" + esc(zi(p.postat)) + ", pus în consultare: " + esc(p.titlu.replace(/^Anun\S+( din [\d.]+)?\s*[–-]?\s*/, "").replace(/^Proiect(ul)? de hot\S+\s+(înregistrat cu\s+)?(nr\.?\s*[\d\/.]+\s*)?/i, "").slice(0, 200)) + (safeUrl(p.pagina) ? ' <a class="lk" href="' + esc(p.pagina) + '" rel="noopener">anunțul</a>' : "") + "</li>"; }).join("")) +
         "</ul></section>";
     }
-    if (C.extra) h += C.extra(T);
     var feluri = (C.fel || []).map(function (f) { return f[0]; }).filter(function (f) { return H.some(function (x) { return x._fel === f; }); });
     if (H.length) {
       h += '<section class="card section"><h2>Hotărârile consiliului local</h2>' + (feluri.length > 1 ? legend(feluri.map(function (f, i) { return [f, CUL[i % CUL.length]]; })) : "") +
@@ -4222,6 +4223,7 @@
     if (aniB.length) h += '<section class="card section"><h2>Cât cheltuie orașul: ' + esc(C.capitol) + '</h2><p class="note">Plățile efective din bugetul municipiului, pe ani (Ministerul Finanțelor, prin <a href="#bani/buget">pagina bugetului</a>).</p><div class="chart" id="tg-b"></div></section>';
     if (T.Dz.length) h += '<section class="card section"><div class="h-row"><h2>Dispozițiile primarului</h2><a href="#primarie/dispozitii">toate dispozițiile</a></div><div id="tg-d"></div></section>';
     el.innerHTML = h;
+    if (C.dupa) C.dupa(T);
     if (H.length) {
       var aniL = []; for (var a = Math.min.apply(null, Object.keys(aniH).map(Number)); a <= azi; a++) aniL.push(String(a));
       var fs = feluri.length ? feluri : [""];
@@ -4252,6 +4254,39 @@
     }
     if (T.Dz.length) lista($("tg-d"), T.Dz, { unitate: ["dispoziție", "dispoziții"], an: function (x) { return String(x.an); }, text: function (x) { return x.obiect + " " + x.nr; },
       item: function (x) { return doc("Dispoziția " + esc(x.nr) + "/" + esc(x.an), x.obiect, x.data ? zi(x.data) : "", x); } });
+  }
+
+  // ---------- Salubrizarea: cât plătește populația (TEME.salubrizare, din surse/salubrizare/tarife.json) ----------
+  function salubTarifeHtml() {
+    var S = (TEME || {}).salubrizare, P = S && S.casnici || [];
+    if (!P.length) return "";
+    var u = P[P.length - 1], p0 = P[0], an = function (v, n) { return dec((v * n * 12).toFixed(2)) + " lei"; };
+    var nc = (S.noncasnici || [])[S.noncasnici.length - 1];
+    return '<section class="card section"><h2>Cât plătește populația pentru gunoi</h2>' +
+      '<div class="grid">' + tile("Acum, de persoană", dec(u.lei_persoana_luna.toFixed(2)), "lei pe lună", "din " + esc(zi(u.de_la)) + ", " + linkHcl(u.hcl)) +
+      tile("O familie de 4 persoane", an(u.lei_persoana_luna, 4), "", "pe an, la taxa de acum") +
+      tile("Față de " + p0.de_la.slice(0, 4), "×" + dec((u.lei_persoana_luna / p0.lei_persoana_luna).toFixed(1)), "", dec(p0.lei_persoana_luna.toFixed(2)) + " lei de persoană pe lună în " + p0.de_la.slice(0, 4) + ", la Servicii Comunale") +
+      (nc ? tile("Firme și instituții", nr(nc.lei_tona), "lei pe tonă", "din " + esc(zi(nc.de_la)) + ", " + linkHcl(nc.hcl)) : "") + "</div>" +
+      '<p style="margin-top:12px">Până în mai 2025, gunoiul l-a ridicat Servicii Comunale, prin contractul de delegare nr. 2318/03.03.2008, iar oamenii plăteau direct operatorului prețul aprobat de consiliu. Din 1 iunie 2025 se plătește la primărie <b>taxa specială de salubrizare</b>, pentru fiecare persoană care locuiește la adresă, iar serviciul îl face operatorul regional. Cine nu separă corect deșeurile plătește un tarif mai mare.</p>' +
+      legend([["deșeuri reziduale", "var(--c2)"], ["reciclabile", "var(--c1)"], ["biodegradabile", "var(--c3)"], ["preț întreg (fără defalcare)", "var(--plan)"]]) +
+      '<div class="chart" id="sb-ch"></div>' +
+      '<div class="tw"><table><thead><tr><th>De la</th><th>Ce se plătește</th><th class="n">Lei/persoană/lună</th><th class="n">Reziduale</th><th class="n">Reciclabile</th><th class="n">Biodegradabile</th><th class="n">Dacă nu separi corect</th><th class="n">Familie de 4, pe an</th><th>Hotărârea</th></tr></thead><tbody>' +
+      P.slice().reverse().map(function (x) {
+        var f = function (v) { return v != null ? dec(v.toFixed(2)) : "-"; };
+        return "<tr><td>" + esc(zi(x.de_la)) + "</td><td>" + esc(x.cine || "") + (x.nota ? '<br><small class="muted">' + esc(x.nota) + "</small>" : "") + '</td><td class="n"><b>' + f(x.lei_persoana_luna) + '</b></td><td class="n">' + f(x.reziduale) +
+          '</td><td class="n">' + f(x.reciclabile) + '</td><td class="n">' + f(x.biodegradabile) + '</td><td class="n">' + f(x.separare_incorecta) + '</td><td class="n">' + an(x.lei_persoana_luna, 4) + "</td><td>" + linkHcl(x.hcl) + "</td></tr>";
+      }).join("") + "</tbody></table></div>" +
+      '<p class="note">Între octombrie 2017 și mai 2025 nu am găsit în hotărârile publicate altă modificare a prețului pentru populație. Dacă știi una, scrie-ne.</p></section>';
+  }
+  function salubTarifeDeseneaza() {
+    var S = (TEME || {}).salubrizare, P = S && S.casnici || [], el = $("sb-ch");
+    if (!P.length || !el) return;
+    var cats = P.map(function (x) { return lunaScurt(x.de_la); }), v = function (k) { return P.map(function (x) { return x[k] || 0; }); };
+    chart(el, { cats: cats, stacked: true, label: "Taxa de salubrizare pentru populație, lei de persoană pe lună", bwMax: 70, yFmt: function (x) { return x + " lei"; },
+      segLabel: function (sr, i, v) { return dec(v.toFixed(2)); }, labelValue: function (i) { return dec(P[i].lei_persoana_luna.toFixed(2)) + " lei"; },
+      series: [{ name: "Reziduale", color: "var(--c2)", values: v("reziduale") }, { name: "Reciclabile", color: "var(--c1)", values: v("reciclabile") },
+        { name: "Biodegradabile", color: "var(--c3)", values: v("biodegradabile") }, { name: "Preț întreg", color: "var(--plan)", values: P.map(function (x) { return x.reziduale == null ? x.lei_persoana_luna : 0; }) }],
+      tooltip: function (i) { var x = P[i]; return "<b>din " + esc(zi(x.de_la)) + "</b><br>" + dec(x.lei_persoana_luna.toFixed(2)) + " lei de persoană pe lună" + (x.reziduale != null ? "<br>reziduale " + dec(x.reziduale.toFixed(2)) + ", reciclabile " + dec(x.reciclabile.toFixed(2)) + ", biodegradabile " + dec(x.biodegradabile.toFixed(2)) : "") + "<br>HCL " + x.hcl.nr + "/" + x.hcl.an; } });
   }
 
   // ---------- Servicii Comunale: pe scurt ----------
