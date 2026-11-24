@@ -86,3 +86,7 @@ elif fel == "rapoarte-text":   # rapoartele fără an în titlu: are text? ce sc
         print("#####", (lt or "")[:90], "|", url.rsplit("/", 1)[-1][:60], "| pagini", pg, "| text", len(t))
         print("   ", re.sub(r"\s+", " ", t[:500]))
     print("fara an in titlu:", fara, "cu text:", cu_text, "din", len(rows))
+elif fel == "componenta":   # consilierii de pe pagina primăriei: partid, poză
+    import json
+    for x in json.load(open("data/componenta.json", encoding="utf-8")).get("consilieri") or []:
+        print(x.get("nume"), "|", x.get("id"), "|", x.get("partid"), "|", "foto" if x.get("foto") else "FARA FOTO", "|", "iesit" if x.get("iesit") else "")
