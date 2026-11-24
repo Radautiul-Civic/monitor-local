@@ -3159,8 +3159,10 @@
       '<section class="card section"><h2>Hotărârile adoptate</h2>' + (H.map(function (x) { return doc(linkHcl(x), x.titlu, x.postat ? "postată " + zi(x.postat) : "", x); }).join("") || '<p class="empty">Nicio hotărâre cu această dată în listele publicate.</p>') + "</section>";
     el.innerHTML = h;
     incarcaRez().then(function () {
-      var x = rezPentru(data);
-      if (x && $("sd-rez")) $("sd-rez").innerHTML = '<section class="card section"><h2>Rezumatul ședinței</h2>' + rezumatHtml(x) + "</section>";
+      // o ședință transmisă în mai multe înregistrări (ex. după o pauză) are câte un rezumat pentru fiecare parte
+      var xs = (REZ || []).filter(function (x) { return x.data === data; }).sort(function (p, q) { return (p.aprobat_la || "").localeCompare(q.aprobat_la || ""); });
+      if (xs.length && $("sd-rez")) $("sd-rez").innerHTML = '<section class="card section"><h2>Rezumatul ședinței</h2>' + xs.map(function (x, i) {
+        return (xs.length > 1 ? '<h3 class="an-h">Partea ' + (i + 1) + (x.titlu_video ? ": " + esc(x.titlu_video) : "") + "</h3>" : "") + rezumatHtml(x); }).join("") + "</section>";
     });
     voturiIntern2(function (V) {
       var s = (V.sedinte || []).filter(function (x) { return x.data === data; })[0];
