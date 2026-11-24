@@ -52,7 +52,7 @@
     texte: function () { return ["cauta", "texte"]; },
     salubrizare: function () { return ["servicii", "salubrizare"]; },
     servicii: function (h) { return h[1] === "hotarari" ? ["servicii", "societate", "hotarari"] : h; } };
-  if (INTERN) { SECTIUNI.push({ id: "rezumate", nume: "Rezumate" }); SECTIUNI.push({ id: "analize", nume: "Analize" }); SECTIUNI.push({ id: "declaratii", nume: "Declarații" }); SECTIUNI.push({ id: "mesaje", nume: "Mesaje" }); SECTIUNI.push({ id: "arhiva", nume: "Arhiva" }); }
+  if (INTERN) { SECTIUNI.push({ id: "rezumate", nume: "Rezumate" }); SECTIUNI.push({ id: "analize", nume: "Analize" }); SECTIUNI.push({ id: "semnale", nume: "Semnale" }); SECTIUNI.push({ id: "declaratii", nume: "Declarații" }); SECTIUNI.push({ id: "mesaje", nume: "Mesaje" }); SECTIUNI.push({ id: "arhiva", nume: "Arhiva" }); }
   SECTIUNI.push({ id: "despre", nume: "Despre", def: "despre", sub: [["despre", "Despre monitor"], ["glosar", "Glosar"]] });
 
   function route() {
@@ -3293,6 +3293,66 @@
       });
     }).catch(function () { el.innerHTML = head("Mesaje de la cititori", "") + '<p class="empty">Nu am putut citi mesajele.</p>'; });
   }
+  // ---------- Semnalele automate și indicele de transparență (deocamdată doar intern, până se verifică metoda) ----------
+  var SEMN_FEL = { consultare_scurta: ["Consultare sub 30 de zile", "p"], fara_anunt: ["Fără anunț de consultare găsit", "par"], publicare_tarzie: ["Publicată târziu", "par"],
+    fragmentare: ["Achiziții directe repetate peste prag", "p"], sub_prag: ["Chiar sub pragul achiziției directe", "par"] };
+  var SEMN_COMP = { consultare: "Consultare publică", publicare: "Publicare la timp", sedinte_planificate: "Ședințe planificate", achizitii: "Achiziții directe" };
+  function semnaleIntern(el, r) {
+    if (!INTERN) return;
+    el.innerHTML = head("Semnale", "") + '<p class="updated">Se încarcă...</p>';
+    Promise.all([get(DATA + "semnale.json"), get(DATA + "arhiva-manifest.json").catch(function () { return null; })]).then(function (d) {
+      var S = d[0], M = d[1] || [], ind = (S.indice || []).filter(function (x) { return x.indice != null; }).reverse();
+      var grav = function (g) { return '<span class="sg-g sg-' + g + '" title="importanța semnalului">' + "●●●".slice(0, g) + "</span>"; };
+      var fel = function (f) { var k = SEMN_FEL[f] || [f, "n"]; return '<span class="rz ' + k[1] + '">' + esc(k[0]) + "</span>"; };
+      var hclDoc = function (x) {
+        var h = x.hcl;
+        return '<div class="doc"><div class="h">' + grav(x.grav) + fel(x.fel) + linkHcl(h) + " <span class=\"muted\">adoptată " + esc(zi(h.data)) + "</span>" +
+          (h.pagina ? ' <a class="lk" href="' + esc(safeUrl(h.pagina) || "#") + '" rel="noopener">pe site</a>' : "") + '</div><div class="t">' + esc(h.titlu) + "</div>" +
+          '<div class="m"><span>' + esc(x.text) + "</span>" + (x.anunt ? ' <span>Anunțul: publicat ' + esc(zi(x.anunt.postat)) + (x.anunt.pagina ? ', <a href="' + esc(safeUrl(x.anunt.pagina) || "#") + '" rel="noopener">vezi anunțul</a>' : "") + "</span>" : "") + "</div></div>";
+      };
+      var achDoc = function (x) {
+        return '<div class="doc"><div class="h">' + grav(x.grav) + fel(x.fel) + "<b>" + esc(x.institutie || "") + "</b>" + (x.an ? ' <span class="muted">' + esc(x.an) + "</span>" : "") + '</div><div class="t">Furnizor: ' + esc(x.furnizor || "-") +
+          (x.cpv ? ' · CPV ' + esc(x.cpv) : "") + '</div><div class="m"><span>' + esc(x.text) + "</span></div>" +
+          (x.achizitii.length > 1 ? '<details class="tbl"><summary>Cele ' + x.achizitii.length + ' achiziții</summary><div class="tw"><table><thead><tr><th>Data</th><th>Obiect</th><th class="n">Lei</th><th>Cod SICAP</th></tr></thead><tbody>' +
+            x.achizitii.map(function (a) { return "<tr><td>" + esc(zi(a.data)) + "</td><td>" + esc(a.obiect || "") + '</td><td class="n">' + nr(Math.round(a.lei)) + "</td><td>" + esc(a.cod || "") + "</td></tr>"; }).join("") + "</tbody></table></div></details>"
+            : '<p class="note">' + esc(zi(x.achizitii[0].data)) + ": " + esc(x.achizitii[0].obiect || "") + " (" + esc(x.achizitii[0].cod || "") + ")</p>") + "</div>";
+      };
+      var disp = M.filter(function (f) { return f.x; }).sort(function (a, b) { return (b.x || "").localeCompare(a.x || ""); });
+      var U = S.urgenta || {}, aniU = Object.keys(U).sort().reverse();
+      var frag = (S.achizitii || []).filter(function (x) { return x.fel === "fragmentare"; }), sub = (S.achizitii || []).filter(function (x) { return x.fel === "sub_prag"; });
+      el.innerHTML = head("Semnale", "Ce merită o întrebare, găsit automat în documentele publice: consultări scurtate, hotărâri publicate târziu, ședințe de îndată, achiziții directe repetate. Un semnal nu e o acuzație: fiecare duce la documentul din care a fost dedus.") +
+        '<p class="callout">Pagină internă până verificăm metoda. Pragurile și regulile sunt la final, în „Cum se calculează”.</p>' +
+        (ind.length ? '<section class="card section"><h2>Indicele de transparență al primăriei</h2><p class="note">De la 0 la 100, media a patru componente. Arată tendința, nu dă o notă de legalitate.</p>' +
+          ind.map(function (x) {
+            return '<h3 class="an-h">' + esc(x.an) + (x.an >= String(AN_CURENT) ? ' <small class="muted">(an în curs)</small>' : "") + '</h3><div class="grid">' + tile("Indicele", x.indice, "din 100", "") +
+              Object.keys(SEMN_COMP).map(function (k) { var v = x.componente[k], D = x.detalii;
+                var sub_ = { consultare: D.normative ? (D.normative - D.cu_problema_consultare) + " din " + D.normative + " hotărâri probabil normative fără semnal" : "nicio hotărâre normativă",
+                  publicare: D.hotarari_cu_data_publicarii + " hotărâri cu data publicării", sedinte_planificate: D.de_indata + " din " + D.sedinte + " ședințe convocate de îndată",
+                  achizitii: D.grupuri_fragmentare + " grupuri de achiziții directe repetate peste prag" }[k];
+                return tile(SEMN_COMP[k], v == null ? "-" : v, v == null ? "" : "din 100", sub_); }).join("") + "</div>";
+          }).join("") + "</section>" : "") +
+        '<section class="card section"><h2>Consultarea publică <span class="nr-b n">' + (S.consultare || []).length + "</span></h2>" +
+          '<p class="note">Hotărâri cu caracter probabil normativ (taxe, tarife, regulamente) adoptate la mai puțin de ' + S.praguri.zile_consultare + " de zile de la anunțul proiectului sau fără anunț găsit pe site. Doar din 2025, de când site-ul nou publică anunțurile.</p>" +
+          ((S.consultare || []).length ? S.consultare.slice().reverse().map(hclDoc).join("") : '<p class="empty">Niciun semnal.</p>') + "</section>" +
+        '<section class="card section"><h2>Publicarea hotărârilor <span class="nr-b n">' + (S.publicare || []).length + "</span></h2>" +
+          ((S.publicare || []).length ? S.publicare.map(hclDoc).join("") : '<p class="empty">Nicio hotărâre din 2025 încoace nu a apărut pe site la mai mult de ' + S.praguri.zile_publicare + " de zile după adoptare.</p>") + "</section>" +
+        '<section class="card section"><h2>Ședințele convocate de îndată</h2><p class="note">Ședința de îndată se convoacă fără termenul obișnuit, pentru situații urgente. Cetățenii află de ea cel mai târziu.</p><div class="tw"><table><thead><tr><th>An</th><th class="n">Ședințe</th><th class="n">Extraordinare</th><th class="n">De îndată</th></tr></thead><tbody>' +
+          aniU.map(function (a) { var x = U[a]; return "<tr><td>" + a + '</td><td class="n">' + x.total + '</td><td class="n">' + x.extraordinare + '</td><td class="n">' + (x.de_indata ? "<b>" + x.de_indata + "</b>" : 0) + "</td></tr>"; }).join("") + "</tbody></table></div></section>" +
+        '<section class="card section"><h2>Achiziții directe repetate <span class="nr-b n">' + frag.length + '</span></h2><p class="note">La aceeași instituție, același furnizor, aceeași grupă CPV, în același an: cel puțin trei achiziții directe care împreună depășesc pragul. Nu înseamnă automat fragmentare ilegală; înseamnă că merită întrebat de ce nu s-a făcut o singură procedură.</p>' +
+          (frag.length ? frag.map(achDoc).join("") : '<p class="empty">Niciun semnal.</p>') + "</section>" +
+        '<section class="card section"><h2>Chiar sub prag <span class="nr-b n">' + sub.length + '</span></h2><p class="note">Achiziții directe între 90% și 100% din prag.</p>' +
+          (sub.length ? '<details><summary>Vezi lista</summary>' + sub.map(achDoc).join("") + "</details>" : '<p class="empty">Niciun semnal.</p>') + "</section>" +
+        '<section class="card section"><h2>Documente dispărute de pe site-ul primăriei <span class="nr-b n">' + disp.length + "</span></h2>" +
+          '<p class="note">Fișiere văzute de arhiva noastră și care nu mai sunt pe site. Copia lor e în arhiva de siguranță, cu amprenta din momentul copierii.</p>' +
+          (disp.length ? '<div class="tw"><table><thead><tr><th>Dispărut la</th><th>Fișier</th><th>Încărcat</th><th>Copie</th></tr></thead><tbody>' + disp.slice(0, 200).map(function (f) {
+            return "<tr><td>" + esc(zi(f.x)) + '</td><td><a href="' + esc(safeUrl(f.u) || "#") + '" rel="noopener">' + esc(f.n || f.u.split("/").pop()) + "</a></td><td>" + esc(f.d ? zi(f.d) : "-") + "</td><td>" +
+              (f.w ? '<a href="' + esc(safeUrl(f.w) || "#") + '" rel="noopener">Internet Archive</a>' : f.c ? "pe hostingul nostru" : "-") + "</td></tr>"; }).join("") + "</tbody></table></div>" : '<p class="empty">' + (M.length ? "Niciun document dispărut." : "Manifestul arhivei nu s-a putut citi.") + "</p>") + "</section>" +
+        '<section class="card section"><h2>Cum se calculează</h2><dl class="sg-m">' + Object.keys(S.metoda || {}).map(function (k) { return "<dt>" + esc(SEMN_COMP[k] || (k === "indice" ? "Indicele" : k)) + "</dt><dd>" + esc(S.metoda[k]) + "</dd>"; }).join("") + "</dl>" +
+          '<p class="note">Actualizat la ' + esc(zi(S.generat_la)) + ".</p></section>";
+      glosar(el);
+    }).catch(function () { el.innerHTML = head("Semnale", "") + '<p class="empty">Semnalele nu au fost calculate încă. Apar după următoarea colectare.</p>'; });
+  }
+
   // ---------- Analizele Rădăuțiul Civic (doar intern): cartoanele și textele postărilor, plus ciornele făcute automat din rezumate ----------
   function analizeIntern(el) {
     if (!INTERN) return;
@@ -4595,6 +4655,7 @@
     else if (id === "despre") (r.sub === "glosar" ? glosarPagina : despre)(el, r);
     else if (id === "mesaje") mesajeIntern(el);
     else if (id === "analize") analizeIntern(el);
+    else if (id === "semnale") semnaleIntern(el, r);
     else if (id === "declaratii" && INTERN) declaratiiIntern(el);
     else if (id === "arhiva") arhivaIntern(el, r);
     if (id === "acasa") { noutatiCard(); anCard(); arhivaCard(); litNewsCard(); primaVizita(); }

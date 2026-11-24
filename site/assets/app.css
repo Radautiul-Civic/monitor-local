@@ -899,3 +899,7 @@ details.alerte .al-f{margin-top:8px;max-width:640px}
 .an-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
 .an-grid a{display:block;text-decoration:none;color:inherit;font-size:.82rem}.an-grid img{width:100%;aspect-ratio:1;border-radius:10px;border:1px solid var(--line);display:block;margin-bottom:4px}
 @media(max-width:560px){.an-c img{width:84px;height:84px;flex-basis:84px}.an-grid{grid-template-columns:repeat(2,1fr)}}
+
+/* semnalele (intern) */
+.sg-g{letter-spacing:-2px;margin-right:6px;font-size:.8rem}.sg-1{color:#9aa0a6}.sg-2{color:#d98a1f}.sg-3{color:#c94a3a}
+.sg-m dt{font-weight:700;margin-top:10px}.sg-m dd{margin:2px 0 0}

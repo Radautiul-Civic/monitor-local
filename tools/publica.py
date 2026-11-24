@@ -174,7 +174,7 @@ def intern_date():
     d = os.path.join(ROOT, "data")
     out = {}
     for name in ("indicatori.json", "liste.json", "urbanism.json", "sicap.json", "sicap-explorer.json", "buget.json", "concursuri.json",
-                 "sedinte.json", "noutati.json", "acasa.json", "componenta.json", "teme.json", "termoficare.json"):
+                 "sedinte.json", "noutati.json", "acasa.json", "componenta.json", "teme.json", "termoficare.json", "semnale.json"):
         if os.path.exists(os.path.join(d, name)):
             out[name] = os.path.join(d, name)
     di = os.path.join(d, "intern-date")   # litigii cu numele părților, voturi
