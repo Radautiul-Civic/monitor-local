@@ -1,12 +1,8 @@
-name: Test detectare înregistrări (Facebook)
+name: Test detectare înregistrări
 
-# Verifică dacă lista de videoclipuri a unei pagini publice de Facebook se poate citi fără autentificare, din rularea automată.
+# Verifică dacă înregistrările ședințelor se pot găsi automat din articolele radautiziar.ro (videoclip YouTube încorporat).
 on:
   workflow_dispatch:
-    inputs:
-      url:
-        description: "Adresa paginii"
-        default: "https://www.facebook.com/profile.php?id=61559725245078&sk=videos"
 
 permissions:
   contents: read
@@ -14,21 +10,28 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - run: pip install -q yt-dlp requests
-      - env:
-          URL: ${{ inputs.url }}
-        run: |
-          echo "== yt-dlp flat playlist"; yt-dlp --flat-playlist --print "%(id)s | %(title)s | %(url)s" "$URL" 2>&1 | head -30 || true
-          echo "== yt-dlp /videos"; yt-dlp --flat-playlist --print "%(id)s | %(title)s" "https://www.facebook.com/61559725245078/videos" 2>&1 | head -30 || true
-          echo "== html"; python - <<'PY'
-          import os, re, requests
-          for u in (os.environ["URL"], "https://www.facebook.com/61559725245078/videos", "https://mbasic.facebook.com/profile.php?id=61559725245078&v=timeline"):
+      - run: |
+          python - <<'PY'
+          import re, requests, subprocess, html
+          H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36"}
+          for u in ("https://www.radautiziar.ro/wp-json/wp/v2/posts?search=sedinta+consiliului+local&per_page=10&_fields=id,date,link,title,content",
+                    "https://www.radautiziar.ro/?s=sedinta+consiliului+local", "https://www.radautiziar.ro/feed/"):
               try:
-                  r = requests.get(u, timeout=30, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36", "Accept-Language": "ro"})
-                  ids = sorted(set(re.findall(r"/videos/(\d{10,})", r.text)))
-                  print(u, r.status_code, len(r.text), "login" in r.url, ids[:10], len(re.findall(r"Sedinta Consiliului", r.text)))
+                  r = requests.get(u, timeout=40, headers=H)
+                  print("==", u, r.status_code, len(r.text), r.headers.get("content-type"))
+                  if "wp-json" in u and r.ok:
+                      for p in r.json():
+                          yt = re.findall(r"youtube\.com/embed/([\w-]{6,})|youtu\.be/([\w-]{6,})", p["content"]["rendered"])
+                          print(p["date"], html.unescape(p["title"]["rendered"]), p["link"], [a or b for a, b in yt])
+                  else:
+                      print(sorted(set(re.findall(r"https://www\.radautiziar\.ro/sedinta-[\w-]+/", r.text)))[:10])
               except Exception as e:
-                  print(u, "eroare", e)
+                  print("eroare", u, e)
+          r = requests.get("https://www.radautiziar.ro/sedinta-consiliului-local-24-noe-2026/", timeout=40, headers=H)
+          print("== articol", r.status_code, sorted(set(re.findall(r"youtube\.com/embed/([\w-]{6,})", r.text))), re.findall(r'"datePublished":"([^"]+)"', r.text)[:1])
           PY
+          echo "== yt-dlp"; yt-dlp --skip-download --print "%(id)s | %(title)s | %(duration)s | %(upload_date)s | %(channel)s" "https://www.youtube.com/watch?v=chq4NwFuBN8" 2>&1 | tail -5 || true
+          echo "== audio"; timeout 300 yt-dlp -f "bestaudio/best" --download-sections "*0-120" -o "a.%(ext)s" "https://www.youtube.com/watch?v=chq4NwFuBN8" 2>&1 | tail -4 || true; ls -la a.* 2>/dev/null || echo "fără fișier audio"
