@@ -69,6 +69,12 @@ jobs:
               print("exemple:", c.execute("select year, number, adoption_date, substr(title,1,90) from hcl order by year desc, number desc limit 5").fetchall())
           if "documents" in tab:
               print("documente:", c.execute("select count(*), sum(text_path is not null), sum(pages) from documents").fetchone())
+          for src in ("hcl", "proiecte", "pv", "dispozitii"):
+              print("== exemple", src)
+              for w, t, l, dt in c.execute("select wp_id, title, link, date from posts where source=? order by date desc limit 6", (src,)).fetchall():
+                  print("  ", dt, "|", t[:140], "|", l)
+                  for dtxt, du in c.execute("select link_text, url from documents where wp_id=? limit 3", (w,)).fetchall():
+                      print("       doc:", (dtxt or "")[:90], "|", du)
           for f in sorted(os.listdir(d)):
               print("  fișier", f, os.path.getsize(os.path.join(d, f)))
           PY

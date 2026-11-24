@@ -2966,10 +2966,50 @@
     }).sort(function (a, b) { return (b.an || "").localeCompare(a.an || ""); });
   }
   function incarcaTeme() { return TEME ? Promise.resolve(TEME) : get(DATA + "teme.json").then(function (d) { TEME = d; return d; }).catch(function () { TEME = {}; return TEME; }); }
+  // ---------- fișa consilierului: față de grupul său, pe teme, ce a spus în ședințe ----------
+  var TEME_VOT = [["Termoficare", /termic|termoficar/], ["Buget și taxe", /buget|rectificar|impozit|\btax|imprumut|credit/], ["Urbanism", /urbanis|p\.?\s?u\.?\s?[zd]\b|construir|planul urbanistic/],
+    ["Patrimoniu", /domeniul (public|privat)|concesion|inchiri|vanzar|teren|imobil|dare in administrare/], ["Servicii publice", /salubr|deseu|\bapa\b|canaliz|iluminat|transport|parcar|cimitir|deszapez/],
+    ["Social și sănătate", /social|spital|medical|locuint|asistent|varstnic/], ["Școli și sport", /scoal|scoli|liceu|gradinit|invatamant|sport|club/]];
+  function consGrupTeme(V, c, voturi) {
+    var eu = compDe(c.id), partid = eu && eu.partid;
+    // grupul: colegii de partid de acum; ne uităm doar la mandatul în curs, ca partidul să fie același
+    var Mv = mandateDin(V), mand = Mv[Mv.length - 1], de_la = mand ? mand[1] : "0000";
+    var colegi = partid ? (V.consilieri || []).filter(function (x) { var k = compDe(x.id); return x.id !== c.id && k && k.partid === partid && !k.iesit; }) : [];
+    var sep = { singur: 0, cu: 0, ex: [] };
+    voturi.forEach(function (x, j) {
+      if (x.d < de_la || "IAN".indexOf(x.c) < 0) return;
+      var i = x.s.voturi.indexOf(x.v) + 1, cu = colegi.filter(function (k) { var cd = k.cod && k.cod[x.d]; return cd && cd[i] === x.c; });
+      if (cu.length) sep.cu++; else { sep.singur++; if (sep.ex.length < 12) sep.ex.push(x); }
+    });
+    var tem = TEME_VOT.map(function (t) { var L = voturi.filter(function (x) { return x.c !== "X" && x.c !== "?" && t[1].test(norm((x.v.titlu || "").slice(0, 400))); });
+      return { t: t[0], n: L.length, P: L.filter(function (x) { return x.c === "P"; }).length, I: L.filter(function (x) { return x.c === "I"; }).length, A: L.filter(function (x) { return x.c === "A"; }).length, N: L.filter(function (x) { return x.c === "N"; }).length }; })
+      .filter(function (x) { return x.n; });
+    var h = "";
+    if (partid && sep.singur + sep.cu) h += '<section class="card section"><h2>Față de colegii de partid</h2><p class="note">În mandatul în curs, ori de câte ori a votat împotrivă, s-a abținut sau nu a votat: a făcut-o împreună cu cel puțin un coleg de la ' + esc(partid) +
+      ' sau singur din grupul său. Procesele-verbale numesc doar pe cei care nu votează „pentru”, deci numărăm doar aceste voturi.</p><div class="grid">' +
+      tile("Cu colegii de partid", nr(sep.cu), sep.cu === 1 ? "vot" : "voturi", "") + tile("Singur din " + partid, nr(sep.singur), sep.singur === 1 ? "vot" : "voturi", "") + "</div>" +
+      (sep.ex.length ? '<details class="nota-d"><summary><b>Când a votat altfel decât colegii lui</b></summary>' + sep.ex.map(function (x) { var K = VCOD[x.c];
+        return '<div class="doc"><div class="h"><span class="rz ' + K[1] + '">' + esc(K[2]) + "</span>" + linkSed(x.d, x.s.tip) + (x.v.hcl ? linkHcl(x.v.hcl) : "") + '</div><div class="t">' + esc((x.v.titlu || "proiect neidentificat").slice(0, 200)) + "</div></div>"; }).join("") + "</details>" : "") + "</section>";
+    if (tem.length) h += '<section class="card section"><h2>Pe teme</h2><p class="note">Voturile cunoscute, după titlul proiectului. „Pentru” e dedus doar în ședințele în care știm sigur cine a fost în sală.</p><div class="tw"><table><thead><tr><th>Tema</th><th class="n">Voturi</th><th class="n">Pentru (dedus)</th><th class="n">Împotrivă</th><th class="n">Abțineri</th><th class="n">Nu a votat</th></tr></thead><tbody>' +
+      tem.map(function (x) { return "<tr><td>" + esc(x.t) + '</td><td class="n">' + x.n + '</td><td class="n">' + x.P + '</td><td class="n">' + (x.I ? "<b>" + x.I + "</b>" : 0) + '</td><td class="n">' + (x.A ? "<b>" + x.A + "</b>" : 0) + '</td><td class="n">' + x.N + "</td></tr>"; }).join("") + "</tbody></table></div></section>";
+    return h;
+  }
+  function consInterventii(c) {
+    var tok = norm(c.nume).split(/[\s-]+/).filter(function (w) { return w.length >= 4; });
+    var al = function (cine) { var t = " " + norm(cine).replace(/[^a-z ]/g, " ") + " "; return tok.some(function (w) { return t.indexOf(" " + w + " ") >= 0; }); };
+    var L = [];
+    (REZ || []).forEach(function (x) { ((x.rezumat || {}).puncte || []).forEach(function (p) { (p.interventii || []).forEach(function (i) { if (i.cine && al(i.cine)) L.push({ d: x.data, p: p, i: i, v: x.video }); }); }); });
+    if (!L.length) return "";
+    L.sort(function (a, b) { return b.d.localeCompare(a.d); });
+    return '<section class="card section"><h2>Ce a spus în ședințe <span class="nr-b n">' + L.length + '</span></h2><p class="note">Din rezumatele ședințelor scrise de Rădăuțiul Civic din înregistrări. Minutul arată momentul din înregistrare.</p>' +
+      L.slice(0, 40).map(function (x) { return '<div class="doc"><div class="h"><a href="#consiliu/sedinte/' + esc(x.d) + '">Ședința din ' + esc(zi(x.d)) + "</a>" + (x.i.minut ? ' <span class="rz-min">' + esc(x.i.minut) + "</span>" : "") +
+        (x.v && safeUrl(x.v) ? ' <a class="lk" href="' + esc(safeUrl(x.v)) + '" rel="noopener">înregistrarea</a>' : "") + '</div><div class="t">' + esc(x.p.titlu || "") + '</div><div class="m"><span>' + esc(x.i.ce || "") + "</span></div></div>"; }).join("") + "</section>";
+  }
   function consilierProfil(el, r, id) {
     el.innerHTML = head("Consilier local", "", r) + '<p class="updated">Se încarcă...</p>';
     if (!COMP) { incarcaComp().then(function () { consilierProfil(el, r, id); }); return; }
     if (!TEME) { incarcaTeme().then(function () { consilierProfil(el, r, id); }); return; }
+    if (!REZ) { incarcaRez().then(function () { consilierProfil(el, r, id); }); return; }
     voturiIntern2(function (V) {
       var c = (V.consilieri || []).filter(function (x) { return x.id === id; })[0];
       var inapoi = '<p class="back"><a href="#consiliu/consilieri">← Toți consilierii</a></p>';
@@ -3018,6 +3058,7 @@
             (intD.length ? '<details class="nota-d"><summary><b>Ședințele în care a luat cuvântul</b> <span class="nr-b n">' + intD.length + '</span></summary><p class="note">În paranteză, de câte ori, după procesul-verbal.</p><div class="lnks">' + intD.map(function (d) { return '<a href="#consiliu/sedinte/' + esc(d) + '">' + esc(zi(d)) + " <small>(" + c.interventii[d] + ")</small></a>"; }).join("") + "</div></details>" : "") +
             METODA_NOTA + "</section>";
         })() +
+        consGrupTeme(V, c, voturi) + consInterventii(c) +
         '<section class="card section"><h2>Pe ani</h2><p class="note">„Pentru (dedus)” e votul unui consilier prezent care nu e numit printre cei care au votat altfel; îl socotim doar în ședințele în care știm sigur cine a fost în sală.</p>' +
         '<div class="tw"><table><thead><tr><th>An</th><th class="n">Ședințe</th><th class="n">Absent</th><th class="n">Împotrivă</th><th class="n">Abțineri</th><th class="n">Nu a votat</th><th class="n">Pentru (dedus)</th></tr></thead><tbody>' +
         Object.keys(ani).sort().reverse().map(function (a) { var x = ani[a]; return "<tr><td>" + a + '</td><td class="n">' + x.s + '</td><td class="n">' + x.X + '</td><td class="n">' + x.I + '</td><td class="n">' + x.A + '</td><td class="n">' + x.N + '</td><td class="n">' + x.P + "</td></tr>"; }).join("") +
