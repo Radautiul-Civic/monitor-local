@@ -2402,7 +2402,7 @@
       Object.keys(D.feluri).filter(function (k) { return g[k] && ["consilieri", "comisii", "viceprimar"].indexOf(k) < 0; }).map(function (k) {
       var L2 = g[k].slice().sort(function (a, b) { return (b.an || "").localeCompare(a.an || ""); });
       return '<section class="card section"><h2>' + esc(D.feluri[k]) + ' <span class="nr-b n">' + L2.length + "</span></h2>" + L2.map(function (x) {
-        return '<div class="doc"><div class="h">' + (x.an ? '<span class="id">' + esc(x.an) + "</span>" : "") + '<a class="lk" href="' + esc(safeUrl(x.url) || "#") + '" rel="noopener">PDF</a>' +
+        return '<div class="doc"><div class="h">' + (x.an ? '<span class="id"' + (x.an_estimat ? ' title="an dedus din data încărcării: raportul se depune la începutul anului următor"' : "") + ">" + esc(x.an) + (x.an_estimat ? " (estimat)" : "") + "</span>" : "") + '<a class="lk" href="' + esc(safeUrl(x.url) || "#") + '" rel="noopener">PDF</a>' +
           (safeUrl(x.pagina) ? '<a class="lk" href="' + esc(x.pagina) + '" rel="noopener">pagina</a>' : "") + '</div><div class="t">' + esc(x.titlu) + "</div></div>"; }).join("") + "</section>";
     }).join("");
   }
@@ -3073,7 +3073,7 @@
         (abs.length ? '<section class="card section"><h2>Absențe</h2><div class="lnks">' + abs.map(function (s) { return linkSed(s.data, s.tip); }).join("") + "</div></section>" : "") +
         (function () { var RA = rapoarteCons(c); return RA.length ? '<section class="card section"><h2>Rapoarte de activitate <span class="nr-b n">' + RA.length + "</span></h2>" +
           '<p class="note">Rapoartele anuale pe care consilierul le-a depus, publicate de primărie.</p>' + RA.map(function (x) {
-            return '<div class="doc"><div class="h">' + (x.an ? '<span class="id">' + esc(x.an) + "</span>" : "") + '<a class="lk" href="' + esc(safeUrl(x.url) || "#") + '" rel="noopener">PDF</a></div><div class="t">' + esc(x.titlu) + "</div></div>"; }).join("") + "</section>" : ""; })() +
+            return '<div class="doc"><div class="h">' + (x.an ? '<span class="id"' + (x.an_estimat ? ' title="an dedus din data încărcării: raportul se depune la începutul anului următor"' : "") + ">" + esc(x.an) + (x.an_estimat ? " (estimat)" : "") + "</span>" : "") + '<a class="lk" href="' + esc(safeUrl(x.url) || "#") + '" rel="noopener">PDF</a></div><div class="t">' + esc(x.titlu) + "</div></div>"; }).join("") + "</section>" : ""; })() +
         '<section class="card section"><h2>Toate voturile</h2><div id="cp-l"></div></section>';
       if ($("cp-nota")) { var NA2 = Object.keys(ani).sort().map(function (a) { return { a: a, n: notaCons(V, c, a, String(+a + 1)) }; }).filter(function (x) { return x.n.sedinte; });
         chart($("cp-nota"), { cats: NA2.map(function (x) { return x.a; }), series: [], h: 170, label: "Scorul de activitate pe ani", line: { color: "var(--c1)", values: NA2.map(function (x) { return x.n.nota; }) },
@@ -3095,7 +3095,7 @@
     var cons = (COMP.consilieri || []).filter(function (x) { return x.id; }).map(function (x) { return { id: x.id, nume: x.nume, t: tok(x.nume) }; });
     var cine = function (titlu) { var t = " " + tok(titlu).join(" ") + " "; return cons.filter(function (c) { return c.t.length >= 2 && c.t.every(function (w) { return t.indexOf(" " + w + " ") >= 0; }); })[0]; };
     var item = function (x) { var c = x.fel === "consilieri" ? cine(x.titlu) : null;
-      return '<div class="doc"><div class="h">' + (x.an ? '<span class="id">' + esc(x.an) + "</span>" : "") + '<a class="lk" href="' + esc(safeUrl(x.url) || "#") + '" rel="noopener">PDF</a>' +
+      return '<div class="doc"><div class="h">' + (x.an ? '<span class="id"' + (x.an_estimat ? ' title="an dedus din data încărcării: raportul se depune la începutul anului următor"' : "") + ">" + esc(x.an) + (x.an_estimat ? " (estimat)" : "") + "</span>" : "") + '<a class="lk" href="' + esc(safeUrl(x.url) || "#") + '" rel="noopener">PDF</a>' +
         (safeUrl(x.pagina) ? '<a class="lk" href="' + esc(x.pagina) + '" rel="noopener">pagina</a>' : "") + (c ? '<a class="lk" href="#consiliu/consilieri/' + encodeURIComponent(c.id) + '">fișa consilierului</a>' : "") + '</div><div class="t">' + esc(x.titlu) + "</div></div>"; };
     var sec = function (k, nota) {
       var X = L2.filter(function (x) { return x.fel === k; }).sort(function (a, b) { return (b.an || "0").localeCompare(a.an || "0"); });

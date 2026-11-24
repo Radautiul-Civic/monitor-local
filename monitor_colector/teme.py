@@ -564,7 +564,8 @@ def an_din_text(text_path):
     except OSError:
         return []
     for rx in (r"pentru\s*/?\s*anul\s*:?\s*(20[0-3]\d)", r"\banul\s*:?\s*(20[0-3]\d)", r"perioada\s*:?\s*(?:anul\s*)?(20[0-3]\d)",
-               r"perioada[^.]{0,60}?(20[0-3]\d)", r"\bin\s+anul\s+(20[0-3]\d)"):
+               r"perioada[^.]{0,60}?(20[0-3]\d)", r"\bin\s+anul\s+(20[0-3]\d)", r"raport\w*\s+de\s+activitate\s*[-:,]?\s*(20[0-3]\d)",
+               r"(?:pe\s+parcursul|in\s+cursul|pe\s+durata)\s+anului\s+(20[0-3]\d)", r"\banului\s+(20[0-3]\d)"):
         m = re.search(rx, t)
         if m:
             return [m.group(1)]
@@ -582,7 +583,16 @@ def rapoarte(db):
             fel = "consilieri"   # pe paginile consiliului local, rapoartele fără „consilier” în titlu sunt tot ale consilierilor
         # anul raportului: din titlu, altfel din numele fișierului (nu din „uploads/2025/06”, care e data publicării)
         an = re.findall(r"\b(20[0-3]\d)\b", norm(lt or "")) or re.findall(r"(?<!\d)(20[0-3]\d)(?!\d)", url.rsplit("/", 1)[-1]) or an_din_text(tp)
-        out.append({"fel": fel, "titlu": (lt or ptitlu or "").strip()[:300], "url": url, "pagina": pagina, "an": max(an) if an else None})
+        estimat = False
+        if not an and fel == "consilieri":
+            # raportul anual se depune în primele luni ale anului următor: încărcat în ianuarie-iunie => anul de dinainte
+            m = re.search(r"/uploads/(20[0-3]\d)/(\d\d)/", url)
+            if m and int(m.group(2)) <= 6:
+                an, estimat = [str(int(m.group(1)) - 1)], True
+        x = {"fel": fel, "titlu": (lt or ptitlu or "").strip()[:300], "url": url, "pagina": pagina, "an": max(an) if an else None}
+        if estimat:
+            x["an_estimat"] = True
+        out.append(x)
     return {"lista": out, "feluri": {k: n for k, n, _ in TIP_RAPORT}}
 
 

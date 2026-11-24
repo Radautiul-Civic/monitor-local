@@ -36,3 +36,12 @@ def test_pagina_scapa_textul_si_sare_imaginile_lipsa(tmp_path):
         h = cartoane.pagina(s, i, str(tmp_path))
         assert "<de ce>" not in h and "<img" not in h and "—" not in h
     assert "&lt;de ce&gt;" in "".join(cartoane.pagina(s, i, str(tmp_path)) for i in range(len(s["cartoane"])))
+
+
+def test_an_din_text(tmp_path):
+    from monitor_colector import teme
+    for text, an in (("Raport de activitate 2025 Subsemnatul", "2025"), ("am desfășurat-o pe parcursul anului 2024. Am part", "2024"),
+                     ("ales în urma alegerilor locale din data de 09.06.2024, prezint", None)):
+        f = tmp_path / "t.txt"
+        f.write_text(text, encoding="utf-8")
+        assert (teme.an_din_text(str(f)) or [None])[0] == an
