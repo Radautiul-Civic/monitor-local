@@ -3512,7 +3512,7 @@
     sdjInit();
   }
   var NT_CUL = { rezumat: "var(--c1)", sedinta: "var(--c1)", consultare: "var(--c7)", hcl: "var(--c3)", pv: "var(--c3)", urbanism: "var(--c2)", achizitie: "var(--c4)", licitatie: "var(--c4)", atribuire: "var(--c4)", concurs: "var(--c5)", contract: "var(--c4)", buget: "var(--c6)" };
-  var NT_GRUP = [["", "Toate"], ["consiliu", "Consiliul local", ["sedinta", "consultare", "hcl", "pv", "rezumat"]], ["bani", "Bani publici", ["achizitie", "licitatie", "atribuire", "contract", "buget"]],
+  var NT_GRUP = [["", "Toate"], ["consiliu", "Consiliul local", ["sedinta", "consultare", "hcl", "pv"]], ["bani", "Bani publici", ["achizitie", "licitatie", "atribuire", "contract", "buget"]],
     ["urbanism", "Urbanism", ["urbanism"]], ["concurs", "Angajări", ["concurs"]]];
   // ---------- „Săptămâna în Rădăuți”: ce s-a întâmplat în ultimele 7 zile și ce urmează, din noutățile monitorului ----------
   function zIso(d) { return d.toISOString().slice(0, 10); }
@@ -3571,11 +3571,8 @@
     var el = $("nou-card"); if (!el) return;
     Promise.all([incarcaSed(), incarcaNou(), incarcaRez()]).then(function () {
       if (!$("nou-card")) return;
-      if (!NOU._rez) {
-        NOU._rez = 1; NOU.tipuri = NOU.tipuri || {}; NOU.tipuri.rezumat = "Rezumat de ședință";
-        (REZ || []).forEach(function (x) { (NOU.evenimente = NOU.evenimente || []).push({ data: (x.aprobat_la || x.data).slice(0, 10), tip: "rezumat", titlu: "Rezumatul ședinței din " + zi(x.data), text: ((x.rezumat || {}).rezumat || "").slice(0, 220), link: "#consiliu/sedinte/" + x.data }); });
-        NOU.evenimente.sort(function (a, b) { return a.data < b.data ? 1 : a.data > b.data ? -1 : 0; });
-      }
+      // rezumatele ședințelor sunt ale noastre, nu ale primăriei: stau într-o casetă separată, nu în fluxul „Ce a mai publicat primăria”
+      var RZ = (REZ || []).slice().sort(function (a, b) { return (b.aprobat_la || b.data).localeCompare(a.aprobat_la || a.data); });
       // toate ședințele convocate și încă neținute (pot fi două: una ordinară și una extraordinară), în ordinea datei
       var UU = (SED.urmatoare || []).slice().sort(function (a, b) { return (a.data + (a.ora || "")).localeCompare(b.data + (b.ora || "")); }), U = UU[0], des = (SED.consultare || []).filter(function (p) { return p.deschis; });
       var h = "";
@@ -3586,6 +3583,8 @@
         "</div>" + (des.length ? consLista(des, true) : "") + "</section>";
       h += '<div id="sapt"></div>';
       var E = NOU.evenimente || [], flux = $("nou-flux"), hf = "";
+      if (RZ.length) hf += '<section class="card section"><h2>Rezumatele noastre ale ședințelor</h2><p class="note">Scrise de Rădăuțiul Civic din înregistrările ședințelor, nu publicate de primărie.</p><ul class="sapt-l">' +
+        RZ.slice(0, 4).map(function (x) { return '<li><a href="#consiliu/sedinte/' + esc(x.data) + '"><b>Ședința din ' + esc(zi(x.data)) + "</b> " + esc(((x.rezumat || {}).rezumat || "").slice(0, 200)) + "</a></li>"; }).join("") + "</ul></section>";
       if (E.length) hf += '<section class="card section"><div class="h-row"><h2>Ce a mai publicat primăria</h2><a class="rss" href="' + FTDATA + 'noutati.xml" title="Abonează-te prin RSS">RSS</a></div>' +
         '<div class="seg nt-seg" role="group" aria-label="Ce noutăți">' + NT_GRUP.map(function (g, i) { return '<button type="button" data-g="' + g[0] + '" aria-pressed="' + (i === 0) + '">' + esc(g[1]) + "</button>"; }).join("") + "</div>" +
         '<div id="nou-l"></div><button class="more" id="nou-m" hidden>Arată mai multe</button></section>' + alerteHtml("", "Primește noutățile pe e-mail, pe strada sau subiectul tău");
