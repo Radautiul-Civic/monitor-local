@@ -31,6 +31,11 @@ function norm($s) {
   $s = strtr($s, ['ă' => 'a', 'â' => 'a', 'î' => 'i', 'ș' => 's', 'ş' => 's', 'ț' => 't', 'ţ' => 't']);
   return preg_replace('/\s+/', ' ', preg_replace('/[^a-z0-9 ]+/', ' ', $s));
 }
+// subiectele cu mai multe cuvinte-cheie (alegerea din formular -> începuturile de cuvânt căutate în noutăți)
+const SUBIECTE = ['termic' => ['termic', 'termoficar', 'caldur'], 'salubr' => ['salubr', 'deseu', 'gunoi', 'insule ecologice'],
+  'apa' => ['apa potabil', 'canalizar', 'acet', 'alimentare cu apa', 'apa si canal'], 'ilumin' => ['iluminat'],
+  'dezapez' => ['dezapez', 'deszapez', 'salubrizare stradala', 'zapad'], 'servicii comunale' => ['servicii comunale']];
+function chei_subiect($s) { $k = norm($s); return SUBIECTE[$k] ?? [$k]; }
 function curat($s, $max) { return mb_substr(trim(preg_replace('/[\x00-\x1F\x7F<>]/u', '', strval($s ?? ''))), 0, $max); }
 function trimite_mail($catre, $subiect, $text) {
   $h = "From: " . DE_LA . "\r\nReply-To: contact@radautiulcivic.ro\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit";
@@ -58,7 +63,7 @@ if ($CLI) {
       if (($a['creat'] ?? 0) < time() - 7 * 86400) $a = null;
       continue;
     }
-    $vazut = array_flip($a['trimis'] ?? []); $chei = array_map('norm', array_merge($a['strazi'] ?? [], $a['subiecte'] ?? []));
+    $vazut = array_flip($a['trimis'] ?? []); $chei = array_map('norm', $a['strazi'] ?? []); foreach ($a['subiecte'] ?? [] as $sb) $chei = array_merge($chei, chei_subiect($sb));
     $gasite = [];
     foreach ($ev as $e) {
       $id = $e['id'] ?? md5(($e['tip'] ?? '') . ($e['titlu'] ?? '') . ($e['data'] ?? ''));

@@ -1988,7 +1988,9 @@
     if (pier.length) h += '<section class="card section"><h2>Pierderi acoperite din bugetul local</h2><p class="note">Pe lângă subvenția din preț, consiliul aprobă din când în când acoperirea pierderilor Servicii Comunale din termoficare.</p>' +
       pier.map(function (x) { return '<div class="doc"><div class="h"><span class="id">' + linkHcl(x) + "</span>" + (x.data ? '<span class="muted">' + esc(zi(x.data)) + "</span>" : "") + (x.pierderi_lei ? '<span class="inv-v">' + lei(x.pierderi_lei) + "</span>" : "") + '</div><div class="t">' + esc(x.pe_scurt || x.titlu) + "</div></div>"; }).join("") + "</section>";
     h += '<section class="card section"><h2>Toate hotărârile despre termoficare <span class="nr-b n">' + H.length + '</span></h2><div id="tf-l"></div></section>';
+    h += alerteHtml("", "Primește pe e-mail noutățile despre căldură", "termic");
     el.innerHTML = h;
+    alerteLeaga(el);
     var cats = P.map(function (p) { return lunaScurt(p.de_la); }), r0 = function (v) { return v == null ? null : Math.round(v); };
     var pct = function (p, k) { var t = p.total_cu_tva || ((p.populatie_cu_tva || 0) + (p.subventie_cu_tva || 0)); return t && p[k] != null ? Math.round(1000 * p[k] / t) / 10 : null; };
     var tipTf = function (i) { var p = P[i]; return "<b>" + esc(perioada(p)) + "</b><br>populația: " + lei2(p.populatie_cu_tva) + "/MWh (" + dec(pct(p, "populatie_cu_tva")) + "%)<br>bugetul local: " + lei2(p.subventie_cu_tva) + "/MWh (" + dec(pct(p, "subventie_cu_tva")) + "%)<br>prețul întreg: " + lei2(p.total_cu_tva) + "/MWh" + (p.tva ? " (TVA " + p.tva + "%)" : "") + (p.hcl ? "<br>HCL " + p.hcl.nr + "/" + p.hcl.an : ""); };
@@ -3688,12 +3690,13 @@
     }).catch(function () { $("z-map").innerHTML = '<p class="empty">Harta nu s-a putut încărca.</p>'; });
   }
   // ---------- Alerte pe e-mail (alerte.php): noutățile despre o stradă sau un subiect ----------
-  var SUBIECTE_AL = [["taxe", "Taxe și impozite"], ["buget", "Buget"], ["investiti", "Investiții"], ["asfalt", "Asfaltări"], ["urbanism", "Urbanism"], ["achizit", "Achiziții publice"], ["concurs", "Concursuri și angajări"], ["teren", "Terenuri și clădiri"]];
-  function alerteHtml(strada, titlu) {
+  var SUBIECTE_AL = [["taxe", "Taxe și impozite"], ["buget", "Buget"], ["investiti", "Investiții"], ["asfalt", "Asfaltări"], ["urbanism", "Urbanism"], ["achizit", "Achiziții publice"], ["concurs", "Concursuri și angajări"], ["teren", "Terenuri și clădiri"],
+    ["termic", "Căldura (termoficare)"], ["salubr", "Gunoiul"], ["apa", "Apa și canalizarea"], ["ilumin", "Iluminatul public"], ["dezapez", "Curățenia străzilor și deszăpezirea"]];
+  function alerteHtml(strada, titlu, subiect) {
     var id = "al-" + Math.random().toString(36).slice(2, 7);
-    return '<details class="card section alerte"' + (strada ? " open" : "") + '><summary><b>' + esc(titlu || "Primește noutățile pe e-mail") + '</b> <span class="muted">gratuit, te poți dezabona oricând</span></summary>' +
+    return '<details class="card section alerte"' + (strada || subiect ? " open" : "") + '><summary><b>' + esc(titlu || "Primește noutățile pe e-mail") + '</b> <span class="muted">gratuit, te poți dezabona oricând</span></summary>' +
       '<form class="al-f" data-id="' + id + '"><label class="cx-f"><span>Străzile tale (despărțite prin virgulă, cel mult 5)</span><input name="strazi" type="text" maxlength="250" value="' + esc(strada || "") + '" placeholder="ex. Putnei, Ștefan cel Mare"></label>' +
-      '<fieldset class="al-s"><legend>și/sau subiectele care te interesează</legend>' + SUBIECTE_AL.map(function (x) { return '<label><input type="checkbox" name="subiect" value="' + x[0] + '"> ' + esc(x[1]) + "</label>"; }).join("") + "</fieldset>" +
+      '<fieldset class="al-s"><legend>și/sau subiectele care te interesează</legend>' + SUBIECTE_AL.map(function (x) { return '<label><input type="checkbox" name="subiect" value="' + x[0] + '"' + (x[0] === subiect ? " checked" : "") + "> " + esc(x[1]) + "</label>"; }).join("") + "</fieldset>" +
       '<label class="cx-f"><span>Adresa de e-mail</span><input name="email" type="email" required maxlength="200" autocomplete="email"></label>' +
       '<input name="site" type="text" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">' +
       '<label class="cx-c"><input name="acord" type="checkbox" required> Sunt de acord ca Asociația Rădăuțiul Civic să-mi păstreze adresa și alegerile, doar ca să-mi trimită aceste noutăți. Nu le dă nimănui; le șterge la dezabonare.</label>' +
@@ -4136,16 +4139,16 @@
     ["Conducerea: AGA și consiliul de administrație", "adunar\\w* general|\\baga\\b|consiliu\\w* de administra"], ["Bani: buget, capital, credite, audit", "venituri si cheltuieli|capital\\w* social|credit|imprumut|audit|cheltuielilor"],
     ["Terenuri și alte contracte", "."]];
   var TEMA_CFG = {
-    "servicii/strazi": { titlu: "Curățenia străzilor și deszăpezirea", text: "Măturatul și spălatul străzilor și deszăpezirea le face Servicii Comunale, la tarifele aprobate de consiliul local. Aici: hotărârile, tarifele și ce s-a cumpărat pentru iarnă.",
+    "servicii/strazi": { alerta: "dezapez", titlu: "Curățenia străzilor și deszăpezirea", text: "Măturatul și spălatul străzilor și deszăpezirea le face Servicii Comunale, la tarifele aprobate de consiliul local. Aici: hotărârile, tarifele și ce s-a cumpărat pentru iarnă.",
       rx: "salubrizare stradala|dezapez|deszapez|maturat|curatenie stradal|zapad|polei|antiderapant|igienei publice", sx: "dezapez|deszapez|zapad|antiderapant|sare (de |pentru )?deszapez|sare industriala|sare gema|polei|maturat|maturator|salubrizare stradala" },
-    "servicii/iluminat": { titlu: "Iluminatul public", text: "Becurile și stâlpii de pe străzi: contractul pentru întreținerea iluminatului, tarifele, extinderile de rețea și modernizările aprobate de consiliul local.",
+    "servicii/iluminat": { alerta: "ilumin", titlu: "Iluminatul public", text: "Becurile și stâlpii de pe străzi: contractul pentru întreținerea iluminatului, tarifele, extinderile de rețea și modernizările aprobate de consiliul local.",
       rx: "iluminat", sx: "iluminat|corpuri de iluminat|stalp\\w* .{0,20}iluminat", fel: [["Contractul și tarifele", "contract|tarif|gestiun|studiu\\w* de oportunitate|prestari"], ["Investiții: extinderi și modernizări", "."]] },
     "servicii/hotarari": { titlu: "Toate hotărârile despre Servicii Comunale", text: "Hotărârile consiliului local despre societate și serviciile pe care le face pentru oraș, pe teme.", rx: RX_SC, fel: FEL_SC, sx: false, cui: "2563140", faraSicap: true },
-    "servicii/salubrizare": { titlu: "Gunoiul (salubrizarea)", text: "Ridicarea gunoiului menajer e organizată la nivelul județului Suceava: din 2025 o face operatorul regional al zonei Rădăuți, iar până atunci a făcut-o Servicii Comunale. Aici: cât plătește populația, hotărârile consiliului local despre salubrizare (regulamentul județean, taxa, cantitățile minime pentru firme), investițiile și cheltuielile orașului.",
+    "servicii/salubrizare": { alerta: "salubr", titlu: "Gunoiul (salubrizarea)", text: "Ridicarea gunoiului menajer e organizată la nivelul județului Suceava: din 2025 o face operatorul regional al zonei Rădăuți, iar până atunci a făcut-o Servicii Comunale. Aici: cât plătește populația, hotărârile consiliului local despre salubrizare (regulamentul județean, taxa, cantitățile minime pentru firme), investițiile și cheltuielile orașului.",
       extra: salubTarifeHtml, dupa: salubTarifeDeseneaza,
       rx: "salubriz|deseu|gunoi|colectar\\w* selectiv|insul\\w* ecologic|asociati\\w* de dezvoltare intercomunitara|ecologizar", nu: "salubrizare stradala", sx: "deseu|gunoi|salubriz|ecologiz|pubel|europubel|insul\\w* ecologic", capitol: "Protecția mediului (salubritate, canalizare)",
       fel: [["Regulamente și organizarea serviciului", "regulament|asociati|delegar|contract|norme"], ["Taxe și tarife", "tax|tarif|cantitat"], ["Investiții", "."]] },
-    "servicii/apa": { titlu: "Apa și canalizarea", text: "Apa și canalizarea le asigură ACET S.A. Suceava, operatorul regional, în care orașul e acționar. Orașul votează în asociația județeană pentru apă și canalizare prin reprezentantul său, pe baza mandatelor date de consiliul local. Aici: mandatele, extinderile de rețele aprobate de consiliu și achizițiile.",
+    "servicii/apa": { alerta: "apa", titlu: "Apa și canalizarea", text: "Apa și canalizarea le asigură ACET S.A. Suceava, operatorul regional, în care orașul e acționar. Orașul votează în asociația județeană pentru apă și canalizare prin reprezentantul său, pe baza mandatelor date de consiliul local. Aici: mandatele, extinderile de rețele aprobate de consiliu și achizițiile.",
       rx: "\\bacet\\b|apa potabil|alimentare cu apa|ape uzate|apa si (de )?canal|canalizar|epurare|aductiune|asociati\\w* judetene? pentru apa", nu: "pluvial",
       sx: "apa potabila|canalizare|apa si canal|epurare|bransament\\w* (de )?apa|retea de apa|retele de apa", fel: [["Asociația județeană și operatorul", "acet|asociati|mandat|tarif|delegar"], ["Extinderi și investiții", "."]] },
     "servicii/alte": { titlu: "Piețe, cimitir, câini fără stăpân", text: "Serviciile mai mici ale orașului: piețele și târgul, cimitirul municipal, gestionarea câinilor fără stăpân și taxiurile. Aici: regulamentele, contractele și investițiile aprobate de consiliul local.",
@@ -4262,6 +4265,7 @@
       chart($("tg-b"), { cats: aniB, label: C.capitol + " pe ani", series: [{ name: C.capitol, color: "var(--c1)", values: aniB.map(function (a) { return rot(DB[a].ch[C.capitol], ub); }) }],
         tooltip: function (i) { var a = aniB[i]; return "<b>" + a + (+a === azi ? " (parțial)" : "") + "</b><br>" + lei(DB[a].ch[C.capitol]) + (M.populatie ? "<br>" + lei(DB[a].ch[C.capitol] / M.populatie) + " pe locuitor" : ""); } });
     }
+    if (C.alerta) { el.insertAdjacentHTML("beforeend", alerteHtml("", "Primește pe e-mail noutățile despre " + C.titlu.toLowerCase().replace(/ \(.*/, ""), C.alerta)); alerteLeaga(el); }
     if (T.Dz.length) lista($("tg-d"), T.Dz, { unitate: ["dispoziție", "dispoziții"], an: function (x) { return String(x.an); }, text: function (x) { return x.obiect + " " + x.nr; },
       item: function (x) { return doc("Dispoziția " + esc(x.nr) + "/" + esc(x.an), x.obiect, x.data ? zi(x.data) : "", x); } });
   }
