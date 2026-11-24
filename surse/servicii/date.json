@@ -1,0 +1,22 @@
+{
+  "apa": {
+    "despre": "Tarifele ACET S.A. Suceava pentru apă potabilă și canalizare-epurare, în lei pe metru cub, fără TVA, aceleași în toată aria de operare.",
+    "tarife": [
+      {"de_la": "2019-07-01", "apa": 4.58, "canalizare": 3.16, "sursa": "tabelul anexat HCL 273/2019 (tarife în vigoare la 1 iulie 2019)", "hcl": {"an": 2019, "nr": 273}},
+      {"de_la": "2022-01-01", "apa": 5.51, "canalizare": 4.30, "sursa": "lista ANRSC a tarifelor operatorilor regionali, preluată de Alba24.ro", "url": "https://alba24.ro/preturile-la-apa-si-canalizare-au-crescut-in-alba-avem-printre-cele-mai-mari-tarife-din-tara-la-canalizare-topul-preturilor-894330.html"},
+      {"de_la": "2024-12-01", "apa": 7.20, "canalizare": null, "sursa": "lista ANRSC la 1 decembrie 2024, preluată de Alba24.ro (fără tariful de canalizare)", "url": "https://alba24.ro/cresc-tarifele-la-apa-si-canalizare-in-alba-din-1-ianuarie-2025-care-vor-fi-noile-preturi-situatia-din-alte-judete-1062664.html"},
+      {"de_la": "2026-02-01", "apa": 9.86, "canalizare": 8.54, "sursa": "lista ANRSC la 1 februarie 2026, preluată de Alba24.ro", "url": "https://alba24.ro/tarife-la-apa-si-canalizare-in-romania-in-februarie-2026-cat-platesc-albaiulienii-si-unde-se-situeaza-judetul-alba-in-clasament-1119869.html"}
+    ],
+    "strategie": {"hcl": {"an": 2025, "nr": 58}, "text": "Strategia de tarifare 2025-2029 a ACET, votată prin mandatul dat de consiliul local: ajustări anuale de la 1 ianuarie, în termeni reali și cu inflația."}
+  },
+  "iluminat": {
+    "despre": "Întreținerea iluminatului public, plătită din bugetul local operatorului, în lei pe lună, fără TVA.",
+    "operator": "Servicii Comunale S.A.",
+    "contract": "contractul de delegare nr. 4687/21.03.2025, prin atribuire directă (HCL 38/2025); înainte, contractul nr. 3575/13.04.2007, prelungit",
+    "redeventa_lunara_cu_tva": 1000,
+    "tarife": [
+      {"de_la": "2023-09-28", "lei_luna": 39888, "hcl": {"an": 2023, "nr": 235}, "nota": "prețul de mentenanță stabilit la prelungirea contractului din 2007"},
+      {"de_la": "2026-04-03", "lei_luna": 42799, "hcl": {"an": 2026, "nr": 61}, "nota": "majorare cu rata inflației; de acum indexare anuală"}
+    ]
+  }
+}

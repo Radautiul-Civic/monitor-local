@@ -619,6 +619,12 @@ def scrie(store, data_dir, azi=None):
         stats["salubrizare"] = len(rez["salubrizare"].get("casnici") or [])
     except (OSError, ValueError) as e:
         stats["salubrizare"] = f"eroare: {e}"
+    try:   # apa și iluminatul: tarifele verificate de echipă (surse/servicii/date.json)
+        with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), "surse", "servicii", "date.json"), encoding="utf-8") as f:
+            rez["servicii"] = json.load(f)
+        stats["servicii"] = sorted(rez["servicii"])
+    except (OSError, ValueError) as e:
+        stats["servicii"] = f"eroare: {e}"
     # termoficarea: hotărârile pe subiect și prețurile pe perioade (data/termoficare.json; vezi termoficare.py)
     try:
         from . import termoficare

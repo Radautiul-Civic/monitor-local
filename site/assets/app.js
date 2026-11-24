@@ -33,7 +33,7 @@
       ["buget", "Buget", "De unde vin banii orașului și pe ce se cheltuiesc; bugetul îl aprobă consiliul local și îl execută primarul"], ["taxe", "Taxe și impozite", "Cât plătești: taxele locale stabilite de consiliu, evoluția lor și calculatorul"],
       ["achizitii", "Achiziții publice", "Ce cumpără instituțiile din oraș și de la cine (SICAP)"], ["patrimoniu", "Terenuri și clădiri", "Ce vinde, concesionează sau închiriază orașul"],
       ["finantari", "Finanțări nerambursabile", "Banii dați din bugetul local asociațiilor, cluburilor sportive și cultelor"]] },
-    { id: "servicii", nume: "Servicii publice", def: "pe-scurt", sub: [["pe-scurt", "Pe scurt", "Cine face fiecare serviciu, cum îl plătești și cât costă"], ["termoficare", "Căldura (termoficare)", "Prețul căldurii, cât plătește populația și cât bugetul local"],
+    { id: "servicii", nume: "Servicii publice", def: "pe-scurt", sub: [["pe-scurt", "Pe scurt", "Cine face fiecare serviciu, cum îl plătești și cât costă"], ["termoficare", "Căldura (termoficare)", "Prețul căldurii, cât plătesc cei racordați și cât subvenția din bugetul local"],
       ["salubrizare", "Gunoiul", "Cine ridică gunoiul și cât e taxa de salubrizare"], ["apa", "Apa și canalizarea"], ["strazi", "Curățenia străzilor și deszăpezirea"], ["iluminat", "Iluminatul public"],
       ["alte", "Piețe, cimitir, câini"], ["societate", "Servicii Comunale S.A.", "Societatea orașului: ce face, cine o conduce, ce bani primește"]] },
     { id: "teme", nume: "Pe teme", def: "drumuri", sub: [["drumuri", "Străzi și trotuare"], ["parcari", "Parcări"], ["scoli", "Școli și grădinițe"], ["parcuri", "Parcuri și spații verzi"], ["pug", "PUG și urbanism"]] }
@@ -201,7 +201,7 @@
     ["Delegarea gestiunii", "delegar(e|ea)( a)? gestiunii", "Orașul încredințează unui operator un serviciu public (termoficare, iluminat, salubrizare), prin contract."],
     ["AGA", "AGA|[Aa]dunar(ea|ii) general(ă|e) a acționarilor", "u", "Adunarea generală a acționarilor unei societăți a orașului. Orașul votează acolo prin reprezentanții desemnați de consiliul local."],
     ["Consiliu de administrație", "consiliu(l|lui)? de administrație", "Conduce societatea între ședințele AGA. Membrii se aleg printr-o procedură de selecție (OUG nr. 109/2011 privind guvernanța corporativă)."],
-    ["Subvenție", "subvenți(e|a|ii|ia)", "Partea din preț plătită din bugetul local, ca populația să plătească mai puțin. La termoficare: diferența dintre prețul întreg și prețul pentru populație."],
+    ["Subvenție", "subvenți(e|a|ii|ia)", "Partea din preț plătită din bugetul local, adică din banii tuturor locuitorilor, ca utilizatorii serviciului să plătească mai puțin. La termoficare: diferența dintre prețul întreg și prețul plătit de cei racordați."],
     ["Gcal și MWh", "Gcal|MWh", "u", "Unități pentru cantitatea de căldură. 1 Gcal = 1,163 MWh. Prețurile mai vechi erau date pe Gcal, cele noi pe MWh."],
     ["ADI", "ADI|[Aa]sociați(e|a|ei) de dezvoltare intercomunitară", "u", "Asociație de dezvoltare intercomunitară: orașe și comune care se asociază pentru un serviciu comun, cum e gestionarea deșeurilor la nivelul județului."],
     ["Impozit și taxă", "impozit(e|ul|ele)? și tax(e|ele)", "Impozitul (de exemplu pe clădiri) se plătește fără un serviciu anume în schimb; taxa se plătește pentru un serviciu sau o activitate (de exemplu taxa de salubrizare). Le stabilește consiliul local, în limitele Codului fiscal."],
@@ -1955,7 +1955,7 @@
   function lunaScurt(d) { return d ? (d.slice(8, 10) !== "01" ? +d.slice(8, 10) + " " : "") + LUNI_S[+d.slice(5, 7) - 1] + " " + d.slice(2, 4) : ""; }
   function perioada(p) { return zi(p.de_la) + (p.pana_la ? " - " + zi(p.pana_la) : " (începând cu)"); }
   function termoficare(el, r) {
-    var cap = head("Termoficarea", "Căldura și apa caldă de la Servicii Comunale: cât costă, cât plătește populația, cât acoperă bugetul local și toate hotărârile consiliului.", r);
+    var cap = head("Termoficarea", "Căldura și apa caldă de la Servicii Comunale: cât costă, cât plătesc cei racordați, cât acoperă subvenția din bugetul local și toate hotărârile consiliului.", r);
     if (!TERMO) { el.innerHTML = cap + '<p class="updated">Se încarcă...</p>'; Promise.all([get(DATA + "termoficare.json").then(function (d) { TERMO = d; }).catch(function () { TERMO = { hotarari: [], preturi: [] }; }), incarcaSed()]).then(render); return; }
     var P = (TERMO.preturi || []).filter(function (p) { return p.populatie_cu_tva || p.total_cu_tva; }), H = TERMO.hotarari || [];
     var ult = P[P.length - 1], ant = P[P.length - 2];
@@ -1965,48 +1965,59 @@
     if (urm.length) h += '<section class="card section urm"><h2>Pe ordinea de zi</h2>' + urm.map(function (x) {
       return '<div class="doc"><div class="h"><span class="rz ic">' + esc(ziSapt(x.c.data)) + esc(zi(x.c.data)) + (x.c.ora ? ", ora " + esc(x.c.ora) : "") + '</span><span class="tag">ședință ' + esc(TIP_SED[x.c.tip] || "") + '</span></div><div class="t">' + esc(x.p.text) + "</div></div>"; }).join("") +
       '<p class="note"><a href="#consiliu/urmatoare">Toată ordinea de zi și cum poți participa →</a></p></section>';
-    if (ult) h += '<div class="grid">' + tile(ult.pana_la && ult.pana_la < new Date().toISOString().slice(0, 10) ? "Ultimul preț aprobat pentru populație" : "Plătește populația", ult.populatie_cu_tva != null ? dec(ult.populatie_cu_tva.toFixed(2)) : "-", "lei/MWh", perioada(ult) + (ult.pana_la && ult.pana_la < new Date().toISOString().slice(0, 10) ? "; a expirat, nu e încă aprobat unul nou" : ant && ant.populatie_cu_tva ? "; înainte " + dec(ant.populatie_cu_tva.toFixed(2)) + " lei" : "")) +
-      tile("Plătește bugetul local", ult.subventie_cu_tva != null ? dec(ult.subventie_cu_tva.toFixed(2)) : "-", "lei/MWh", "subvenția: diferența până la prețul întreg") +
+    if (ult) h += '<div class="grid">' + tile(ult.pana_la && ult.pana_la < new Date().toISOString().slice(0, 10) ? "Ultimul preț aprobat pentru cei racordați" : "Plătesc cei racordați la termoficare", ult.populatie_cu_tva != null ? dec(ult.populatie_cu_tva.toFixed(2)) : "-", "lei/MWh", perioada(ult) + (ult.pana_la && ult.pana_la < new Date().toISOString().slice(0, 10) ? "; a expirat, nu e încă aprobat unul nou" : ant && ant.populatie_cu_tva ? "; înainte " + dec(ant.populatie_cu_tva.toFixed(2)) + " lei" : "")) +
+      tile("Subvenție din bugetul local", ult.subventie_cu_tva != null ? dec(ult.subventie_cu_tva.toFixed(2)) : "-", "lei/MWh", "diferența până la prețul întreg, plătită din banii tuturor locuitorilor") +
       tile("Prețul întreg", ult.total_cu_tva != null ? dec(ult.total_cu_tva.toFixed(2)) : "-", "lei/MWh", "producere, transport și distribuție" + (ult.tva ? ", cu TVA " + ult.tva + "%" : "")) + "</div>";
     h += '<section class="card section"><h2>Cum se formează prețul</h2><ul class="pasi">' +
       "<li><b>Prețul întreg</b> are două părți: <b>producerea</b> căldurii la centrala Servicii Comunale (prețul îl aprobă ANRE, autoritatea națională pentru energie) și <b>transportul și distribuția</b> prin rețeaua orașului. Peste ele se adaugă TVA-ul.</li>" +
-      "<li><b>Consiliul Local</b> aprobă prin hotărâre prețul local, cât plătește populația și cât din preț acoperă <b>bugetul local</b> (subvenția). Fără o hotărâre nouă când expiră cea veche, Servicii Comunale nu are cu ce preț să factureze.</li>" +
-      "<li>Firmele și instituțiile (consumatorii noncasnici) plătesc prețul întreg; subvenția e doar pentru populație.</li>" +
+      "<li><b>Consiliul Local</b> aprobă prin hotărâre prețul local, cât plătesc cei racordați la termoficare și cât din preț acoperă <b>bugetul local</b> (subvenția). Subvenția vine din banii tuturor locuitorilor, inclusiv ai celor care nu sunt racordați. Fără o hotărâre nouă când expiră cea veche, Servicii Comunale nu are cu ce preț să factureze.</li>" +
+      "<li>Firmele și instituțiile (consumatorii noncasnici) plătesc prețul întreg; subvenția e doar pentru gospodăriile racordate.</li>" +
       "<li>Prețurile sunt în <b>lei pe MWh</b> (1 Gcal = 1,163 MWh).</li></ul></section>";
     if (P.length) {
       h += '<section class="card section"><h2>Prețurile, perioadă cu perioadă</h2><p class="note">Din articolele și anexele hotărârilor de tarife, verificate de echipă în document (cele marcate „neverificat” sunt citite automat și încă nu au fost verificate). Până în 2023, hotărârile dau prețurile în lei/Gcal; aici sunt transformate în lei/MWh (împărțite la 1,163), ca să se poată compara. Fiecare perioadă duce la hotărâre.</p>' +
-        '<h3 class="an-h">Lei pe MWh, cu TVA: partea populației și partea bugetului local</h3>' + legend([["Plătește populația", "#ec7a2c"], ["Plătește bugetul local", "#2a78d6"]]) + '<div class="chart" id="tf-ch"></div>' +
-        '<h3 class="an-h">Cum au evoluat, în lei pe MWh</h3>' + legend([["Prețul întreg", "#5b6b7b"], ["Plătește populația", "#ec7a2c"], ["Plătește bugetul local", "#2a78d6"]]) + '<div class="chart" id="tf-ln"></div>' +
-        '<h3 class="an-h">Cine plătește, în procente din prețul întreg</h3>' + legend([["Populația", "#ec7a2c"], ["Bugetul local", "#2a78d6"]]) + '<div class="chart" id="tf-pc"></div>' +
-        '<p class="note">Când partea bugetului crește, populația plătește un procent mai mic din prețul întreg; în iernile cu TVA redus, prețul întreg scade și el.</p>' +
-        '<div class="tw"><table class="tx-t"><thead><tr><th>Perioada</th><th class="n">Populația</th><th class="n">Bugetul local</th><th class="n">Prețul întreg</th><th class="n">TVA</th><th class="n">Populația, față de perioada dinainte</th><th>Hotărârea</th></tr></thead><tbody>' +
+        '<h3 class="an-h">Lei pe MWh, cu TVA: cât plătesc cei racordați și cât subvenția din bugetul local</h3>' + legend([["Plătesc cei racordați la termoficare", "#ec7a2c"], ["Subvenție din bugetul local (plătită de toți locuitorii)", "#2a78d6"]]) + '<div class="chart" id="tf-ch"></div>' +
+        '<h3 class="an-h">Cum au evoluat, în lei pe MWh</h3>' + legend([["Prețul întreg", "#5b6b7b"], ["Plătesc cei racordați la termoficare", "#ec7a2c"], ["Subvenție din bugetul local (plătită de toți locuitorii)", "#2a78d6"]]) + '<div class="chart" id="tf-ln"></div>' +
+        '<h3 class="an-h">Cine plătește, în procente din prețul întreg</h3>' + legend([["Cei racordați", "#ec7a2c"], ["Subvenția din bugetul local", "#2a78d6"]]) + '<div class="chart" id="tf-pc"></div>' +
+        '<p class="note">Când subvenția crește, cei racordați plătesc un procent mai mic din prețul întreg, iar restul îl plătesc toți locuitorii, prin bugetul local; în iernile cu TVA redus, prețul întreg scade și el.</p>' +
+        '<div class="tw"><table class="tx-t"><thead><tr><th>Perioada</th><th class="n">Plătesc cei racordați</th><th class="n">Subvenție din buget</th><th class="n">Prețul întreg</th><th class="n">TVA</th><th class="n">Cei racordați, față de perioada dinainte</th><th>Hotărârea</th></tr></thead><tbody>' +
         P.slice().reverse().map(function (p, i, A) { var a = A[i + 1];
           return "<tr><td>" + esc(perioada(p)) + (p.verificat === false ? ' <span class="tag" title="Citit automat din hotărâre, încă neverificat de echipă">neverificat</span>' : "") + (p.nota ? '<br><small class="muted">' + esc(p.nota) + "</small>" : "") + '</td><td class="n"><b>' + lei2(p.populatie_cu_tva) + '</b></td><td class="n">' + lei2(p.subventie_cu_tva) + '</td><td class="n">' + lei2(p.total_cu_tva) + '</td><td class="n">' + (p.tva ? p.tva + "%" : "-") +
             '</td><td class="n">' + (a ? variatie(a.populatie_cu_tva, p.populatie_cu_tva) : "") + "</td><td>" + (p.hcl ? linkHcl(p.hcl) : "") + "</td></tr>"; }).join("") + "</tbody></table></div></section>";
     }
-    var pier = H.filter(function (x) { return x.fel === "pierderi"; });
-    if (pier.length) h += '<section class="card section"><h2>Pierderi acoperite din bugetul local</h2><p class="note">Pe lângă subvenția din preț, consiliul aprobă din când în când acoperirea pierderilor Servicii Comunale din termoficare.</p>' +
+    var PV = TERMO.pierderi || [], pier = H.filter(function (x) { return x.fel === "pierderi"; });
+    if (PV.length) {
+      var sumPV = PV.reduce(function (z, x) { return z + x.lei; }, 0);
+      h += '<section class="card section"><h2>Pierderi acoperite din bugetul local</h2><p>Pe lângă subvenția din preț, consiliul local a aprobat acoperirea pierderilor Servicii Comunale din termoficare: <b>' + lei(sumPV) + "</b> pentru " +
+        esc(PV[0].perioada.split(" - ")[0]) + " - " + esc(PV[PV.length - 1].perioada.split(" - ").pop()) + ", adică aproximativ <b>" + lei(sumPV / 24292) + "</b> de fiecare locuitor al orașului. Sumele sunt din articolul 1 al fiecărei hotărâri, verificate în document.</p>" +
+        legend([["Pierderi acoperite din buget", "#2a78d6"]]) + '<div class="chart" id="tf-pi"></div>' +
+        '<div class="tw"><table><thead><tr><th>Perioada</th><th class="n">Suma</th><th>Hotărârea</th></tr></thead><tbody>' + PV.slice().reverse().map(function (x) {
+          return "<tr><td>" + esc(x.perioada) + '</td><td class="n"><b>' + nr(x.lei) + " lei</b></td><td>" + linkHcl(x.hcl) + (x.data ? ", " + esc(zi(x.data)) : "") + "</td></tr>"; }).join("") + "</tbody></table></div></section>";
+    } else if (pier.length) h += '<section class="card section"><h2>Pierderi acoperite din bugetul local</h2><p class="note">Pe lângă subvenția din preț, consiliul aprobă din când în când acoperirea pierderilor Servicii Comunale din termoficare.</p>' +
       pier.map(function (x) { return '<div class="doc"><div class="h"><span class="id">' + linkHcl(x) + "</span>" + (x.data ? '<span class="muted">' + esc(zi(x.data)) + "</span>" : "") + (x.pierderi_lei ? '<span class="inv-v">' + lei(x.pierderi_lei) + "</span>" : "") + '</div><div class="t">' + esc(x.pe_scurt || x.titlu) + "</div></div>"; }).join("") + "</section>";
     h += '<section class="card section"><h2>Toate hotărârile despre termoficare <span class="nr-b n">' + H.length + '</span></h2><div id="tf-l"></div></section>';
     h += alerteHtml("", "Primește pe e-mail noutățile despre căldură", "termic");
     el.innerHTML = h;
     alerteLeaga(el);
+    if (PV.length && $("tf-pi")) chart($("tf-pi"), { cats: PV.map(function (x) { return x.perioada.replace(/(\w+) (\d{4}) - (\w+) (\d{4})/, function (m, a, b, c, d) { return a.slice(0, 3) + " " + b.slice(2) + "-" + c.slice(0, 3) + " " + d.slice(2); }).replace(/^(\w+) - (\w+) (\d{4})$/, function (m, a, c, d) { return a.slice(0, 3) + "-" + c.slice(0, 3) + " " + d.slice(2); }).replace(/noi/g, "nov"); }),
+      label: "Pierderi din termoficare acoperite din bugetul local, pe perioade", bwMax: 60, labelValue: function (i) { return lei(PV[i].lei); },
+      series: [{ name: "Pierderi", color: "#2a78d6", values: PV.map(function (x) { return Math.round(x.lei / 1e4) / 100; }) }], yFmt: function (g) { return g + " mil."; },
+      tooltip: function (i) { var x = PV[i]; return "<b>" + esc(x.perioada) + "</b><br>" + nr(x.lei) + " lei<br>HCL " + x.hcl.nr + "/" + x.hcl.an; } });
     var cats = P.map(function (p) { return lunaScurt(p.de_la); }), r0 = function (v) { return v == null ? null : Math.round(v); };
     var pct = function (p, k) { var t = p.total_cu_tva || ((p.populatie_cu_tva || 0) + (p.subventie_cu_tva || 0)); return t && p[k] != null ? Math.round(1000 * p[k] / t) / 10 : null; };
-    var tipTf = function (i) { var p = P[i]; return "<b>" + esc(perioada(p)) + "</b><br>populația: " + lei2(p.populatie_cu_tva) + "/MWh (" + dec(pct(p, "populatie_cu_tva")) + "%)<br>bugetul local: " + lei2(p.subventie_cu_tva) + "/MWh (" + dec(pct(p, "subventie_cu_tva")) + "%)<br>prețul întreg: " + lei2(p.total_cu_tva) + "/MWh" + (p.tva ? " (TVA " + p.tva + "%)" : "") + (p.hcl ? "<br>HCL " + p.hcl.nr + "/" + p.hcl.an : ""); };
+    var tipTf = function (i) { var p = P[i]; return "<b>" + esc(perioada(p)) + "</b><br>plătesc cei racordați: " + lei2(p.populatie_cu_tva) + "/MWh (" + dec(pct(p, "populatie_cu_tva")) + "%)<br>subvenție din bugetul local: " + lei2(p.subventie_cu_tva) + "/MWh (" + dec(pct(p, "subventie_cu_tva")) + "%)<br>prețul întreg: " + lei2(p.total_cu_tva) + "/MWh" + (p.tva ? " (TVA " + p.tva + "%)" : "") + (p.hcl ? "<br>HCL " + p.hcl.nr + "/" + p.hcl.an : ""); };
     if (P.length) {
-      chart($("tf-ln"), { cats: cats, series: [], h: 260, minW: 720, label: "Prețul întreg, partea populației și partea bugetului, în lei pe MWh", tooltip: tipTf,
-        lines: [{ name: "Prețul întreg", color: "#5b6b7b", values: P.map(function (p) { return r0(p.total_cu_tva); }) }, { name: "Populația", color: "#ec7a2c", values: P.map(function (p) { return r0(p.populatie_cu_tva); }) },
-          { name: "Bugetul local", color: "#2a78d6", values: P.map(function (p) { return r0(p.subventie_cu_tva); }) }],
+      chart($("tf-ln"), { cats: cats, series: [], h: 260, minW: 720, label: "Prețul întreg, partea celor racordați și subvenția din bugetul local, în lei pe MWh", tooltip: tipTf,
+        lines: [{ name: "Prețul întreg", color: "#5b6b7b", values: P.map(function (p) { return r0(p.total_cu_tva); }) }, { name: "Cei racordați", color: "#ec7a2c", values: P.map(function (p) { return r0(p.populatie_cu_tva); }) },
+          { name: "Subvenția din bugetul local", color: "#2a78d6", values: P.map(function (p) { return r0(p.subventie_cu_tva); }) }],
         lineLabel: function (l, i, v) { return nr(v); } });
-      chart($("tf-pc"), { cats: cats, series: [], h: 230, minW: 720, maxY: 100, stepY: 25, yFmt: function (g) { return g + "%"; }, label: "Partea populației și a bugetului local, în procente din prețul întreg", tooltip: tipTf,
-        lines: [{ name: "Populația", color: "#ec7a2c", values: P.map(function (p) { return pct(p, "populatie_cu_tva"); }) }, { name: "Bugetul local", color: "#2a78d6", values: P.map(function (p) { return pct(p, "subventie_cu_tva"); }) }],
+      chart($("tf-pc"), { cats: cats, series: [], h: 230, minW: 720, maxY: 100, stepY: 25, yFmt: function (g) { return g + "%"; }, label: "Partea celor racordați și a subvenției din bugetul local, în procente din prețul întreg", tooltip: tipTf,
+        lines: [{ name: "Cei racordați", color: "#ec7a2c", values: P.map(function (p) { return pct(p, "populatie_cu_tva"); }) }, { name: "Subvenția din bugetul local", color: "#2a78d6", values: P.map(function (p) { return pct(p, "subventie_cu_tva"); }) }],
         lineLabel: function (l, i, v) { return Math.round(v) + "%"; } });
     }
-    if (P.length) chart($("tf-ch"), { cats: cats, stacked: true, h: 300, minW: 720, bwMax: 36, label: "Prețul energiei termice pe perioade: partea populației și partea bugetului local",
+    if (P.length) chart($("tf-ch"), { cats: cats, stacked: true, h: 300, minW: 720, bwMax: 36, label: "Prețul energiei termice pe perioade: partea celor racordați și subvenția din bugetul local",
       segLabel: function (sr, i, v) { return nr(Math.round(v)); }, labelValue: function (i) { return P[i].total_cu_tva ? nr(Math.round(P[i].total_cu_tva)) : null; },
-      series: [{ name: "Plătește populația", color: "#ec7a2c", values: P.map(function (p) { return p.populatie_cu_tva || 0; }) }, { name: "Plătește bugetul local", color: "#2a78d6", values: P.map(function (p) { return p.subventie_cu_tva || 0; }) }],
-      tooltip: function (i) { var p = P[i]; return "<b>" + esc(perioada(p)) + "</b><br>populația: " + lei2(p.populatie_cu_tva) + "/MWh<br>bugetul local: " + lei2(p.subventie_cu_tva) + "/MWh<br>prețul întreg: " + lei2(p.total_cu_tva) + "/MWh" + (p.tva ? " (TVA " + p.tva + "%)" : "") + (p.hcl ? "<br>HCL " + p.hcl.nr + "/" + p.hcl.an : ""); } });
+      series: [{ name: "Plătesc cei racordați", color: "#ec7a2c", values: P.map(function (p) { return p.populatie_cu_tva || 0; }) }, { name: "Subvenție din bugetul local", color: "#2a78d6", values: P.map(function (p) { return p.subventie_cu_tva || 0; }) }],
+      tooltip: function (i) { var p = P[i]; return "<b>" + esc(perioada(p)) + "</b><br>plătesc cei racordați: " + lei2(p.populatie_cu_tva) + "/MWh<br>subvenție din bugetul local: " + lei2(p.subventie_cu_tva) + "/MWh<br>prețul întreg: " + lei2(p.total_cu_tva) + "/MWh" + (p.tva ? " (TVA " + p.tva + "%)" : "") + (p.hcl ? "<br>HCL " + p.hcl.nr + "/" + p.hcl.an : ""); } });
     function listaTf(vot) {
       if (!$("tf-l")) return;
       lista($("tf-l"), H, { placeholder: "Caută: tarif, pierderi, contract, ANRE", unitate: ["hotărâre", "hotărâri"], an: function (x) { return String(x.an); }, text: function (x) { return x.titlu + " " + (x.pe_scurt || ""); },
@@ -4141,14 +4152,14 @@
   var TEMA_CFG = {
     "servicii/strazi": { alerta: "dezapez", titlu: "Curățenia străzilor și deszăpezirea", text: "Măturatul și spălatul străzilor și deszăpezirea le face Servicii Comunale, la tarifele aprobate de consiliul local. Aici: hotărârile, tarifele și ce s-a cumpărat pentru iarnă.",
       rx: "salubrizare stradala|dezapez|deszapez|maturat|curatenie stradal|zapad|polei|antiderapant|igienei publice", sx: "dezapez|deszapez|zapad|antiderapant|sare (de |pentru )?deszapez|sare industriala|sare gema|polei|maturat|maturator|salubrizare stradala" },
-    "servicii/iluminat": { alerta: "ilumin", titlu: "Iluminatul public", text: "Becurile și stâlpii de pe străzi: contractul pentru întreținerea iluminatului, tarifele, extinderile de rețea și modernizările aprobate de consiliul local.",
+    "servicii/iluminat": { alerta: "ilumin", extra: iluminatHtml, titlu: "Iluminatul public", text: "Becurile și stâlpii de pe străzi: contractul pentru întreținerea iluminatului, tarifele, extinderile de rețea și modernizările aprobate de consiliul local.",
       rx: "iluminat", sx: "iluminat|corpuri de iluminat|stalp\\w* .{0,20}iluminat", fel: [["Contractul și tarifele", "contract|tarif|gestiun|studiu\\w* de oportunitate|prestari"], ["Investiții: extinderi și modernizări", "."]] },
     "servicii/hotarari": { titlu: "Toate hotărârile despre Servicii Comunale", text: "Hotărârile consiliului local despre societate și serviciile pe care le face pentru oraș, pe teme.", rx: RX_SC, fel: FEL_SC, sx: false, cui: "2563140", faraSicap: true },
     "servicii/salubrizare": { alerta: "salubr", titlu: "Gunoiul (salubrizarea)", text: "Ridicarea gunoiului menajer e organizată la nivelul județului Suceava: din 2025 o face operatorul regional al zonei Rădăuți, iar până atunci a făcut-o Servicii Comunale. Aici: cât plătește populația, hotărârile consiliului local despre salubrizare (regulamentul județean, taxa, cantitățile minime pentru firme), investițiile și cheltuielile orașului.",
       extra: salubTarifeHtml, dupa: salubTarifeDeseneaza,
       rx: "salubriz|deseu|gunoi|colectar\\w* selectiv|insul\\w* ecologic|asociati\\w* de dezvoltare intercomunitara|ecologizar", nu: "salubrizare stradala", sx: "deseu|gunoi|salubriz|ecologiz|pubel|europubel|insul\\w* ecologic", capitol: "Protecția mediului (salubritate, canalizare)",
       fel: [["Regulamente și organizarea serviciului", "regulament|asociati|delegar|contract|norme"], ["Taxe și tarife", "tax|tarif|cantitat"], ["Investiții", "."]] },
-    "servicii/apa": { alerta: "apa", titlu: "Apa și canalizarea", text: "Apa și canalizarea le asigură ACET S.A. Suceava, operatorul regional, în care orașul e acționar. Orașul votează în asociația județeană pentru apă și canalizare prin reprezentantul său, pe baza mandatelor date de consiliul local. Aici: mandatele, extinderile de rețele aprobate de consiliu și achizițiile.",
+    "servicii/apa": { alerta: "apa", extra: apaTarifeHtml, dupa: apaTarifeDeseneaza, titlu: "Apa și canalizarea", text: "Apa și canalizarea le asigură ACET S.A. Suceava, operatorul regional, în care orașul e acționar. Orașul votează în asociația județeană pentru apă și canalizare prin reprezentantul său, pe baza mandatelor date de consiliul local. Aici: mandatele, extinderile de rețele aprobate de consiliu și achizițiile.",
       rx: "\\bacet\\b|apa potabil|alimentare cu apa|ape uzate|apa si (de )?canal|canalizar|epurare|aductiune|asociati\\w* judetene? pentru apa", nu: "pluvial",
       sx: "apa potabila|canalizare|apa si canal|epurare|bransament\\w* (de )?apa|retea de apa|retele de apa", fel: [["Asociația județeană și operatorul", "acet|asociati|mandat|tarif|delegar"], ["Extinderi și investiții", "."]] },
     "servicii/alte": { titlu: "Piețe, cimitir, câini fără stăpân", text: "Serviciile mai mici ale orașului: piețele și târgul, cimitirul municipal, gestionarea câinilor fără stăpân și taxiurile. Aici: regulamentele, contractele și investițiile aprobate de consiliul local.",
@@ -4315,21 +4326,56 @@
     var hs = function (H) { return H.length ? nr(H.length) + " " + (H.length === 1 ? "hotărâre" : "hotărâri") + "; ultima: " + linkHcl(H[0]) + (H[0].data ? ", " + zi(H[0].data) : "") : "nicio hotărâre găsită"; };
     var P = (TERMO.preturi || []).filter(function (p) { return p.populatie_cu_tva; }), pu = P[P.length - 1];
     var TH = (TERMO.hotarari || []).slice().sort(function (a, b) { return (b.data || String(b.an)).localeCompare(a.data || String(a.an)); });
-    var SB = ((TEME.salubrizare || {}).casnici || []), sb = SB[SB.length - 1];
+    var SB = ((TEME.salubrizare || {}).casnici || []), sb = SB[SB.length - 1], SV = TEME.servicii || {};
+    var IL = ((SV.iluminat || {}).tarife || []).slice(-1)[0], AP = ((SV.apa || {}).tarife || []).slice(-1)[0];
     var R2 = [
-      ["Căldura și apa caldă", "#servicii/termoficare", "Servicii Comunale S.A., societatea orașului", "factura de la operator; o parte din preț o plătește bugetul local (subvenția)",
-        pu ? "<b>" + dec(pu.populatie_cu_tva.toFixed(2)) + " lei/MWh</b> pentru populație" + (pu.subventie_cu_tva ? ", plus " + dec(pu.subventie_cu_tva.toFixed(2)) + " lei/MWh din buget" : "") + ", din " + zi(pu.de_la) : "", hs(TH)],
+      ["Căldura și apa caldă", "#servicii/termoficare", "Servicii Comunale S.A., societatea orașului", "cei racordați plătesc factura la operator; restul prețului (subvenția) îl plătesc toți locuitorii, din bugetul local",
+        pu ? "<b>" + dec(pu.populatie_cu_tva.toFixed(2)) + " lei/MWh</b> plătesc cei racordați" + (pu.subventie_cu_tva ? ", plus " + dec(pu.subventie_cu_tva.toFixed(2)) + " lei/MWh subvenție din bugetul local, plătită de toți locuitorii" : "") + ", din " + zi(pu.de_la) : "", hs(TH)],
       ["Gunoiul menajer", "#servicii/salubrizare", "operatorul regional al zonei Rădăuți, prin asociația județeană (până în mai 2025, Servicii Comunale)", "taxa specială de salubrizare, la primărie, pentru fiecare persoană de la adresă",
         sb ? "<b>" + dec(sb.lei_persoana_luna.toFixed(2)) + " lei</b> de persoană pe lună, din " + zi(sb.de_la) : "", hs(ult("servicii/salubrizare"))],
-      ["Apa și canalizarea", "#servicii/apa", "ACET S.A. Suceava, operatorul regional, în care orașul e acționar", "factura de la operator; tarifele se aprobă în asociația județeană, unde orașul votează prin mandatul dat de consiliu", "", hs(ult("servicii/apa"))],
+      ["Apa și canalizarea", "#servicii/apa", "ACET S.A. Suceava, operatorul regional, în care orașul e acționar", "factura de la operator; tarifele se aprobă în asociația județeană, unde orașul votează prin mandatul dat de consiliu", AP && AP.canalizare != null ? "<b>" + dec((AP.apa + AP.canalizare).toFixed(2)) + " lei/mc</b> apă și canalizare, fără TVA, din " + zi(AP.de_la) : "", hs(ult("servicii/apa"))],
       ["Curățenia străzilor și deszăpezirea", "#servicii/strazi", "Servicii Comunale S.A.", "din bugetul local, la tarifele aprobate de consiliu", "", hs(ult("servicii/strazi"))],
-      ["Iluminatul public", "#servicii/iluminat", "operatorul din contractul de iluminat public", "din bugetul local, la tarifele din contract", "", hs(ult("servicii/iluminat"))],
+      ["Iluminatul public", "#servicii/iluminat", "Servicii Comunale S.A., prin atribuire directă din 2025", "din bugetul local, la prețul de întreținere din contract", IL ? "<b>" + nr(IL.lei_luna) + " lei</b> pe lună, fără TVA, din " + zi(IL.de_la) : "", hs(ult("servicii/iluminat"))],
       ["Piețe, cimitir, câini fără stăpân", "#servicii/alte", "primăria și firmele cu care are contracte", "taxe și tarife locale, din regulamentele aprobate de consiliu", "", hs(ult("servicii/alte"))]];
     el.innerHTML = cap + '<section class="card section"><h2>Cine face ce și cine plătește</h2><div class="sp-g">' + R2.map(function (x) {
       return '<div class="sc-c"><h3><a href="' + x[1] + '">' + esc(x[0]) + '</a></h3><dl class="sp-dl"><dt>Cine îl face</dt><dd>' + esc(x[2]) + "</dd><dt>Cum plătești</dt><dd>" + esc(x[3]) + "</dd>" +
         (x[4] ? "<dt>Cât costă acum</dt><dd>" + x[4] + "</dd>" : "") + '</dl><p class="note">' + x[5] + "</p></div>";
     }).join("") + "</div></section>" +
       '<section class="card section"><h2>Servicii Comunale S.A.</h2><p>Societatea orașului face căldura, curățenia străzilor și deszăpezirea și lucrări pentru instituții. <a href="#servicii/societate">Ce face, cine o conduce și ce bani primește</a>.</p></section>';
+  }
+
+  // ---------- Apa și iluminatul: tarifele verificate (TEME.servicii, din surse/servicii/date.json) ----------
+  function apaTarifeHtml() {
+    var A = ((TEME || {}).servicii || {}).apa, T = A && A.tarife || [];
+    if (!T.length) return "";
+    var u = T[T.length - 1], p0 = T[0], f = function (v) { return v != null ? dec(v.toFixed(2)) : "-"; };
+    return '<section class="card section"><h2>Cât costă metrul cub de apă</h2><div class="grid">' +
+      tile("Apă potabilă", f(u.apa), "lei/mc", "fără TVA, din " + esc(zi(u.de_la))) + tile("Canalizare și epurare", f(u.canalizare), "lei/mc", "fără TVA, din " + esc(zi(u.de_la))) +
+      (u.canalizare != null ? tile("Împreună", f(u.apa + u.canalizare), "lei/mc", "fără TVA; " + nr(Math.round((u.apa + u.canalizare) * 10)) + " lei la 10 mc pe lună") : "") +
+      (p0.canalizare != null && u.canalizare != null ? tile("Față de " + p0.de_la.slice(0, 4), "×" + dec(((u.apa + u.canalizare) / (p0.apa + p0.canalizare)).toFixed(1)), "", f(p0.apa + p0.canalizare) + " lei/mc în " + p0.de_la.slice(0, 4)) : "") + "</div>" +
+      '<p style="margin-top:12px">Tarifele nu le aprobă consiliul local, ci asociația județeană pentru apă și canalizare (AJAC Suceava), cu avizul autorității naționale de reglementare (ANRSC). Consiliul local dă mandat reprezentantului orașului în asociație, de exemplu pentru strategia de tarifare 2025-2029 (' + linkHcl(A.strategie.hcl) + "), care prevede creșteri în fiecare an, de la 1 ianuarie.</p>" +
+      legend([["apă potabilă", "var(--c1)"], ["canalizare și epurare", "var(--c4)"]]) + '<div class="chart" id="ap-ch"></div>' +
+      '<div class="tw"><table><thead><tr><th>De la</th><th class="n">Apă</th><th class="n">Canalizare</th><th>Sursa</th></tr></thead><tbody>' + T.slice().reverse().map(function (x) {
+        return "<tr><td>" + esc(zi(x.de_la)) + '</td><td class="n">' + f(x.apa) + '</td><td class="n">' + f(x.canalizare) + "</td><td>" + (x.hcl ? linkHcl(x.hcl) + ": " : "") + (safeUrl(x.url) ? '<a href="' + esc(x.url) + '" rel="noopener">' + esc(x.sursa) + "</a>" : esc(x.sursa)) + "</td></tr>"; }).join("") +
+      '</tbody></table></div><p class="note">Lei pe metru cub, fără TVA, aceleași în toată aria ACET. Lipsesc anii pentru care n-am găsit încă o sursă publică sigură.</p></section>';
+  }
+  function apaTarifeDeseneaza() {
+    var A = ((TEME || {}).servicii || {}).apa, T = A && A.tarife || [], el = $("ap-ch");
+    if (!T.length || !el) return;
+    chart(el, { cats: T.map(function (x) { return lunaScurt(x.de_la); }), grouped: true, bwMax: 40, label: "Tarifele la apă și canalizare, lei pe metru cub, fără TVA",
+      series: [{ name: "Apă potabilă", color: "var(--c1)", values: T.map(function (x) { return x.apa || 0; }) }, { name: "Canalizare", color: "var(--c4)", values: T.map(function (x) { return x.canalizare || 0; }) }],
+      tooltip: function (i) { var x = T[i]; return "<b>din " + esc(zi(x.de_la)) + "</b><br>apă: " + (x.apa != null ? dec(x.apa.toFixed(2)) : "-") + " lei/mc<br>canalizare: " + (x.canalizare != null ? dec(x.canalizare.toFixed(2)) : "-") + " lei/mc"; } });
+  }
+  function iluminatHtml() {
+    var I = ((TEME || {}).servicii || {}).iluminat, T = I && I.tarife || [];
+    if (!T.length) return "";
+    var u = T[T.length - 1], a = T[T.length - 2];
+    return '<section class="card section"><h2>Cine face iluminatul și cât costă</h2><div class="grid">' +
+      tile("Întreținerea, pe lună", nr(u.lei_luna), "lei", "fără TVA, din " + esc(zi(u.de_la)) + ", " + linkHcl(u.hcl)) +
+      tile("Pe an", lei(u.lei_luna * 12), "", "fără TVA, plătiți din bugetul local") +
+      (a ? tile("Înainte", nr(a.lei_luna), "lei pe lună", "din " + esc(zi(a.de_la)) + "; +" + dec((100 * (u.lei_luna / a.lei_luna - 1)).toFixed(1)) + "%") : "") +
+      tile("Redevența", nr(I.redeventa_lunara_cu_tva), "lei pe lună", "cu TVA, plătită de operator orașului") + "</div>" +
+      '<p style="margin-top:12px">Iluminatul îl întreține <b>' + esc(I.operator) + "</b>, prin " + esc(I.contract) + ". Prețul se indexează anual cu inflația. Extinderile de rețea și modernizările sunt investiții separate, aprobate de consiliul local.</p></section>";
   }
 
   // ---------- Servicii Comunale: pe scurt ----------
@@ -4343,7 +4389,7 @@
     var C = TEMA_CFG["servicii/hotarari"], T = temaPotriviri(C), H = T.H;
     var de = function (f) { return H.filter(function (x) { return x._fel.indexOf(f) === 0; }).sort(function (a, b) { return (b.data || String(b.an)).localeCompare(a.data || String(a.an)); }); };
     var P = (TERMO.preturi || []).filter(function (p) { return p.populatie_cu_tva; }), pu = P[P.length - 1];
-    var pierderi = (TERMO.hotarari || []).filter(function (x) { return x.pierderi_lei; }), sumP = pierderi.reduce(function (a, x) { return a + x.pierderi_lei; }, 0);
+    var pierderi = TERMO.pierderi || [], sumP = pierderi.reduce(function (a, x) { return a + x.lei; }, 0);
     var S = T.S, vS = S.reduce(function (a, x) { return a + leiOk(x); }, 0);
     var card = function (titlu, href, txt, hs) {
       return '<div class="sc-c"><h3><a href="' + href + '">' + esc(titlu) + "</a></h3><p>" + txt + "</p>" + (hs.length ? '<p class="note">' + nr(hs.length) + " " + (hs.length === 1 ? "hotărâre" : "hotărâri") + "; ultima: " + linkHcl(hs[0]) + (hs[0].data ? ", " + zi(hs[0].data) : "") + "</p>" : "") + "</div>";
@@ -4351,15 +4397,15 @@
     var termo = de("Termoficarea"), str = de("Curățenia"), il = de("Iluminatul"), con = de("Conducerea"), bani = de("Bani");
     var h = cap + '<section class="card section"><h2>Ce face pentru oraș</h2><div class="sc-g">' +
       card("Termoficarea", "#servicii/termoficare", "Produce și distribuie căldura și apa caldă, prin contractul de dare în administrare nr. 17021/22.11.2018, prelungit prin hotărâri ale consiliului." +
-        (pu ? " Ultimul preț aprobat pentru populație: <strong>" + dec(pu.populatie_cu_tva.toFixed(2)) + " lei/MWh</strong>, din " + esc(zi(pu.de_la)) + "." : ""), termo) +
+        (pu ? " Ultimul preț aprobat pentru cei racordați: <strong>" + dec(pu.populatie_cu_tva.toFixed(2)) + " lei/MWh</strong>, din " + esc(zi(pu.de_la)) + "." : ""), termo) +
       card("Curățenia străzilor și deszăpezirea", "#servicii/strazi", "Măturatul și spălatul străzilor și deszăpezirea, la tarifele aprobate de consiliul local.", str) +
-      card("Iluminatul public", "#servicii/iluminat", "A avut contractul de iluminat public nr. 3575/13.04.2007, prelungit de mai multe ori; din 2023 consiliul a analizat cum se gestionează mai departe serviciul.", il) +
+      card("Iluminatul public", "#servicii/iluminat", "Întreține iluminatul public: întâi prin contractul nr. 3575/13.04.2007, prelungit de mai multe ori, apoi prin contractul de delegare nr. 4687/21.03.2025, atribuit direct.", il) +
       card("Lucrări pentru instituții", "#bani/achizitii/furnizor/2563140", S.length ? "Instituțiile din oraș i-au dat <strong>" + nr(S.length) + "</strong> achiziții directe în SICAP, în valoare de <strong>" + lei(vS) + "</strong> (lucrări, vidanjare, amenajări)." : "Achizițiile din SICAP apar după următoarea colectare.", []) +
       "</div></section>" +
       '<section class="card section"><h2>Cine o conduce și cine răspunde</h2><p>Societatea are un <b>consiliu de administrație</b>, ales printr-o procedură de selecție (guvernanța corporativă a întreprinderilor publice, OUG nr. 109/2011), și o <b>adunare generală a acționarilor</b> (AGA), în care orașul e reprezentat de consilieri locali desemnați prin hotărâre. Bugetul de venituri și cheltuieli al societății se aprobă anual.</p>' +
       (con.length ? '<ul class="sc-l">' + con.slice(0, 6).map(function (x) { return "<li>" + linkHcl(x) + (x.data ? " (" + esc(zi(x.data)) + ")" : "") + ": " + esc(x.titlu.replace(/^(Hot[aă]r[aâ]re|HCL)\s*(nr\.?\s*[\d.\/]+\s*(din [\d.]+)?)?\s*/i, "").slice(0, 200)) + "</li>"; }).join("") + "</ul>" : "") + "</section>" +
       '<section class="card section"><h2>Banii de la oraș</h2><div class="grid">' +
-      (sumP ? tile("Pierderi acoperite din buget", lei(sumP), "", "la termoficare, prin " + nr(pierderi.length) + " " + (pierderi.length === 1 ? "hotărâre" : "hotărâri") + " cu suma citită din text") : "") +
+      (sumP ? tile("Pierderi acoperite din buget", lei(sumP), "", "la termoficare, " + esc(pierderi[0].perioada.split(" - ")[0]) + " - " + esc(pierderi[pierderi.length - 1].perioada.split(" - ").pop()) + ", prin " + nr(pierderi.length) + " hotărâri") : "") +
       (pu && pu.subventie_cu_tva ? tile("Subvenția la căldură", dec(pu.subventie_cu_tva.toFixed(2)), "lei/MWh", "partea din preț plătită din bugetul local, din " + esc(zi(pu.de_la))) : "") +
       (S.length ? tile("Achiziții directe de la societate", lei(vS), "", "de la instituțiile din oraș, din 2018") : "") + "</div>" +
       (bani.length ? '<h3 style="margin-top:14px">Buget, capital, credite, audit</h3><ul class="sc-l">' + bani.slice(0, 10).map(function (x) { return "<li>" + linkHcl(x) + (x.data ? " (" + esc(zi(x.data)) + ")" : "") + ": " + esc(x.titlu.replace(/^(Hot[aă]r[aâ]re|HCL)\s*(nr\.?\s*[\d.\/]+\s*(din [\d.]+)?)?\s*/i, "").slice(0, 200)) + "</li>"; }).join("") + "</ul>" : "") + "</section>";
@@ -4417,11 +4463,11 @@
       ["Reclamațiile le faci întâi la operatorul serviciului, în scris; dacă nu se rezolvă, la primărie.", "Urmărește proiectele de hotărâre despre tarife și taxe: sunt puse în consultare și poți trimite propuneri.", "Cere contractul de delegare și raportările operatorului în baza Legii nr. 544/2001."]],
     "servicii/societate": ["Servicii Comunale e societatea orașului. Consiliul local numește reprezentanții orașului în adunarea generală a acționarilor, aprobă bugetul societății, tarifele serviciilor și, la termoficare, acoperirea pierderilor din bugetul local.",
       ["Reclamațiile despre căldură, curățenie sau deszăpezire le faci întâi la societate, apoi la primărie, care răspunde de serviciul public.", "Cere bugetul și contractele societății în baza Legii nr. 544/2001.", "Urmărește hotărârile despre tarife și pierderi: se votează în consiliu."]],
-    "servicii/termoficare": ["Prețul căldurii are două părți: cât plătește populația și cât acoperă bugetul local (subvenția). Ambele se aprobă prin hotărâre a consiliului local. Când costurile sunt mai mari decât încasările, consiliul poate aproba acoperirea pierderilor din buget.",
+    "servicii/termoficare": ["Prețul căldurii are două părți: cât plătesc cei racordați la termoficare și cât acoperă bugetul local (subvenția), adică banii tuturor locuitorilor. Ambele se aprobă prin hotărâre a consiliului local. Când costurile sunt mai mari decât încasările, consiliul poate aproba acoperirea pierderilor din buget.",
       ["Compară prețul plătit de populație cu prețul întreg, pe ani.", "Urmărește proiectele de hotărâre despre tarife și trimite propuneri la consultare.", "Reclamațiile despre furnizare le faci întâi la operator, apoi la primărie."]],
     "servicii/strazi": ["Curățenia străzilor și deszăpezirea le face Servicii Comunale, la tarifele aprobate de consiliul local. Iarna, primăria are un plan de deszăpezire, cu ordinea în care se curăță străzile.",
       ["Semnalează strada nedeszăpezită sau murdară la primărie, în scris, ca să ai număr de înregistrare.", "Trotuarul din fața casei îl curăță proprietarul, potrivit regulilor locale de gospodărire."]],
-    "servicii/iluminat": ["Iluminatul public e un serviciu al orașului, delegat unui operator prin contract. Extinderile și modernizările se aprobă de consiliul local ca investiții.",
+    "servicii/iluminat": ["Iluminatul public e un serviciu al orașului, delegat din 2025 societății Servicii Comunale, prin atribuire directă; orașul plătește lunar întreținerea, la prețul din contract. Extinderile și modernizările se aprobă de consiliul local ca investiții.",
       ["Semnalează becul ars sau stâlpul căzut la primărie.", "Urmărește investițiile în iluminat pe strada ta."]],
     "servicii/apa": ["Apa și canalizarea sunt un serviciu regional: orașele și comunele din județ s-au asociat și au delegat serviciul operatorului regional. Consiliul local aprobă mandatul reprezentantului orașului în adunarea generală a asociației, de exemplu pentru tarife și investiții.",
       ["Reclamațiile despre apă, presiune sau facturi le faci la operator.", "Urmărește mandatele date de consiliul local: acolo se vede ce votează orașul despre tarife."]],

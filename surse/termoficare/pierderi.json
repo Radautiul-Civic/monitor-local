@@ -1,0 +1,9 @@
+{
+  "despre": "Pierderile din termoficare acoperite din bugetul local, verificate de echipă în textul hotărârilor (art. 1). Sume în lei.",
+  "pierderi": [
+    {"perioada": "noiembrie 2022 - martie 2023", "de_la": "2022-11-01", "pana_la": "2023-03-31", "lei": 5384900, "hcl": {"an": 2023, "nr": 222}, "data": "2023-09-08"},
+    {"perioada": "aprilie - octombrie 2023", "de_la": "2023-04-01", "pana_la": "2023-10-31", "lei": 2270776, "hcl": {"an": 2023, "nr": 302}, "data": "2023-12-12"},
+    {"perioada": "noiembrie 2023 - martie 2024", "de_la": "2023-11-01", "pana_la": "2024-03-31", "lei": 1711143, "hcl": {"an": 2024, "nr": 210}, "data": "2024-10-21"},
+    {"perioada": "aprilie - decembrie 2024", "de_la": "2024-04-01", "pana_la": "2024-12-31", "lei": 4731980, "hcl": {"an": 2025, "nr": 77}, "data": null}
+  ]
+}

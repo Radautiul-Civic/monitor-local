@@ -142,7 +142,12 @@ def scrie(db, data_dir, cheie=None):
         preturi = [dict(p, verificat=True) for p in verif] + [p for p in auto if p["de_la"] > ultima]
     else:
         preturi = auto
-    rez = {"hotarari": H, "preturi": sorted(preturi, key=lambda p: p["de_la"]), "preturi_automat": auto}
+    try:   # pierderile acoperite din buget, verificate de echipă
+        with open(os.path.join(os.path.dirname(VERIFICATE), "pierderi.json"), encoding="utf-8") as f:
+            pierderi = json.load(f).get("pierderi") or []
+    except (OSError, ValueError):
+        pierderi = []
+    rez = {"hotarari": H, "preturi": sorted(preturi, key=lambda p: p["de_la"]), "preturi_automat": auto, "pierderi": pierderi}
     with open(os.path.join(data_dir, "termoficare.json"), "w", encoding="utf-8") as f:
         json.dump(rez, f, ensure_ascii=False, separators=(",", ":"))
     return {"hotarari": len(H), "cu_preturi": sum(1 for x in H if x.get("perioade")), "perioade": len(serie), "ai_acum": noi, "erori": erori}
