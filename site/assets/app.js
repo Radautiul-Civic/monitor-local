@@ -34,7 +34,7 @@
       ["achizitii", "Achiziții publice", "Ce cumpără instituțiile din oraș și de la cine (SICAP)"], ["patrimoniu", "Terenuri și clădiri", "Ce vinde, concesionează sau închiriază orașul"],
       ["finantari", "Finanțări nerambursabile", "Banii dați din bugetul local asociațiilor, cluburilor sportive și cultelor"]] },
     { id: "servicii", nume: "Servicii publice", def: "pe-scurt", sub: [["pe-scurt", "Pe scurt", "Cine face fiecare serviciu, cum îl plătești și cât costă"], ["termoficare", "Căldura (termoficare)", "Prețul căldurii, cât plătesc cei racordați și cât subvenția din bugetul local"],
-      ["salubrizare", "Gunoiul", "Cine ridică gunoiul și cât e taxa de salubrizare"], ["apa", "Apa rece și canalizarea", "ACET S.A. Suceava: apa rece de la robinet și canalizarea"], ["strazi", "Curățenia străzilor și deszăpezirea"], ["iluminat", "Iluminatul public"],
+      ["salubrizare", "Salubrizare", "Cine ridică gunoiul și cât e taxa de salubrizare"], ["apa", "Apa rece și canalizarea", "ACET S.A. Suceava: apa rece de la robinet și canalizarea"], ["strazi", "Curățenia străzilor și deszăpezirea"], ["iluminat", "Iluminatul public"],
       ["alte", "Piețe, cimitir, câini"], ["societate", "Servicii Comunale S.A.", "Societatea orașului: ce face, cine o conduce, ce bani primește"]] },
     { id: "teme", nume: "Pe teme", def: "drumuri", sub: [["drumuri", "Străzi și trotuare"], ["parcari", "Parcări"], ["scoli", "Școli și grădinițe"], ["parcuri", "Parcuri și spații verzi"], ["pug", "PUG și urbanism"]] }
   ].concat(INTERN ? [{ id: "litigii", nume: "Litigii", def: "noutati", sub: [["noutati", "Noutăți"], ["dosare", "Dosare"], ["statistici", "Statistici"]] }] : [])
@@ -3754,7 +3754,7 @@
   }
   // ---------- Alerte pe e-mail (alerte.php): noutățile despre o stradă sau un subiect ----------
   var SUBIECTE_AL = [["taxe", "Taxe și impozite"], ["buget", "Buget"], ["investiti", "Investiții"], ["asfalt", "Asfaltări"], ["urbanism", "Urbanism"], ["achizit", "Achiziții publice"], ["concurs", "Concursuri și angajări"], ["teren", "Terenuri și clădiri"],
-    ["termic", "Căldura (termoficare)"], ["salubr", "Gunoiul"], ["apa", "Apa rece și canalizarea"], ["ilumin", "Iluminatul public"], ["dezapez", "Curățenia străzilor și deszăpezirea"]];
+    ["termic", "Căldura (termoficare)"], ["salubr", "Salubrizare"], ["apa", "Apa rece și canalizarea"], ["ilumin", "Iluminatul public"], ["dezapez", "Curățenia străzilor și deszăpezirea"]];
   function alerteHtml(strada, titlu, subiect) {
     var id = "al-" + Math.random().toString(36).slice(2, 7);
     return '<details class="card section alerte"' + (strada || subiect ? " open" : "") + '><summary><b>' + esc(titlu || "Primește noutățile pe e-mail") + '</b> <span class="muted">gratuit, te poți dezabona oricând</span></summary>' +
@@ -4207,7 +4207,7 @@
     "servicii/iluminat": { alerta: "ilumin", extra: iluminatHtml, titlu: "Iluminatul public", text: "Becurile și stâlpii de pe străzi: contractul pentru întreținerea iluminatului, tarifele, extinderile de rețea și modernizările aprobate de consiliul local.",
       rx: "iluminat", sx: "iluminat|corpuri de iluminat|stalp\\w* .{0,20}iluminat", fel: [["Contractul și tarifele", "contract|tarif|gestiun|studiu\\w* de oportunitate|prestari"], ["Investiții: extinderi și modernizări", "."]] },
     "servicii/hotarari": { titlu: "Toate hotărârile despre Servicii Comunale", text: "Hotărârile consiliului local despre societate și serviciile pe care le face pentru oraș, pe teme.", rx: RX_SC, fel: FEL_SC, sx: false, cui: "2563140", faraSicap: true },
-    "servicii/salubrizare": { alerta: "salubr", titlu: "Gunoiul (salubrizarea)", text: "Ridicarea gunoiului menajer e organizată la nivelul județului Suceava: din 2025 o face operatorul regional al zonei Rădăuți, iar până atunci a făcut-o Servicii Comunale. Aici: cât plătește populația, hotărârile consiliului local despre salubrizare (regulamentul județean, taxa, cantitățile minime pentru firme), investițiile și cheltuielile orașului.",
+    "servicii/salubrizare": { alerta: "salubr", titlu: "Salubrizare", text: "Ridicarea gunoiului menajer e organizată la nivelul județului Suceava: din 2025 o face operatorul regional al zonei Rădăuți, iar până atunci a făcut-o Servicii Comunale. Aici: cât plătește populația, hotărârile consiliului local despre salubrizare (regulamentul județean, taxa, cantitățile minime pentru firme), investițiile și cheltuielile orașului.",
       extra: salubTarifeHtml, dupa: salubTarifeDeseneaza,
       rx: "salubriz|deseu|gunoi|colectar\\w* selectiv|insul\\w* ecologic|asociati\\w* de dezvoltare intercomunitara|ecologizar", nu: "salubrizare stradala", sx: "deseu|gunoi|salubriz|ecologiz|pubel|europubel|insul\\w* ecologic", capitol: "Protecția mediului (salubritate, canalizare)",
       fel: [["Regulamente și organizarea serviciului", "regulament|asociati|delegar|contract|norme"], ["Taxe și tarife", "tax|tarif|cantitat"], ["Investiții", "."]] },
