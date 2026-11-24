@@ -1,8 +1,10 @@
-name: Pilot alt municipiu (colectare de probă, fără publicare)
+name: Colectare alte municipii (fără publicare)
 
 # Rulează colectorul monitorului pe site-ul altei primării cu aceeași structură WordPress, în folderul de date al
 # orașului. Nu publică nimic: verifică doar cât din colector merge așa cum e.
 on:
+  schedule:
+    - cron: "20 2 * * *"   # zilnic, noaptea; deocamdată doar Fălticeni (același șablon de site ca Rădăuți)
   workflow_dispatch:
     inputs:
       oras:
@@ -14,12 +16,15 @@ on:
       max:
         description: "documente de descărcat la rularea asta"
         default: "300"
+      tot:
+        description: "colectare de la zero (da/nu)"
+        default: "nu"
 
 permissions:
   contents: read
 
 concurrency:
-  group: pilot-${{ inputs.oras }}
+  group: pilot-${{ inputs.oras || 'falticeni' }}
   cancel-in-progress: false
 
 jobs:
@@ -27,8 +32,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      MC_BASE_URL: ${{ inputs.url }}
-      MC_DATA_DIR: data-${{ inputs.oras }}
+      MC_BASE_URL: ${{ inputs.url || 'https://www.falticeni.ro' }}
+      MC_DATA_DIR: data-${{ inputs.oras || 'falticeni' }}
+      ORAS: ${{ inputs.oras || 'falticeni' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -36,20 +42,23 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils >/dev/null
+          sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ron >/dev/null
           pip install -r requirements.txt
       - name: Datele orașului (din rularea anterioară)
         uses: actions/cache/restore@v4
         with:
-          path: data-${{ inputs.oras }}
-          key: oras-${{ inputs.oras }}-${{ github.run_id }}
-          restore-keys: oras-${{ inputs.oras }}-
+          path: data-${{ env.ORAS }}
+          key: oras-${{ env.ORAS }}-${{ github.run_id }}
+          restore-keys: oras-${{ env.ORAS }}-
       - run: mkdir -p "$MC_DATA_DIR" && python -m monitor_colector categorii | head -60
       - name: Hotărâri, proiecte, procese-verbale, dispoziții
-        run: python -m monitor_colector colecteaza --surse hcl,proiecte,pv,dispozitii,cu,ac,buget,contracte,angajari
+        run: python -m monitor_colector colecteaza --surse hcl,proiecte,pv,dispozitii,cu,ac,buget,contracte,angajari $([ "${{ inputs.tot }}" = "da" ] && echo --tot)
       - name: Documente
         continue-on-error: true
-        run: python -m monitor_colector descarca --max ${{ inputs.max }}
+        run: python -m monitor_colector descarca --max ${{ inputs.max || '300' }}
+      - name: Recunoașterea textului (documente scanate)
+        continue-on-error: true
+        run: python -m monitor_colector ocr --minute 60
       - name: Indicatori
         continue-on-error: true
         run: python -m monitor_colector indicatori
@@ -81,5 +90,5 @@ jobs:
       - uses: actions/cache/save@v4
         if: always()
         with:
-          path: data-${{ inputs.oras }}
-          key: oras-${{ inputs.oras }}-${{ github.run_id }}
+          path: data-${{ env.ORAS }}
+          key: oras-${{ env.ORAS }}-${{ github.run_id }}

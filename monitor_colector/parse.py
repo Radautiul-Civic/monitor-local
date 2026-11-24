@@ -139,6 +139,16 @@ def parse_hcl_post(post_title, slug, documents):
     m = _SLUG_RE.match(slug or "")
     if m:
         candidates.append({"number": int(m.group(1)), "date": None, "year": int(m.group(2))})
+    # alte primării: titlul postării („Hotărârea nr.172 din 06.11.2026 privind ...”) și fișiere de forma H202611172.pdf (an, lună, număr)
+    t = norm(post_title or "")
+    if re.match(r"\s*(hotararea|hotarare|hcl)\W*nr", t):
+        ref = parse_hcl_ref(post_title)
+        if ref:
+            candidates.append(ref)
+    for d in documents:
+        f = re.match(r"h(20\d\d)(\d\d)(\d{3,4})\b", d["url"].rsplit("/", 1)[-1].lower())
+        if f:
+            candidates.append({"number": int(f.group(3)), "date": None, "year": int(f.group(1))})
     if not candidates:
         result["issues"].append("numar_nedeterminat")
         return result
