@@ -230,22 +230,26 @@
       if (!cfg.cats.length) { el.innerHTML = ""; return; }
       var W = Math.max(cfg.minW || 280, el.clientWidth || 600), H = cfg.h || 220, m = { t: 18, r: 8, b: 26, l: 36 };
       var n = cfg.cats.length, iw = W - m.l - m.r, ih = H - m.t - m.b, band = iw / n;
-      var bw = Math.min(24, band * 0.62);
+      var bw = Math.min(cfg.bwMax || 24, band * 0.62);
       var tot = cfg.cats.map(function (_, i) {
         var v = cfg.stacked ? cfg.series.reduce(function (a, s) { return a + (s.values[i] || 0); }, 0)
           : Math.max.apply(null, cfg.series.map(function (s) { return s.values[i] || 0; }));
-        return Math.max(v, cfg.track ? (cfg.track.values[i] || 0) : 0, cfg.line ? (cfg.line.values[i] || 0) : 0);
+        return Math.max(v, cfg.track ? (cfg.track.values[i] || 0) : 0, cfg.line ? (cfg.line.values[i] || 0) : 0,
+          Math.max.apply(null, (cfg.lines || []).map(function (l) { return l.values[i] || 0; }).concat([0])));
       });
       var max = Math.max.apply(null, tot.concat([1]));
       var step = Math.pow(10, Math.floor(Math.log10(max))); var nice = Math.ceil(max / step) * step;
       if (nice / step <= 2) step /= 2; if (nice / step > 6) step *= 2; nice = Math.ceil(max / step) * step;
+      if (cfg.maxY) { nice = cfg.maxY; step = cfg.stepY || nice / 4; }
       var y = function (v) { return m.t + ih - (v / nice) * ih; };
-      var s = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(cfg.label || "") + '"' + (cfg.onClick ? ' class="clic"' : "") + ">";
+      var lat = cfg.minW && W > (el.clientWidth || W);   // mai lat decât ecranul: se derulează orizontal, cu textul la mărimea lui
+      el.classList.toggle("chart-lat", !!lat);
+      var s = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(cfg.label || "") + '"' + (cfg.onClick ? ' class="clic"' : "") + (lat ? ' style="width:' + W + 'px"' : "") + ">";
       s += '<g class="grid">';
       for (var g = 0; g <= nice + 1e-9; g += step) s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + y(g) + '" y2="' + y(g) + '"/>';
       s += '</g><g class="axis">';
-      for (g = 0; g <= nice + 1e-9; g += step) s += '<text x="' + (m.l - 6) + '" y="' + (y(g) + 4) + '" text-anchor="end">' + (step < 1 ? dec(+g.toFixed(1)) : nr(Math.round(g))) + "</text>";
-      var every = band < 30 ? 2 : 1;
+      for (g = 0; g <= nice + 1e-9; g += step) s += '<text x="' + (m.l - 6) + '" y="' + (y(g) + 4) + '" text-anchor="end">' + (cfg.yFmt ? cfg.yFmt(g) : step < 1 ? dec(+g.toFixed(1)) : nr(Math.round(g))) + "</text>";
+      var every = band < 20 ? 3 : band < 30 ? 2 : 1;
       cfg.cats.forEach(function (c, i) { if (i % every === 0 || i === n - 1) s += '<text x="' + (m.l + band * i + band / 2) + '" y="' + (H - 8) + '" text-anchor="middle">' + esc(c) + "</text>"; });
       s += "</g>";
       function rect(x, y0, y1, w, color, round) {
@@ -273,11 +277,22 @@
           var y0 = y(cfg.stacked ? base : 0), y1 = y(top);
           if (cfg.stacked && k > 0) y0 -= 2;   // 2px spațiu între segmente
           s += rect(x, y0, y1, bw, sr.color, !cfg.stacked || k === segs.length - 1);
+          if (cfg.segLabel && y0 - y1 >= 13) {   // cifra în interiorul segmentului, când încape
+            var tl = cfg.segLabel(sr, i, v);
+            if (tl != null) s += '<text class="seg-lbl" x="' + (x + bw / 2) + '" y="' + ((y0 + y1) / 2 + 3.5) + '" text-anchor="middle">' + esc(tl) + "</text>";
+          }
           base = top;
         });
         var lab = cfg.labelValue ? cfg.labelValue(i) : null;
         if (lab != null) s += '<text class="lbl" x="' + (x + bw / 2) + '" y="' + (y(tot[i]) - 5) + '" text-anchor="middle">' + esc(lab) + "</text>";
         s += '<rect class="hit" x="' + (m.l + band * i) + '" y="' + m.t + '" width="' + band + '" height="' + ih + '"/></g>';
+      });
+      (cfg.lines || []).forEach(function (l, k) {   // mai multe linii (fără bare), cu cifra la fiecare punct când e loc
+        var P = [];
+        l.values.forEach(function (v, i) { if (v != null) P.push([m.l + band * i + band / 2, y(Math.max(0, v)), v, i]); });
+        s += '<polyline points="' + P.map(function (p) { return p[0] + "," + p[1]; }).join(" ") + '" fill="none" stroke="' + l.color + '" stroke-width="2.5" pointer-events="none"/>' +
+          P.map(function (p) { return '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="3.2" fill="' + l.color + '" pointer-events="none"/>' +
+            (cfg.lineLabel && (band >= 34 || p[3] % 2 === 0 || p[3] === n - 1) ? '<text class="ln-lbl" x="' + p[0] + '" y="' + (p[1] + (k % 2 ? 14 : -7)) + '" text-anchor="middle" fill="' + l.color + '">' + esc(cfg.lineLabel(l, p[3], p[2])) + "</text>" : ""); }).join("");
       });
       if (cfg.line) {   // o linie peste bare (ex. datoria cumulată); valorile negative se opresc la 0
         var pts = cfg.line.values.map(function (v, i) { return (m.l + band * i + band / 2) + "," + y(Math.max(0, v || 0)); });
@@ -286,6 +301,7 @@
       }
       s += "</svg>";
       el.innerHTML = s + '<div class="tip"></div>';
+      if (lat) el.scrollLeft = el.scrollWidth;   // pe telefon, întâi perioadele cele mai noi
       var tip = el.querySelector(".tip");
       Array.prototype.forEach.call(el.querySelectorAll("g.col"), function (gEl) {
         var i = +gEl.getAttribute("data-i");
@@ -1895,7 +1911,10 @@
       "<li>Prețurile sunt în <b>lei pe MWh</b> (1 Gcal = 1,163 MWh).</li></ul></section>";
     if (P.length) {
       h += '<section class="card section"><h2>Prețurile, perioadă cu perioadă</h2><p class="note">Din articolele și anexele hotărârilor de tarife, verificate de echipă în document (cele marcate „neverificat” sunt citite automat și încă nu au fost verificate). Până în 2023, hotărârile dau prețurile în lei/Gcal; aici sunt transformate în lei/MWh (împărțite la 1,163), ca să se poată compara. Fiecare perioadă duce la hotărâre.</p>' +
-        legend([["Plătește populația", "#ec7a2c"], ["Plătește bugetul local", "#2a78d6"]]) + '<div class="chart" id="tf-ch"></div>' +
+        '<h3 class="an-h">Lei pe MWh, cu TVA: partea populației și partea bugetului local</h3>' + legend([["Plătește populația", "#ec7a2c"], ["Plătește bugetul local", "#2a78d6"]]) + '<div class="chart" id="tf-ch"></div>' +
+        '<h3 class="an-h">Cum au evoluat, în lei pe MWh</h3>' + legend([["Prețul întreg", "#5b6b7b"], ["Plătește populația", "#ec7a2c"], ["Plătește bugetul local", "#2a78d6"]]) + '<div class="chart" id="tf-ln"></div>' +
+        '<h3 class="an-h">Cine plătește, în procente din prețul întreg</h3>' + legend([["Populația", "#ec7a2c"], ["Bugetul local", "#2a78d6"]]) + '<div class="chart" id="tf-pc"></div>' +
+        '<p class="note">Când partea bugetului crește, populația plătește un procent mai mic din prețul întreg; în iernile cu TVA redus, prețul întreg scade și el.</p>' +
         '<div class="tw"><table class="tx-t"><thead><tr><th>Perioada</th><th class="n">Populația</th><th class="n">Bugetul local</th><th class="n">Prețul întreg</th><th class="n">TVA</th><th class="n">Populația, față de perioada dinainte</th><th>Hotărârea</th></tr></thead><tbody>' +
         P.slice().reverse().map(function (p, i, A) { var a = A[i + 1];
           return "<tr><td>" + esc(perioada(p)) + (p.verificat === false ? ' <span class="tag" title="Citit automat din hotărâre, încă neverificat de echipă">neverificat</span>' : "") + (p.nota ? '<br><small class="muted">' + esc(p.nota) + "</small>" : "") + '</td><td class="n"><b>' + lei2(p.populatie_cu_tva) + '</b></td><td class="n">' + lei2(p.subventie_cu_tva) + '</td><td class="n">' + lei2(p.total_cu_tva) + '</td><td class="n">' + (p.tva ? p.tva + "%" : "-") +
@@ -1906,7 +1925,20 @@
       pier.map(function (x) { return '<div class="doc"><div class="h"><span class="id">' + linkHcl(x) + "</span>" + (x.data ? '<span class="muted">' + esc(zi(x.data)) + "</span>" : "") + (x.pierderi_lei ? '<span class="inv-v">' + lei(x.pierderi_lei) + "</span>" : "") + '</div><div class="t">' + esc(x.pe_scurt || x.titlu) + "</div></div>"; }).join("") + "</section>";
     h += '<section class="card section"><h2>Toate hotărârile despre termoficare <span class="nr-b n">' + H.length + '</span></h2><div id="tf-l"></div></section>';
     el.innerHTML = h;
-    if (P.length) chart($("tf-ch"), { cats: P.map(function (p) { return lunaScurt(p.de_la); }), stacked: true, label: "Prețul energiei termice pe perioade: partea populației și partea bugetului local",
+    var cats = P.map(function (p) { return lunaScurt(p.de_la); }), r0 = function (v) { return v == null ? null : Math.round(v); };
+    var pct = function (p, k) { var t = p.total_cu_tva || ((p.populatie_cu_tva || 0) + (p.subventie_cu_tva || 0)); return t && p[k] != null ? Math.round(1000 * p[k] / t) / 10 : null; };
+    var tipTf = function (i) { var p = P[i]; return "<b>" + esc(perioada(p)) + "</b><br>populația: " + lei2(p.populatie_cu_tva) + "/MWh (" + dec(pct(p, "populatie_cu_tva")) + "%)<br>bugetul local: " + lei2(p.subventie_cu_tva) + "/MWh (" + dec(pct(p, "subventie_cu_tva")) + "%)<br>prețul întreg: " + lei2(p.total_cu_tva) + "/MWh" + (p.tva ? " (TVA " + p.tva + "%)" : "") + (p.hcl ? "<br>HCL " + p.hcl.nr + "/" + p.hcl.an : ""); };
+    if (P.length) {
+      chart($("tf-ln"), { cats: cats, series: [], h: 260, minW: 720, label: "Prețul întreg, partea populației și partea bugetului, în lei pe MWh", tooltip: tipTf,
+        lines: [{ name: "Prețul întreg", color: "#5b6b7b", values: P.map(function (p) { return r0(p.total_cu_tva); }) }, { name: "Populația", color: "#ec7a2c", values: P.map(function (p) { return r0(p.populatie_cu_tva); }) },
+          { name: "Bugetul local", color: "#2a78d6", values: P.map(function (p) { return r0(p.subventie_cu_tva); }) }],
+        lineLabel: function (l, i, v) { return nr(v); } });
+      chart($("tf-pc"), { cats: cats, series: [], h: 230, minW: 720, maxY: 100, stepY: 25, yFmt: function (g) { return g + "%"; }, label: "Partea populației și a bugetului local, în procente din prețul întreg", tooltip: tipTf,
+        lines: [{ name: "Populația", color: "#ec7a2c", values: P.map(function (p) { return pct(p, "populatie_cu_tva"); }) }, { name: "Bugetul local", color: "#2a78d6", values: P.map(function (p) { return pct(p, "subventie_cu_tva"); }) }],
+        lineLabel: function (l, i, v) { return Math.round(v) + "%"; } });
+    }
+    if (P.length) chart($("tf-ch"), { cats: cats, stacked: true, h: 300, minW: 720, bwMax: 36, label: "Prețul energiei termice pe perioade: partea populației și partea bugetului local",
+      segLabel: function (sr, i, v) { return nr(Math.round(v)); }, labelValue: function (i) { return P[i].total_cu_tva ? nr(Math.round(P[i].total_cu_tva)) : null; },
       series: [{ name: "Plătește populația", color: "#ec7a2c", values: P.map(function (p) { return p.populatie_cu_tva || 0; }) }, { name: "Plătește bugetul local", color: "#2a78d6", values: P.map(function (p) { return p.subventie_cu_tva || 0; }) }],
       tooltip: function (i) { var p = P[i]; return "<b>" + esc(perioada(p)) + "</b><br>populația: " + lei2(p.populatie_cu_tva) + "/MWh<br>bugetul local: " + lei2(p.subventie_cu_tva) + "/MWh<br>prețul întreg: " + lei2(p.total_cu_tva) + "/MWh" + (p.tva ? " (TVA " + p.tva + "%)" : "") + (p.hcl ? "<br>HCL " + p.hcl.nr + "/" + p.hcl.an : ""); } });
     function listaTf(vot) {

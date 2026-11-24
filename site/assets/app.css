@@ -848,3 +848,6 @@ details.alerte .al-f{margin-top:8px;max-width:640px}
 .sp-h{margin:26px 0 10px;font-size:1.3rem}
 .cal-tt{margin:0 0 8px}
 .tag.cons-t{border-color:#1baf7a;color:#0b7a3e;background:color-mix(in srgb,#1baf7a 10%,transparent);text-decoration:none}
+.chart .seg-lbl{fill:#fff;font-size:10px;font-weight:650;font-variant-numeric:tabular-nums;pointer-events:none}
+.chart .ln-lbl{font-size:10px;font-weight:650;font-variant-numeric:tabular-nums;paint-order:stroke;stroke:var(--surface);stroke-width:3px;pointer-events:none}
+.chart.chart-lat{overflow-x:auto;-webkit-overflow-scrolling:touch}
