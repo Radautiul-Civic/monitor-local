@@ -3444,7 +3444,9 @@
         .catch(function (e) { $("v-msg").textContent = "Eroare: " + e.message; });
     });
     function lista() {
-      Promise.all([get(API).catch(function () { return { video: [], aprobari: {} }; }), get(DATA + "rezumate.json").catch(function () { return {}; }), incarcaSed().catch(function () { return null; })]).then(function (d) {
+      Promise.all([get(API).catch(function () { return { video: [], aprobari: {} }; }), get(DATA + "rezumate.json").catch(function () { return {}; }), incarcaSed().catch(function () { return null; }),
+        get(DATA + "cartoane.json?v=" + Date.now()).then(function (x) { CARTOANE_C = x; }).catch(function () { CARTOANE_C = {}; }),
+        VOT !== undefined ? null : get(DATA + "voturi.json").then(function (x) { VOT = x; }).catch(function () { VOT = null; })]).then(function (d) {
         var st = d[0], C = d[1] || {}, A = st.aprobari || {}, rows = {};
         // memento: ședințele ținute în ultimele 60 de zile pentru care nu s-a adăugat nicio înregistrare
         var cuVideo = {}; (st.video || []).forEach(function (v) { cuVideo[v.data] = 1; });
@@ -3470,6 +3472,24 @@
     lista();
   }
   var STARE_RZ = { aprobat: ["Aprobat, public", "c"], respins: ["Respins", "p"], refa: ["Refacere cerută", "par"], ciorna: ["Ciornă", "ic"] };
+  var CARTOANE_C = null;   // intern/date/cartoane.json: cartoanele și textele făcute automat din rezumate (ciorne și aprobate)
+  function rzVoturiPv(c, R) {
+    var d = c.data_sedinta || c.data, s = VOT && (VOT.sedinte || []).filter(function (x) { return x.data === d; })[0];
+    var P = (R.puncte || []).filter(function (p) { return p.vot && (p.vot.rezultat || p.vot.detalii); });
+    if (!P.length && !s) return "";
+    return '<details class="rz-v" open><summary><b>Verificarea voturilor</b> ' + (s ? '<span class="muted">rezumatul (din înregistrare) alături de procesul-verbal</span>' : '<span class="warn-t">procesul-verbal nu e publicat încă: verifică pe înregistrare</span>') + "</summary>" +
+      '<div class="rz-v2"><div><h4>Din rezumat</h4>' + (P.length ? "<ol>" + P.map(function (p) { return "<li><b>" + esc(p.vot.rezultat || "?") + "</b> " + esc(p.vot.detalii || "") + ' <small class="muted">' + esc((p.titlu || "").slice(0, 80)) + "</small></li>"; }).join("") + "</ol>" : '<p class="empty">Fără voturi în rezumat.</p>') + "</div>" +
+      "<div><h4>Din procesul-verbal</h4>" + (s ? "<ol>" + (s.voturi || []).filter(function (v) { return !v.procedural; }).map(function (v) { return "<li>" + votHtml(v) + ' <small class="muted">' + esc((v.titlu || "").replace(/^[\s\S]{0,120}?\b(privind|pentru)\b/i, "$1").slice(0, 90)) + "</small></li>"; }).join("") + "</ol>" : '<p class="empty">Încă nepublicat.</p>') + "</div></div></details>";
+  }
+  function rzPostare(id) {
+    var x = CARTOANE_C && CARTOANE_C[id];
+    if (!x) return '<p class="note">Cartoanele pentru Facebook și Instagram se fac automat la următoarea rulare a fluxului de transcriere și apar aici.</p>';
+    return '<details class="rz-post"><summary><b>Postarea: ' + (x.cartoane || []).length + " cartoane și textele</b> " + (x.sursa === "ciorna" ? '<span class="muted">(din ciornă; se refac după aprobare)</span>' : "") + "</summary>" +
+      '<div class="an-grid">' + (x.cartoane || []).map(function (n, i) { var u = "cartoane/" + encodeURIComponent(id) + "/" + encodeURIComponent(n) + "?v=" + encodeURIComponent(x.generat_la || "");
+        return '<a href="' + esc(u) + '" download="' + esc("Sedinta " + x.data + " " + (i + 1) + ".png") + '"><img loading="lazy" src="' + esc(u) + '" alt=""><span>' + (i + 1) + ". " + esc((x.titluri || [])[i] || "") + "</span></a>"; }).join("") + "</div>" +
+      ((x.postari || {}).facebook ? postBox(x.postari.facebook, "Facebook") : "") + ((x.postari || {}).instagram ? postBox(x.postari.instagram, "Instagram") : "") +
+      '<p class="note"><a href="#analize/' + esc(encodeURIComponent(id)) + '">Deschide pe pagina Analize</a></p></details>';
+  }
   function ciornaHtml(id, c, a) {
     var s = (a && a.stare) || "ciorna", R = (a && a.stare === "aprobat" && a.rezumat) || c.rezumat || {}, k = "c-" + id;
     var inp = function (f, v, mare) { return mare ? '<textarea data-f="' + f + '" rows="' + Math.min(10, Math.max(2, Math.ceil(String(v || "").length / 110))) + '">' + esc(v || "") + "</textarea>" : '<input data-f="' + f + '" value="' + esc(v || "") + '">'; };
@@ -3479,6 +3499,7 @@
       (R._model ? " · model " + esc(R._model) : "") + (a ? " · decizie: " + esc(a.stare) + " " + esc(zi(a.la)) + (a.de ? " (" + esc(a.de) + ")" : "") : "") + "</p>" +
       (c.eroare ? '<p class="callout">Rezumatul n-a putut fi generat: ' + esc(c.eroare) + "</p>" : "") +
       ((R.observatii || []).length ? '<div class="callout"><b>De verificat (semnalat de model):</b><ul>' + R.observatii.map(function (o) { return "<li>" + esc(o) + "</li>"; }).join("") + "</ul></div>" : "") +
+      rzVoturiPv(c, R) +
       (c.rezumat || (a && a.rezumat) ? '<div class="rz-ed"><label>Rezumatul ședinței</label>' + inp("rezumat", R.rezumat, true) +
         (R.puncte || []).map(function (p, i) {
           var v = p.vot || {};
@@ -3487,8 +3508,10 @@
             (p.interventii || []).map(function (t, j) { return '<div class="rz-int" data-i="' + j + '">' + inp("cine", t.cine) + inp("minut", t.minut) + inp("ce", t.ce, true) + "</div>"; }).join("") +
             '<div class="rz-vot"><label>Vot</label>' + inp("vot_rezultat", v.rezultat) + inp("vot_detalii", v.detalii) + inp("vot_sursa", v.sursa) + "<label>HCL</label>" + inp("hcl", p.hcl) + "</div></fieldset>";
         }).join("") +
+        '<label class="rz-chk"><input type="checkbox" data-verif> Am verificat pe înregistrare rezultatul fiecărui vot (pentru, împotrivă, abțineri)</label>' +
         '<div class="rz-act"><button class="btn ok" data-a="aprobat" type="button">Aprobă și publică</button><button class="btn" data-a="refa" type="button">Cere refacerea</button><button class="btn rau" data-a="respins" type="button">Respinge</button>' +
-        (s === "aprobat" ? '<button class="btn" data-a="ciorna" type="button">Retrage de pe public</button>' : "") + '<span class="rz-msg muted"></span></div></div>' : '<p class="empty">Fără rezumat încă.</p>') + "</section>";
+        (s === "aprobat" ? '<button class="btn" data-a="ciorna" type="button">Retrage de pe public</button>' : "") + '<span class="rz-msg muted"></span></div></div>' : '<p class="empty">Fără rezumat încă.</p>') +
+      rzPostare(id) + "</section>";
   }
   function legaCiorna(id, c, a) {
     var sec = $("c-" + id); if (!sec) return;
@@ -3499,7 +3522,8 @@
     });
     Array.prototype.forEach.call(sec.querySelectorAll(".rz-act button"), function (b) {
       b.addEventListener("click", function () {
-        var stare = b.dataset.a, msg = sec.querySelector(".rz-msg");
+        var stare = b.dataset.a, msg = sec.querySelector(".rz-msg"), ck = sec.querySelector("[data-verif]");
+        if (stare === "aprobat" && ck && !ck.checked) { msg.textContent = "Bifează întâi că ai verificat voturile pe înregistrare."; ck.focus(); return; }
         var R = JSON.parse(JSON.stringify((a && a.stare === "aprobat" && a.rezumat) || c.rezumat || {}));
         var val = function (root, f) { var e = root.querySelector('[data-f="' + f + '"]'); return e ? e.value.trim() : null; };
         R.rezumat = val(sec.querySelector(".rz-ed"), "rezumat");

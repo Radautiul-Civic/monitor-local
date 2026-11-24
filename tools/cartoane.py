@@ -353,32 +353,42 @@ def cmd_analize():
     print(f"{len(idx)} analize -> {ANALIZE_OUT}")
 
 
-def cmd_auto(maxim=3):
-    """Ciorne de cartoane pentru rezumatele aprobate care nu au încă (sau au fost reaprobate între timp)."""
+def cmd_auto(maxim=4):
+    """Cartoane și texte pentru rezumatele ședințelor: pentru ciornele din panou (ca să se vadă înainte de aprobare)
+    și pentru rezumatele aprobate (care le înlocuiesc). Se refac când ciorna e regenerată sau rezumatul e reaprobat."""
     sys.path.insert(0, ROOT)
     import requests
     from monitor_colector.intern_ftp import Intern
     INDEX, FOLDER = "intern/date/cartoane.json", "intern/cartoane"
     pub = requests.get("https://monitor.radautiulcivic.ro/date/rezumate.json", timeout=60, headers={"User-Agent": "MonitorLocal-cartoane"})
-    rezumate = (pub.json().get("rezumate") or []) if pub.ok else []
+    aprobate = (pub.json().get("rezumate") or []) if pub.ok else []
     with Intern() as I:
         idx = I.json(INDEX, {}) or {}
-        de_facut = [x for x in rezumate if (x.get("rezumat") or {}).get("puncte") and (idx.get(x["id"]) or {}).get("aprobat_la") != x.get("aprobat_la")][:maxim]
-        print(f"{len(rezumate)} rezumate aprobate, {len(de_facut)} de făcut")
+        ciorne = I.json("intern/date/rezumate.json", {}) or {}
+        decizii = I.json("intern/date/aprobari.json", {}) or {}
+        surse = [(x, "aprobat", x.get("aprobat_la")) for x in aprobate if (x.get("rezumat") or {}).get("puncte")]
+        gata = {x["id"] for x, _, _ in surse}
+        for cid, c in ciorne.items():
+            if cid in gata or (decizii.get(cid) or {}).get("stare") in ("aprobat", "respins") or not (c.get("rezumat") or {}).get("puncte"):
+                continue
+            surse.append(({"id": cid, "data": c.get("data_sedinta") or c.get("data"), "rezumat": c["rezumat"]}, "ciorna", c.get("generat_la") or c.get("creat_la")))
+        de_facut = [(x, fel, v) for x, fel, v in surse if (idx.get(x["id"]) or {}).get("versiune") != f"{fel}:{v}"][:maxim]
+        print(f"{len(aprobate)} rezumate aprobate, {len(surse) - len(gata)} ciorne, {len(de_facut)} de făcut")
         if de_facut and os.environ.get("GITHUB_ACTIONS"):   # browserul pentru desenat se instalează doar când e ceva de făcut
             import subprocess
             subprocess.run([sys.executable, "-m", "playwright", "install", "--with-deps", "chromium"], check=True, stdout=subprocess.DEVNULL)
-        for x in de_facut:
+        for x, fel, v in de_facut:
             spec = din_rezumat(x)
             with tempfile.TemporaryDirectory() as out:
                 nume = fa(spec, out)
                 for i, n in enumerate(nume, 1):
                     with open(os.path.join(out, n), "rb") as fh:
                         I.scrie(f"{FOLDER}/{x['id']}/{i}.png", fh.read())
-            idx[x["id"]] = {"data": x["data"], "titlu": spec["titlu"], "aprobat_la": x.get("aprobat_la"), "generat_la": datetime.now().isoformat(timespec="seconds"),
-                            "cartoane": [f"{i}.png" for i in range(1, len(nume) + 1)], "titluri": [k["titlu"] for k in spec["cartoane"]], "postari": spec["postari"]}
+            idx[x["id"]] = {"data": x["data"], "titlu": spec["titlu"], "sursa": fel, "versiune": f"{fel}:{v}", "aprobat_la": x.get("aprobat_la"),
+                            "generat_la": datetime.now().isoformat(timespec="seconds"), "cartoane": [f"{i}.png" for i in range(1, len(nume) + 1)],
+                            "titluri": [k["titlu"] for k in spec["cartoane"]], "postari": spec["postari"]}
             I.scrie(INDEX, idx)
-            print(f"  {x['id']}: {len(nume)} cartoane urcate")
+            print(f"  {x['id']} ({fel}): {len(nume)} cartoane urcate")
 
 
 def main(argv=None):
