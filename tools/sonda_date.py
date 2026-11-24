@@ -90,3 +90,23 @@ elif fel == "componenta":   # consilierii de pe pagina primăriei: partid, poză
     import json
     for x in json.load(open("data/componenta.json", encoding="utf-8")).get("consilieri") or []:
         print(x.get("nume"), "|", x.get("id"), "|", x.get("partid"), "|", "foto" if x.get("foto") else "FARA FOTO", "|", "iesit" if x.get("iesit") else "")
+elif fel == "salub":   # salubrizarea: fragmentele din hotărârile de taxe și textul hotărârilor despre tarife
+    import json as _j
+    try:
+        T = _j.load(open("data/teme.json", encoding="utf-8")).get("taxe") or {}
+        for an in sorted(T):
+            print("TEME", an, (T[an].get("indicatori") or {}).get("salubrizare_pf_lei_persoana_luna"), ((T[an].get("ai") or {}).get("indicatori") or {}).get("salubrizare_pf"))
+    except Exception as e:   # noqa: BLE001
+        print("teme.json:", e)
+    for an, nr, d, titlu, tp in c.execute("SELECT h.year, h.number, h.adoption_date, h.title, d.text_path FROM hcl h JOIN documents d ON d.url=h.pdf_url "
+                                          "WHERE d.text_path IS NOT NULL ORDER BY h.adoption_date"):
+        tl = (titlu or "").lower()
+        if not tp or not os.path.exists(tp):
+            continue
+        t = open(tp, encoding="utf-8", errors="replace").read()
+        if re.search(r"impozit|taxe(lor)? local", tl):
+            for m in re.finditer(r"salubriz", t, re.I):
+                print("TAXE", an, nr, d, "|", re.sub(r"\s+", " ", t[max(0, m.start() - 250): m.end() + 450]))
+        elif re.search(r"salubriz|deseur|deșeur|colectare", tl) and re.search(r"tarif|tax|cantit|pret|preț|act\w* adi", tl):
+            print("=====", an, nr, d, titlu)
+            print(re.sub(r"[ \t]+", " ", t[: int(arg or 6000)]))
