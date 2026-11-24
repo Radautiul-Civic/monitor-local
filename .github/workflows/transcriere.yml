@@ -158,6 +158,15 @@ jobs:
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m monitor_colector.video refa
+      - name: Ciorne de cartoane (Facebook și Instagram) pentru rezumatele aprobate, în zona internă
+        continue-on-error: true
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          pip install -q playwright
+          python tools/cartoane.py auto
       - name: Ștergerea artefactelor (depozitul e public; transcrierile rămân doar în zona internă)
         if: always()
         env:

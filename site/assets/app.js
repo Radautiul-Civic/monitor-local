@@ -52,7 +52,7 @@
     texte: function () { return ["cauta", "texte"]; },
     salubrizare: function () { return ["servicii", "salubrizare"]; },
     servicii: function (h) { return h[1] === "hotarari" ? ["servicii", "societate", "hotarari"] : h; } };
-  if (INTERN) { SECTIUNI.push({ id: "rezumate", nume: "Rezumate" }); SECTIUNI.push({ id: "declaratii", nume: "Declarații" }); SECTIUNI.push({ id: "mesaje", nume: "Mesaje" }); SECTIUNI.push({ id: "arhiva", nume: "Arhiva" }); }
+  if (INTERN) { SECTIUNI.push({ id: "rezumate", nume: "Rezumate" }); SECTIUNI.push({ id: "analize", nume: "Analize" }); SECTIUNI.push({ id: "declaratii", nume: "Declarații" }); SECTIUNI.push({ id: "mesaje", nume: "Mesaje" }); SECTIUNI.push({ id: "arhiva", nume: "Arhiva" }); }
   SECTIUNI.push({ id: "despre", nume: "Despre", def: "despre", sub: [["despre", "Despre monitor"], ["glosar", "Glosar"]] });
 
   function route() {
@@ -3293,6 +3293,38 @@
       });
     }).catch(function () { el.innerHTML = head("Mesaje de la cititori", "") + '<p class="empty">Nu am putut citi mesajele.</p>'; });
   }
+  // ---------- Analizele Rădăuțiul Civic (doar intern): cartoanele și textele postărilor, plus ciornele făcute automat din rezumate ----------
+  function analizeIntern(el) {
+    if (!INTERN) return;
+    var cine = decodeURIComponent((location.hash.split("/")[1] || "").split("?")[0]);
+    el.innerHTML = head("Analizele Rădăuțiul Civic", "") + '<p class="updated">Se încarcă...</p>';
+    Promise.all([get("analize/index.json?v=" + Date.now()).catch(function () { return {}; }), get(DATA + "cartoane.json?v=" + Date.now()).catch(function () { return {}; })]).then(function (d) {
+      var A = (d[0].analize || []).map(function (a) { return Object.assign({ baza: "analize/" + a.id + "/" }, a); });
+      var C = Object.keys(d[1] || {}).map(function (k) { return Object.assign({ id: k, ciorna: 1, baza: "cartoane/" + k + "/", fisier: "Sedinta " + d[1][k].data }, d[1][k]); })
+        .sort(function (a, b) { return (b.data || "").localeCompare(a.data || ""); });
+      var x = A.concat(C).filter(function (a) { return a.id === cine; })[0];
+      var poza = function (a, n, i) { return a.baza + encodeURIComponent(n) + (a.generat_la ? "?v=" + encodeURIComponent(a.generat_la) : ""); };
+      if (x) {
+        el.innerHTML = head(x.titlu || "Analiză", (x.data ? zi(x.data) + ". " : "") + (x.ciorna ? "Ciornă făcută automat din rezumatul aprobat al ședinței." : "Analiză a Asociației Rădăuțiul Civic.")) +
+          '<p><a href="#analize">&larr; toate analizele</a></p>' +
+          (x.ciorna ? '<p class="callout">Ciornă automată: verifică voturile și numele pe înregistrare înainte de orice postare. Transcrierea automată greșește des rezultatul votului.</p>' : "") +
+          (x.pe_scurt ? '<section class="card section"><p>' + esc(x.pe_scurt) + "</p></section>" : "") +
+          '<section class="card section"><h2>Cartoanele (' + (x.cartoane || []).length + ')</h2><p class="note">Pătrate, 1080 × 1080, pentru Facebook și Instagram. Apasă pe un carton ca să-l descarci.</p><div class="an-grid">' +
+          (x.cartoane || []).map(function (n, i) { return '<a href="' + esc(poza(x, n)) + '" download="' + esc((x.fisier || x.id) + " " + (i + 1) + ".png") + '" title="' + esc((x.titluri || [])[i] || "") + '"><img loading="lazy" src="' + esc(poza(x, n)) + '" alt="' + esc((x.titluri || [])[i] || "Cartonul " + (i + 1)) + '"><span>' + (i + 1) + ". " + esc((x.titluri || [])[i] || "") + "</span></a>"; }).join("") + "</div></section>" +
+          '<section class="card section"><h2>Textele postărilor</h2><p class="note">Postările nu trimit la monitor cât timp acesta nu e public.</p>' +
+          ((x.postari || {}).facebook ? postBox(x.postari.facebook, "Facebook") : "") + ((x.postari || {}).instagram ? postBox(x.postari.instagram, "Instagram") : "") + "</section>" +
+          ((x.surse || []).length ? '<section class="card section"><h2>Surse</h2><ul>' + x.surse.map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("") + "</ul></section>" : "") +
+          ((x.note || []).length ? '<section class="card section"><h2>Note de lucru</h2><ul>' + x.note.map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("") + "</ul></section>" : "");
+        return;
+      }
+      var lista = function (L) { return '<div class="an-l">' + L.map(function (a) { return '<a class="an-c" href="#analize/' + encodeURIComponent(a.id) + '">' + ((a.cartoane || []).length ? '<img loading="lazy" src="' + esc(poza(a, a.cartoane[0])) + '" alt="">' : "") +
+        "<div><b>" + esc(a.titlu || a.id) + "</b><small>" + (a.data ? esc(zi(a.data)) + " · " : "") + (a.cartoane || []).length + " cartoane</small>" + (a.pe_scurt ? "<p>" + esc(a.pe_scurt) + "</p>" : "") + "</div></a>"; }).join("") + "</div>"; };
+      el.innerHTML = head("Analizele Rădăuțiul Civic", "Analizele noastre pe deciziile locale: cartoanele pentru rețelele sociale, textele postărilor și sursele. Deocamdată doar în versiunea internă.") +
+        '<section class="card section"><h2>Analize</h2>' + (A.length ? lista(A) : '<p class="empty">Nicio analiză încă.</p>') + "</section>" +
+        '<section class="card section"><h2>Ciorne din rezumatele ședințelor</h2><p class="note">Se fac automat, cu același șablon, pentru fiecare rezumat aprobat în panoul „Rezumate”. Sunt un punct de plecare: se verifică și se completează de mână înainte de postare.</p>' +
+        (C.length ? lista(C) : '<p class="empty">Nicio ciornă încă. Apar după ce aprobi un rezumat de ședință (la următoarea rulare a fluxului de transcriere).</p>') + "</section>";
+    });
+  }
   function panouRezumate(el) {
     if (!INTERN) return;
     el.innerHTML = head("Rezumatele ședințelor (panou)", "Adaugă înregistrarea unei ședințe; fluxul „Transcriere ședințe” o transcrie (Whisper) și scrie ciorna rezumatului. Aici o citești, o corectezi și o aprobi; abia atunci apare pe pagina publică a ședinței.") +
@@ -4562,6 +4594,7 @@
     else if (id === "texte") texte(el);
     else if (id === "despre") (r.sub === "glosar" ? glosarPagina : despre)(el, r);
     else if (id === "mesaje") mesajeIntern(el);
+    else if (id === "analize") analizeIntern(el);
     else if (id === "declaratii" && INTERN) declaratiiIntern(el);
     else if (id === "arhiva") arhivaIntern(el, r);
     if (id === "acasa") { noutatiCard(); anCard(); arhivaCard(); litNewsCard(); primaVizita(); }

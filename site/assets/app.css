@@ -891,3 +891,11 @@ details.alerte .al-f{margin-top:8px;max-width:640px}
 .svc-ic{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .svc-nav a:not([aria-current]) .svc-ic{color:var(--accent)}
 @media (max-width:640px){.svc-nav{display:flex;overflow-x:auto;gap:8px;padding-bottom:6px;scroll-snap-type:x proximity}.svc-nav a{flex:0 0 96px;scroll-snap-align:start;font-size:.8rem;padding:10px 6px}}
+
+/* analizele (intern): lista și cartoanele */
+.an-l{display:grid;gap:12px}.an-c{display:flex;gap:14px;align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:12px;text-decoration:none;color:inherit}
+.an-c:hover{border-color:var(--accent,#1c5cab)}.an-c img{width:120px;height:120px;border-radius:8px;flex:0 0 120px;border:1px solid var(--line)}
+.an-c small{display:block;color:var(--muted,#6b7177);margin:2px 0 4px}.an-c p{margin:0;font-size:.92rem}
+.an-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.an-grid a{display:block;text-decoration:none;color:inherit;font-size:.82rem}.an-grid img{width:100%;aspect-ratio:1;border-radius:10px;border:1px solid var(--line);display:block;margin-bottom:4px}
+@media(max-width:560px){.an-c img{width:84px;height:84px;flex-basis:84px}.an-grid{grid-template-columns:repeat(2,1fr)}}

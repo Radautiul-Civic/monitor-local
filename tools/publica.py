@@ -343,6 +343,12 @@ def main():
         # zona internă: toate datele (cu litigiile și rapoartele), apoi documentele Word
         for name, local in intern_date().items():
             files.append((local, "intern/date", name, None, None, None))
+        # analizele Rădăuțiul Civic (cartoane și texte), deocamdată doar pe intern
+        an = os.path.join(ROOT, "site_intern", "analize")
+        for dirpath, _, names in os.walk(an):
+            rel = os.path.relpath(dirpath, an).replace(os.sep, "/")
+            for n in sorted(names):
+                files.append((os.path.join(dirpath, n), "intern/analize" if rel == "." else "intern/analize/" + rel, n, None, None, None))
         tf, manifeste["texte"] = texte_de_urcat(base)
         print(f"intern: {len(tf)} fișiere noi sau modificate")
         files += [(p, r, n, "texte", k, h) for p, r, n, k, h in tf]
