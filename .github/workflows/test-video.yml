@@ -13,25 +13,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - run: pip install -q yt-dlp requests
+      - uses: denoland/setup-deno@v2
       - run: |
-          python - <<'PY'
-          import re, requests, subprocess, html
-          H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36"}
-          for u in ("https://www.radautiziar.ro/wp-json/wp/v2/posts?search=sedinta+consiliului+local&per_page=10&_fields=id,date,link,title,content",
-                    "https://www.radautiziar.ro/?s=sedinta+consiliului+local", "https://www.radautiziar.ro/feed/"):
-              try:
-                  r = requests.get(u, timeout=40, headers=H)
-                  print("==", u, r.status_code, len(r.text), r.headers.get("content-type"))
-                  if "wp-json" in u and r.ok:
-                      for p in r.json():
-                          yt = re.findall(r"youtube\.com/embed/([\w-]{6,})|youtu\.be/([\w-]{6,})", p["content"]["rendered"])
-                          print(p["date"], html.unescape(p["title"]["rendered"]), p["link"], [a or b for a, b in yt])
-                  else:
-                      print(sorted(set(re.findall(r"https://www\.radautiziar\.ro/sedinta-[\w-]+/", r.text)))[:10])
-              except Exception as e:
-                  print("eroare", u, e)
-          r = requests.get("https://www.radautiziar.ro/sedinta-consiliului-local-24-noe-2026/", timeout=40, headers=H)
-          print("== articol", r.status_code, sorted(set(re.findall(r"youtube\.com/embed/([\w-]{6,})", r.text))), re.findall(r'"datePublished":"([^"]+)"', r.text)[:1])
-          PY
-          echo "== yt-dlp"; yt-dlp --skip-download --print "%(id)s | %(title)s | %(duration)s | %(upload_date)s | %(channel)s" "https://www.youtube.com/watch?v=chq4NwFuBN8" 2>&1 | tail -5 || true
-          echo "== audio"; timeout 300 yt-dlp -f "bestaudio/best" --download-sections "*0-120" -o "a.%(ext)s" "https://www.youtube.com/watch?v=chq4NwFuBN8" 2>&1 | tail -4 || true; ls -la a.* 2>/dev/null || echo "fără fișier audio"
+          for v in rf4ADf-FjGM chq4NwFuBN8; do
+            echo "== $v"; yt-dlp --skip-download --print "%(id)s | %(title)s | %(duration)s | %(upload_date)s | %(channel)s | %(live_status)s" "https://www.youtube.com/watch?v=$v" 2>&1 | tail -3 || true
+            timeout 300 yt-dlp -f "bestaudio/best" --download-sections "*0-120" -o "$v.%(ext)s" "https://www.youtube.com/watch?v=$v" 2>&1 | tail -3 || true; ls -la $v.* 2>/dev/null || echo "fără fișier audio"
+          done
