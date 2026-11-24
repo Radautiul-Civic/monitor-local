@@ -3444,16 +3444,26 @@
         .catch(function (e) { $("v-msg").textContent = "Eroare: " + e.message; });
     });
     function lista() {
-      Promise.all([get(API).catch(function () { return { video: [], aprobari: {} }; }), get(DATA + "rezumate.json").catch(function () { return {}; })]).then(function (d) {
+      Promise.all([get(API).catch(function () { return { video: [], aprobari: {} }; }), get(DATA + "rezumate.json").catch(function () { return {}; }), incarcaSed().catch(function () { return null; })]).then(function (d) {
         var st = d[0], C = d[1] || {}, A = st.aprobari || {}, rows = {};
+        // memento: ședințele ținute în ultimele 60 de zile pentru care nu s-a adăugat nicio înregistrare
+        var cuVideo = {}; (st.video || []).forEach(function (v) { cuVideo[v.data] = 1; });
+        var azi = new Date().toISOString().slice(0, 10), lim = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
+        var lipsa = ((SED || {}).recente || []).concat((SED || {}).urmatoare || []).filter(function (c) { return c.data && c.data <= azi && c.data >= lim && !cuVideo[c.data]; })
+          .sort(function (a, b) { return b.data.localeCompare(a.data); });
         (st.video || []).forEach(function (v) { var m = (v.url || "").match(/\/videos\/(\d+)/); rows[v.data + "|" + v.url] = { v: v, idp: m ? v.data + "-" + m[1] : null }; });
         var ids = Object.keys(C).sort().reverse();
         var asteapta = Object.keys(rows).map(function (k) { return rows[k]; }).filter(function (x) { return !x.idp || !C[x.idp]; });
-        var h = (asteapta.length ? '<section class="card section"><h2>În așteptarea transcrierii</h2>' + asteapta.map(function (x) {
+        var h = (lipsa.length ? '<section class="card section rz-lipsa"><h2>Ședințe fără înregistrare adăugată <span class="nr-b n">' + lipsa.length + "</span></h2>" +
+          '<p class="note">Caută înregistrarea pe pagina de Facebook care transmite ședințele (Jurnalist Live) sau în articolul ședinței de pe radautiziar.ro, apoi adaug-o mai sus.</p>' +
+          lipsa.map(function (c) { return '<div class="doc"><div class="h"><span class="id">' + esc(zi(c.data)) + "</span> " + esc(TIP[c.tip] || "") + (c.ora ? ", ora " + esc(c.ora) : "") +
+            ' <button type="button" class="btn-s" data-zi="' + esc(c.data) + '">Completează data</button></div></div>'; }).join("") + "</section>" : "") +
+          (asteapta.length ? '<section class="card section"><h2>În așteptarea transcrierii</h2>' + asteapta.map(function (x) {
           return '<div class="doc"><div class="h"><span class="id">' + esc(zi(x.v.data)) + '</span><span class="muted">adăugată ' + esc(zi(x.v.adaugat_la)) + '</span></div><div class="m"><a href="' + esc(safeUrl(x.v.url) || "#") + '" rel="noopener">' + esc(x.v.url) + "</a></div></div>";
         }).join("") + "</section>" : "") +
           (ids.length ? ids.map(function (id) { return ciornaHtml(id, C[id], A[id]); }).join("") : '<section class="card section"><p class="empty">Nicio ciornă încă.</p></section>');
         $("rz-l").innerHTML = h;
+        Array.prototype.forEach.call($("rz-l").querySelectorAll("button[data-zi]"), function (b) { b.addEventListener("click", function () { $("v-data").value = b.dataset.zi; $("v-url").focus(); window.scrollTo(0, 0); }); });
         ids.forEach(function (id) { legaCiorna(id, C[id], A[id]); });
       });
     }
