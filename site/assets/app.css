@@ -883,3 +883,11 @@ details.alerte .al-f{margin-top:8px;max-width:640px}
 .sc-l{margin:8px 0 0;padding-left:18px}.sc-l li{margin:6px 0;font-size:.93rem}
 .sp-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
 .sp-dl{margin:4px 0 6px}.sp-dl dt{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-top:6px}.sp-dl dd{margin:1px 0 0}
+/* rândul de servicii publice, cu pictograme */
+.svc-nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin:14px 0 4px}
+.svc-nav a{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;text-decoration:none;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 8px 10px;font-size:.86rem;line-height:1.25;transition:border-color .15s,background .15s}
+.svc-nav a:hover{border-color:var(--accent);color:var(--ink)}
+.svc-nav a[aria-current="page"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.svc-ic{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.svc-nav a:not([aria-current]) .svc-ic{color:var(--accent)}
+@media (max-width:640px){.svc-nav{display:flex;overflow-x:auto;gap:8px;padding-bottom:6px;scroll-snap-type:x proximity}.svc-nav a{flex:0 0 96px;scroll-snap-align:start;font-size:.8rem;padding:10px 6px}}

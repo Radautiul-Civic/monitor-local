@@ -34,7 +34,7 @@
       ["achizitii", "Achiziții publice", "Ce cumpără instituțiile din oraș și de la cine (SICAP)"], ["patrimoniu", "Terenuri și clădiri", "Ce vinde, concesionează sau închiriază orașul"],
       ["finantari", "Finanțări nerambursabile", "Banii dați din bugetul local asociațiilor, cluburilor sportive și cultelor"]] },
     { id: "servicii", nume: "Servicii publice", def: "pe-scurt", sub: [["pe-scurt", "Pe scurt", "Cine face fiecare serviciu, cum îl plătești și cât costă"], ["termoficare", "Căldura (termoficare)", "Prețul căldurii, cât plătesc cei racordați și cât subvenția din bugetul local"],
-      ["salubrizare", "Gunoiul", "Cine ridică gunoiul și cât e taxa de salubrizare"], ["apa", "Apa și canalizarea"], ["strazi", "Curățenia străzilor și deszăpezirea"], ["iluminat", "Iluminatul public"],
+      ["salubrizare", "Gunoiul", "Cine ridică gunoiul și cât e taxa de salubrizare"], ["apa", "Apa rece și canalizarea", "ACET S.A. Suceava: apa rece de la robinet și canalizarea"], ["strazi", "Curățenia străzilor și deszăpezirea"], ["iluminat", "Iluminatul public"],
       ["alte", "Piețe, cimitir, câini"], ["societate", "Servicii Comunale S.A.", "Societatea orașului: ce face, cine o conduce, ce bani primește"]] },
     { id: "teme", nume: "Pe teme", def: "drumuri", sub: [["drumuri", "Străzi și trotuare"], ["parcari", "Parcări"], ["scoli", "Școli și grădinițe"], ["parcuri", "Parcuri și spații verzi"], ["pug", "PUG și urbanism"]] }
   ].concat(INTERN ? [{ id: "litigii", nume: "Litigii", def: "noutati", sub: [["noutati", "Noutăți"], ["dosare", "Dosare"], ["statistici", "Statistici"]] }] : [])
@@ -90,6 +90,24 @@
     "bani/buget": "buget", "bani/investitii": "investitii", "bani/taxe": "taxe", "servicii/termoficare": "taxe", "bani/patrimoniu": "patrimoniu", "bani/finantari": "finantari", "bani/achizitii": "achizitii", "primarie/angajari": "angajari",
     "primarie/dispozitii": "dispozitii", "primarie/rapoarte": "rapoarte", "primarie/urbanism": "urbanism", primarie: "urbanism", bani: "buget", litigii: "achizitii",
     cauta: "cauta", texte: "cauta", despre: "despre" };
+  // pictogramele serviciilor publice (rândul de sub titlu și fișele de pe prima pagină)
+  var SVC_IC = {
+    "pe-scurt": '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    termoficare: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 6v12M11 6v12M15 6v12M19 6v12M5 21v-3M19 21v-3M9 3c0 1 1 1 1 2M13 3c0 1 1 1 1 2"/>',
+    salubrizare: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/>',
+    apa: '<path d="M12 3c-3 4.5-6 7.5-6 11a6 6 0 0 0 12 0c0-3.5-3-6.5-6-11z"/><path d="M9 15a3 3 0 0 0 3 3"/>',
+    strazi: '<path d="M12 2v20M4.5 6.5l15 11M19.5 6.5l-15 11M9 3l3 3 3-3M9 21l3-3 3 3"/>',
+    iluminat: '<path d="M8 21h8M12 21V9M12 9c0-3 2-5 6-5"/><path d="M15 4h6v3a3 3 0 0 1-6 0z"/>',
+    alte: '<path d="M3 9l2-5h14l2 5M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0zM5 13v8h14v-8M10 21v-5h4v5"/>',
+    societate: '<path d="M4 21V7l8-4 8 4v14M9 21v-5h6v5M8 10h2M14 10h2M8 13h2M14 13h2"/>'
+  };
+  function svcIc(k) { return '<svg class="svc-ic" viewBox="0 0 24 24" aria-hidden="true">' + (SVC_IC[k] || "") + "</svg>"; }
+  function svcNav(activ, faraScurt) {
+    var S = SECTIUNI.filter(function (x) { return x.id === "servicii"; })[0];
+    return '<nav class="svc-nav" aria-label="Servicii publice">' + S.sub.filter(function (x) { return !faraScurt || x[0] !== "pe-scurt"; }).map(function (x) {
+      return '<a href="#servicii/' + x[0] + '"' + (x[0] === activ ? ' aria-current="page"' : "") + (x[2] ? ' title="' + esc(x[2]) + '"' : "") + ">" + svcIc(x[0]) + "<span>" + esc(x[1]) + "</span></a>";
+    }).join("") + "</nav>";
+  }
   function head(title, text, r, share) {
     var rr = r || route(), sid = (rr.s || {}).id, icn = SEC_IC[sid];
     var ilu = !share && (!rr.rest.length || rr.sub === "urbanism") ? (ILU[sid + "/" + rr.sub] || ILU[sid]) : null;
@@ -99,7 +117,8 @@
     var h = foto + '<div class="page-head' + (foto ? " cu-foto" : "") + (ilu ? " cu-ilu" : "") + '">' + (ilu ? '<div class="ph-top"><div class="ph-main">' : "") +
       '<div class="ph-t">' + (icn ? '<span class="ph-ic">' + ic(icn) + "</span>" : "") + "<h1>" + esc(title) + "</h1>" + (share ? shareBtn(share[0], share[1]) : "") + "</div>" + scurtText(text) +
       (ilu ? '</div><figure class="ph-ilu"><img src="' + BASE + "assets/img/sec/" + ilu + '.webp" alt="" width="720" height="480" decoding="async"></figure></div>' : "");
-    if (r && r.s.sub && r.s.sub.length > 1) h += '<div class="subnav">' + r.s.sub.map(function (x) {
+    if (r && r.s.id === "servicii") h += svcNav(r.sub);
+    else if (r && r.s.sub && r.s.sub.length > 1) h += '<div class="subnav">' + r.s.sub.map(function (x) {
       return '<a href="#' + r.s.id + "/" + x[0] + '"' + (x[0] === r.sub ? ' aria-current="page"' : "") + (x[2] ? ' title="' + esc(x[2]) + '"' : "") + ">" + esc(x[1]) + "</a>";
     }).join("") + "</div>";
     var t3 = r && TAB3[r.s.id + "/" + r.sub];
@@ -248,7 +267,7 @@
       p.parentNode.insertBefore(d, p); d.appendChild(p);
     });
     // pe telefon, sub-meniul se derulează orizontal: tab-ul activ trebuie să fie la vedere
-    Array.prototype.forEach.call(root.querySelectorAll(".subnav:not([data-s])"), function (n) {
+    Array.prototype.forEach.call(root.querySelectorAll(".subnav:not([data-s]), .svc-nav:not([data-s])"), function (n) {
       n.dataset.s = "1";
       var a = n.querySelector('a[aria-current="page"]');
       if (a && n.scrollWidth > n.clientWidth) n.scrollLeft = Math.max(0, a.offsetLeft - n.offsetLeft - 24);
@@ -564,7 +583,7 @@
     var scanPct = d.descarcate ? Math.round(100 * d.scanate / d.descarcate) : null;
     var hScan = ani.reduce(function (a, y) { return a + (pe[y].scanate || 0); }, 0);
     h += '<div id="nou-card"></div>';
-    if (!INTERN) return h + '<div id="an-card"></div><div id="nou-flux"></div>' + ghid() + semnale(ultim && lag[ultim], reg.cu, scanPct, d, total ? Math.round(100 * hScan / total) : null);
+    if (!INTERN) return h + '<div id="an-card"></div><div id="nou-flux"></div>' + ghid() + '<section class="card section"><div class="h-row"><h2>Servicii publice</h2><a href="#servicii">cine face fiecare serviciu și cât costă</a></div>' + svcNav("", true) + "</section>" + semnale(ultim && lag[ultim], reg.cu, scanPct, d, total ? Math.round(100 * hScan / total) : null);
     h += '<div class="grid">' +
       tile("Hotărâri de consiliu în monitor", nr(total), "", ani.length ? "din " + ani[0] + " până în " + ani[ani.length - 1] : "", "#consiliu/hcl") +
       (ultim ? tile("Durata medie de publicare a unei hotărâri (" + ultim + ")", dec(lag[ultim].medie_zile), zile(lag[ultim].medie_zile), "de la adoptare la postarea pe site; maxim <strong>" + lag[ultim].max_zile + " zile</strong>", "#consiliu/hcl") : "") +
@@ -3702,7 +3721,7 @@
   }
   // ---------- Alerte pe e-mail (alerte.php): noutățile despre o stradă sau un subiect ----------
   var SUBIECTE_AL = [["taxe", "Taxe și impozite"], ["buget", "Buget"], ["investiti", "Investiții"], ["asfalt", "Asfaltări"], ["urbanism", "Urbanism"], ["achizit", "Achiziții publice"], ["concurs", "Concursuri și angajări"], ["teren", "Terenuri și clădiri"],
-    ["termic", "Căldura (termoficare)"], ["salubr", "Gunoiul"], ["apa", "Apa și canalizarea"], ["ilumin", "Iluminatul public"], ["dezapez", "Curățenia străzilor și deszăpezirea"]];
+    ["termic", "Căldura (termoficare)"], ["salubr", "Gunoiul"], ["apa", "Apa rece și canalizarea"], ["ilumin", "Iluminatul public"], ["dezapez", "Curățenia străzilor și deszăpezirea"]];
   function alerteHtml(strada, titlu, subiect) {
     var id = "al-" + Math.random().toString(36).slice(2, 7);
     return '<details class="card section alerte"' + (strada || subiect ? " open" : "") + '><summary><b>' + esc(titlu || "Primește noutățile pe e-mail") + '</b> <span class="muted">gratuit, te poți dezabona oricând</span></summary>' +
@@ -4159,7 +4178,7 @@
       extra: salubTarifeHtml, dupa: salubTarifeDeseneaza,
       rx: "salubriz|deseu|gunoi|colectar\\w* selectiv|insul\\w* ecologic|asociati\\w* de dezvoltare intercomunitara|ecologizar", nu: "salubrizare stradala", sx: "deseu|gunoi|salubriz|ecologiz|pubel|europubel|insul\\w* ecologic", capitol: "Protecția mediului (salubritate, canalizare)",
       fel: [["Regulamente și organizarea serviciului", "regulament|asociati|delegar|contract|norme"], ["Taxe și tarife", "tax|tarif|cantitat"], ["Investiții", "."]] },
-    "servicii/apa": { alerta: "apa", extra: apaTarifeHtml, dupa: apaTarifeDeseneaza, titlu: "Apa și canalizarea", text: "Apa și canalizarea le asigură ACET S.A. Suceava, operatorul regional, în care orașul e acționar. Orașul votează în asociația județeană pentru apă și canalizare prin reprezentantul său, pe baza mandatelor date de consiliul local. Aici: mandatele, extinderile de rețele aprobate de consiliu și achizițiile.",
+    "servicii/apa": { alerta: "apa", extra: apaTarifeHtml, dupa: apaTarifeDeseneaza, titlu: "Apa rece și canalizarea", text: "Apa rece de la robinet și canalizarea le asigură operatorul regional ACET Suceava, în care orașul e acționar. Orașul votează în asociația județeană pentru apă și canalizare prin reprezentantul său, pe baza mandatelor date de consiliul local. Aici: mandatele, extinderile de rețele aprobate de consiliu și achizițiile.",
       rx: "\\bacet\\b|apa potabil|alimentare cu apa|ape uzate|apa si (de )?canal|canalizar|epurare|aductiune|asociati\\w* judetene? pentru apa", nu: "pluvial",
       sx: "apa potabila|canalizare|apa si canal|epurare|bransament\\w* (de )?apa|retea de apa|retele de apa", fel: [["Asociația județeană și operatorul", "acet|asociati|mandat|tarif|delegar"], ["Extinderi și investiții", "."]] },
     "servicii/alte": { titlu: "Piețe, cimitir, câini fără stăpân", text: "Serviciile mai mici ale orașului: piețele și târgul, cimitirul municipal, gestionarea câinilor fără stăpân și taxiurile. Aici: regulamentele, contractele și investițiile aprobate de consiliul local.",
@@ -4333,7 +4352,7 @@
         pu ? "<b>" + dec(pu.populatie_cu_tva.toFixed(2)) + " lei/MWh</b> plătesc cei racordați" + (pu.subventie_cu_tva ? ", plus " + dec(pu.subventie_cu_tva.toFixed(2)) + " lei/MWh subvenție din bugetul local, plătită de toți locuitorii" : "") + ", din " + zi(pu.de_la) : "", hs(TH)],
       ["Gunoiul menajer", "#servicii/salubrizare", "operatorul regional al zonei Rădăuți, prin asociația județeană (până în mai 2025, Servicii Comunale)", "taxa specială de salubrizare, la primărie, pentru fiecare persoană de la adresă",
         sb ? "<b>" + dec(sb.lei_persoana_luna.toFixed(2)) + " lei</b> de persoană pe lună, din " + zi(sb.de_la) : "", hs(ult("servicii/salubrizare"))],
-      ["Apa și canalizarea", "#servicii/apa", "ACET S.A. Suceava, operatorul regional, în care orașul e acționar", "factura de la operator; tarifele se aprobă în asociația județeană, unde orașul votează prin mandatul dat de consiliu", AP && AP.canalizare != null ? "<b>" + dec((AP.apa + AP.canalizare).toFixed(2)) + " lei/mc</b> apă și canalizare, fără TVA, din " + zi(AP.de_la) : "", hs(ult("servicii/apa"))],
+      ["Apa rece și canalizarea", "#servicii/apa", "ACET S.A. Suceava, operatorul regional, în care orașul e acționar", "factura de la operator; tarifele se aprobă în asociația județeană, unde orașul votează prin mandatul dat de consiliu", AP && AP.canalizare != null ? "<b>" + dec((AP.apa + AP.canalizare).toFixed(2)) + " lei/mc</b> apă și canalizare, fără TVA, din " + zi(AP.de_la) : "", hs(ult("servicii/apa"))],
       ["Curățenia străzilor și deszăpezirea", "#servicii/strazi", "Servicii Comunale S.A.", "din bugetul local, la tarifele aprobate de consiliu", "", hs(ult("servicii/strazi"))],
       ["Iluminatul public", "#servicii/iluminat", "Servicii Comunale S.A., prin atribuire directă din 2025", "din bugetul local, la prețul de întreținere din contract", IL ? "<b>" + nr(IL.lei_luna) + " lei</b> pe lună, fără TVA, din " + zi(IL.de_la) : "", hs(ult("servicii/iluminat"))],
       ["Piețe, cimitir, câini fără stăpân", "#servicii/alte", "primăria și firmele cu care are contracte", "taxe și tarife locale, din regulamentele aprobate de consiliu", "", hs(ult("servicii/alte"))]];
