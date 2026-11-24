@@ -110,3 +110,12 @@ elif fel == "salub":   # salubrizarea: fragmentele din hotărârile de taxe și 
         elif re.search(r"salubriz|deseur|deșeur|colectare", tl) and re.search(r"tarif|tax|cantit|pret|preț|act\w* adi", tl):
             print("=====", an, nr, d, titlu)
             print(re.sub(r"[ \t]+", " ", t[: int(arg or 6000)]))
+elif fel == "hcl-titlu":   # textul hotărârilor al căror titlu se potrivește (regex), primele N caractere din fiecare
+    rx, _, lung = arg.partition(" ")
+    rx = re.compile(rx, re.I)
+    for an, nr, d, titlu, tp in c.execute("SELECT h.year, h.number, h.adoption_date, h.title, d.text_path FROM hcl h JOIN documents d ON d.url=h.pdf_url "
+                                          "WHERE d.text_path IS NOT NULL ORDER BY h.year, h.number"):
+        if titlu and rx.search(titlu) and tp and os.path.exists(tp):
+            t = open(tp, encoding="utf-8", errors="replace").read()
+            print("=====", an, nr, d, re.sub(r"\s+", " ", titlu)[:250], len(t))
+            print(re.sub(r"[ \t]+", " ", t[: int(lung or 8000)]))
