@@ -46,6 +46,29 @@ def download(session, url, data_dir=config.DATA_DIR, timeout=config.TIMEOUT):
     return {"sha256": h.hexdigest(), "size": size, "last_modified": lm, "local_path": dest}
 
 
+def text_office(path):
+    """Textul unui document .docx / .odt (din XML-ul din arhivă) sau .doc (cu antiword, dacă e instalat). Gol dacă nu se poate."""
+    import re
+    import subprocess
+    import zipfile
+    ext = os.path.splitext(path.lower())[1]
+    try:
+        if ext in (".docx", ".odt"):
+            with zipfile.ZipFile(path) as z:
+                xml = z.read("word/document.xml" if ext == ".docx" else "content.xml").decode("utf-8", "replace")
+            xml = re.sub(r"</w:p>|</text:p>|</text:h>|<w:br/>|<text:line-break/>", "\n", xml)
+            xml = re.sub(r"<w:tab/>|<text:tab/>", "\t", xml)
+            t = re.sub(r"<[^>]+>", "", xml)
+            import html as _h
+            return _h.unescape(t)
+        if ext == ".doc":
+            r = subprocess.run(["antiword", "-w", "0", path], capture_output=True, timeout=120)
+            return r.stdout.decode("utf-8", "replace") if r.returncode == 0 else ""
+    except (OSError, KeyError, zipfile.BadZipFile, subprocess.SubprocessError):
+        return ""
+    return ""
+
+
 def text_layer(pdf_path):
     """(pagini, are_text). Un PDF fără text extractibil trebuie trecut prin OCR."""
     try:
@@ -106,7 +129,17 @@ def process_downloads(store, session, data_dir=config.DATA_DIR, limit=None, dela
             stats["erori"] += 1
             continue
         fields = dict(info, fetched_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
-        if info["local_path"].lower().endswith(".pdf"):
+        ext = os.path.splitext(info["local_path"].lower())[1]
+        if ext in (".doc", ".docx", ".odt"):   # alte primării publică documente Word / OpenDocument
+            t = text_office(info["local_path"])
+            fields.update(pages=None, text_layer=1 if t.strip() else None)   # fără text: nu e PDF scanat, nu-l trimitem la OCR
+            if t.strip():
+                tp = text_path_for(info["local_path"])
+                with open(tp, "w", encoding="utf-8") as f:
+                    f.write(t)
+                fields["text_path"] = tp
+                stats["cu_text"] += 1
+        elif info["local_path"].lower().endswith(".pdf"):
             pages, has_text = text_layer(info["local_path"])
             fields.update(pages=pages, text_layer=has_text)
             if has_text:

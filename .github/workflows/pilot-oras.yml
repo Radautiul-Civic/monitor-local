@@ -1,18 +1,19 @@
 name: Colectare alte municipii (fără publicare)
 
-# Rulează colectorul monitorului pe site-ul altei primării cu aceeași structură WordPress, în folderul de date al
-# orașului. Nu publică nimic: verifică doar cât din colector merge așa cum e.
+# Colectează hotărârile, proiectele, procesele-verbale și documentele altor municipii din județ, fiecare în folderul
+# lui de date (cache separat). Nu publică nimic deocamdată. Fălticeni are același șablon WordPress ca Rădăuți;
+# Vatra Dornei și Câmpulung Moldovenesc au cititoare proprii (monitor_colector/alte_orase.py).
 on:
   schedule:
-    - cron: "20 2 * * *"   # zilnic, noaptea; deocamdată doar Fălticeni (același șablon de site ca Rădăuți)
+    - cron: "20 2 * * *"   # zilnic, noaptea, toate orașele
   workflow_dispatch:
     inputs:
       oras:
-        description: "slug oraș (ex. falticeni)"
-        default: "falticeni"
+        description: "slug oraș: falticeni, vatradornei, campulung (gol = toate)"
+        default: ""
       url:
-        description: "adresa site-ului primăriei"
-        default: "https://www.falticeni.ro"
+        description: "adresa site-ului primăriei (doar pentru un oraș nou cu șablonul WordPress)"
+        default: ""
       max:
         description: "documente de descărcat la rularea asta"
         default: "300"
@@ -23,18 +24,21 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: pilot-${{ inputs.oras || 'falticeni' }}
-  cancel-in-progress: false
-
 jobs:
   pilot:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.oras && format('[{{"oras":"{0}","url":"{1}"}}]', inputs.oras, inputs.url) || '[{"oras":"falticeni","url":"https://www.falticeni.ro"},{"oras":"vatradornei","url":"https://primariavatradornei.ro"},{"oras":"campulung","url":"https://campulungmoldovenesc.ro"}]') }}
+    concurrency:
+      group: oras-${{ matrix.oras }}
+      cancel-in-progress: false
     env:
-      MC_BASE_URL: ${{ inputs.url || 'https://www.falticeni.ro' }}
-      MC_DATA_DIR: data-${{ inputs.oras || 'falticeni' }}
-      ORAS: ${{ inputs.oras || 'falticeni' }}
+      MC_BASE_URL: ${{ matrix.url || (matrix.oras == 'falticeni' && 'https://www.falticeni.ro') || (matrix.oras == 'vatradornei' && 'https://primariavatradornei.ro') || 'https://campulungmoldovenesc.ro' }}
+      MC_DATA_DIR: data-${{ matrix.oras }}
+      ORAS: ${{ matrix.oras }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -42,7 +46,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ron >/dev/null
+          sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ron antiword >/dev/null
           pip install -r requirements.txt
       - name: Datele orașului (din rularea anterioară)
         uses: actions/cache/restore@v4
@@ -50,8 +54,12 @@ jobs:
           path: data-${{ env.ORAS }}
           key: oras-${{ env.ORAS }}-${{ github.run_id }}
           restore-keys: oras-${{ env.ORAS }}-
-      - run: mkdir -p "$MC_DATA_DIR" && python -m monitor_colector categorii | head -60
-      - name: Hotărâri, proiecte, procese-verbale, dispoziții
+      - run: mkdir -p "$MC_DATA_DIR"
+      - name: Hotărâri, proiecte, procese-verbale, dispoziții (alte site-uri)
+        if: env.ORAS == 'vatradornei' || env.ORAS == 'campulung'
+        run: python -m monitor_colector.alte_orase "$ORAS"
+      - name: Hotărâri, proiecte, procese-verbale, dispoziții (același șablon WordPress ca Rădăuți)
+        if: env.ORAS != 'vatradornei' && env.ORAS != 'campulung'
         run: python -m monitor_colector colecteaza --surse hcl,proiecte,pv,dispozitii,cu,ac,buget,contracte,angajari $([ "${{ inputs.tot }}" = "da" ] && echo --tot)
       - name: Documente
         continue-on-error: true
