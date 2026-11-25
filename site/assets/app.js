@@ -52,7 +52,9 @@
     texte: function () { return ["cauta", "texte"]; },
     salubrizare: function () { return ["servicii", "salubrizare"]; },
     servicii: function (h) { return h[1] === "hotarari" ? ["servicii", "societate", "hotarari"] : h; } };
-  if (INTERN) { SECTIUNI.push({ id: "rezumate", nume: "Rezumate" }); SECTIUNI.push({ id: "analize", nume: "Analize" }); SECTIUNI.push({ id: "semnale", nume: "Semnale" }); SECTIUNI.push({ id: "declaratii", nume: "Declarații" }); SECTIUNI.push({ id: "mesaje", nume: "Mesaje" }); SECTIUNI.push({ id: "arhiva", nume: "Arhiva" }); }
+  // panoul de control (doar intern): în bara lui, separată de meniul platformei
+  if (INTERN) [["sarcini", "De făcut"], ["rezumate", "Rezumate"], ["analize", "Analize"], ["semnale", "Semnale"], ["mesaje", "Mesaje"], ["declaratii", "Declarații"], ["arhiva", "Arhiva"]]
+    .forEach(function (x) { SECTIUNI.push({ id: x[0], nume: x[1], admin: true }); });
   SECTIUNI.push({ id: "despre", nume: "Despre", def: "despre", sub: [["despre", "Despre monitor"], ["glosar", "Glosar"]] });
 
   function route() {
@@ -73,9 +75,21 @@
   }
 
   function nav(r) {
-    $("nav").innerHTML = SECTIUNI.map(function (s) {
-      return '<a href="#' + s.id + '"' + (s.id === r.s.id ? ' aria-current="page"' : "") + ">" + esc(s.nume) + "</a>";
-    }).join("");
+    var a = function (s) { return '<a href="#' + s.id + '"' + (s.id === r.s.id ? ' aria-current="page"' : "") + ">" + esc(s.nume) + "</a>"; };
+    $("nav").innerHTML = SECTIUNI.filter(function (s) { return !s.admin; }).map(a).join("");
+    if (!INTERN) return;
+    var bara = $("admin-bar");
+    if (!bara) { bara = document.createElement("div"); bara.id = "admin-bar"; bara.className = "admin-bar"; document.querySelector("header.top").insertAdjacentElement("beforebegin", bara); }
+    var ascuns = false; try { ascuns = localStorage.getItem("panou-ascuns") === "1"; } catch (e) {}
+    var inPanou = r.s.admin;
+    bara.className = "admin-bar" + (ascuns && !inPanou ? " ascuns" : "");
+    bara.innerHTML = '<div class="wrap"><b class="ab-t">Panou de control</b><nav aria-label="Panou de control">' + SECTIUNI.filter(function (s) { return s.admin; }).map(a).join("") + "</nav>" +
+      '<button type="button" class="ab-x" aria-expanded="' + !(ascuns && !inPanou) + '">' + (ascuns && !inPanou ? "Arată panoul" : "Ascunde panoul") + "</button></div>";
+    bara.querySelector(".ab-x").addEventListener("click", function () {
+      var nou = !bara.classList.contains("ascuns");
+      try { localStorage.setItem("panou-ascuns", nou ? "1" : "0"); } catch (e) {}
+      if (nou && inPanou) location.hash = "#acasa"; else nav(r);
+    });
   }
 
   // descrierea paginii: prima propoziție la vedere, restul la „mai mult” (paginile aveau prea mult text deasupra datelor)
@@ -3340,6 +3354,43 @@
       });
     }).catch(function () { el.innerHTML = head("Mesaje de la cititori", "") + '<p class="empty">Nu am putut citi mesajele.</p>'; });
   }
+  // ---------- Panoul de control: ce are echipa de făcut, într-un singur loc ----------
+  function sarciniIntern(el) {
+    if (!INTERN) return;
+    el.innerHTML = head("De făcut", "") + '<p class="updated">Se încarcă...</p>';
+    var opt = function (p) { return p.catch(function () { return null; }); };
+    Promise.all([opt(get(API)), opt(get(DATA + "rezumate.json")), opt(incarcaSed()), opt(get(DATA + "semnale.json")), opt(get(DATA + "cartoane.json?v=" + Date.now()))]).then(function (d) {
+      var st = d[0] || {}, C = d[1] || {}, Sd = d[2] || {}, Sg = d[3], K = d[4] || {}, A = st.aprobari || {};
+      var ciorne = Object.keys(C).filter(function (k) { var x = A[k]; return C[k].rezumat && (!x || x.stare === "ciorna" || x.stare === "refa"); });
+      var cuVideo = {}; (st.video || []).forEach(function (v) { cuVideo[v.data] = 1; });
+      var azi = new Date().toISOString().slice(0, 10), lim = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
+      var faraVideo = (Sd.recente || []).concat(Sd.urmatoare || []).filter(function (c) { return c.data && c.data <= azi && c.data >= lim && !cuVideo[c.data]; });
+      var asteapta = (st.video || []).filter(function (v) { return !Object.keys(C).some(function (k) { return k.indexOf(v.data) === 0; }); });
+      var mesaje = (st.mesaje || []).filter(function (m) { return !m.citit; });
+      var cartC = Object.keys(K).filter(function (k) { return K[k].sursa === "ciorna"; });
+      var semn = Sg ? (Sg.consultare || []).length + (Sg.diferente || []).length + (Sg.modificate || []).length + (Sg.achizitii || []).filter(function (x) { return x.fel === "fragmentare"; }).length : null;
+      var card = function (n, titlu, text, link, eticheta, urgent) {
+        return '<a class="sr-c' + (n ? (urgent ? " urgent" : " are") : "") + '" href="' + link + '"><b>' + (n == null ? "-" : n) + "</b><span><strong>" + esc(titlu) + "</strong>" + esc(text) + '</span><i>' + esc(eticheta) + " &rarr;</i></a>";
+      };
+      el.innerHTML = head("De făcut", "Tot ce așteaptă o decizie sau o verificare din partea echipei. Restul meniului e platforma, așa cum o vede (sau o va vedea) publicul.") +
+        '<div class="sr-g">' +
+        card(ciorne.length, "Rezumate de verificat și aprobat", "Ciornele ședințelor: verifică voturile pe înregistrare, apoi aprobă.", "#rezumate", "panoul de rezumate", true) +
+        card(faraVideo.length, "Ședințe fără înregistrare", "Ținute în ultimele 60 de zile, fără link adăugat în panou.", "#rezumate", "adaugă linkul", true) +
+        card(asteapta.length, "Înregistrări în lucru", "Adăugate, în așteptarea transcrierii și a ciornei.", "#rezumate", "vezi lista") +
+        card(mesaje.length, "Mesaje necitite", "De la cititori, din formularul de pe pagina Despre.", "#mesaje", "citește", true) +
+        card(cartC.length, "Cartoane din ciorne", "Făcute automat; devin finale după aprobarea rezumatului.", "#analize", "vezi cartoanele") +
+        card(semn, "Semnale de verificat", "Consultări scurtate, diferențe proiect - hotărâre, postări modificate, achiziții repetate.", "#semnale", "vezi semnalele") +
+        "</div>" +
+        '<section class="card section"><h2>Decizii care așteaptă</h2><ul class="sr-l">' +
+        "<li><b>Întreabă monitorul:</b> cheia AI se pune de mână în cPanel (intern/cheie-ai.php) sau renunțăm la funcție.</li>" +
+        "<li><b>Alertele pe e-mail:</b> cron-ul din cPanel și adresa de expediere.</li>" +
+        "<li><b>Datele deschise:</b> licența (propunere: CC BY 4.0).</li>" +
+        "<li><b>Semnalele:</b> verificarea juridică a metodei (termene, ce e „normativ”, pragurile achiziției directe).</li>" +
+        "<li><b>Monitorul public:</b> data deschiderii.</li></ul></section>" +
+        '<section class="card section"><h2>Starea datelor</h2><p>Ultima colectare: <b>' + esc(zi(IND.calculat_la)) + "</b>." + (Sg ? " Semnale calculate la " + esc(zi(Sg.generat_la)) + "." : " Semnalele nu au fost încă calculate.") + "</p></section>";
+    });
+  }
+
   // ---------- Semnalele automate și indicele de transparență (deocamdată doar intern, până se verifică metoda) ----------
   var SEMN_FEL = { diferenta_proiect: ["Diferă de proiect", "par"], consultare_scurta: ["Consultare sub 30 de zile", "p"], fara_anunt: ["Fără anunț de consultare găsit", "par"], publicare_tarzie: ["Publicată târziu", "par"],
     fragmentare: ["Achiziții directe repetate peste prag", "p"], sub_prag: ["Chiar sub pragul achiziției directe", "par"] };
@@ -3648,6 +3699,7 @@
     return t + "\n\nVoturile și hotărârile, pe Monitor local: " + SITE + "#consiliu/sedinte/" + data + "\n(Cifrele sunt citite automat din procesul-verbal; verifică în document.)";
   }
   function postBox(text, titlu) {
+    if (!INTERN) return "";   // textele gata de postat sunt pentru echipă, nu pentru versiunea publică
     return '<details class="post"><summary>' + esc(titlu || "Text gata de postat") + '</summary><textarea readonly rows="8">' + esc(text) + '</textarea><button type="button" class="btn-s" onclick="var t=this.previousElementSibling;t.select();try{navigator.clipboard.writeText(t.value)}catch(e){document.execCommand(\'copy\')}this.textContent=\'Copiat\'">Copiază textul</button></details>';
   }
   function sedCard(c, mare) {
@@ -4804,6 +4856,7 @@
     else if (id === "despre") (r.sub === "glosar" ? glosarPagina : despre)(el, r);
     else if (id === "mesaje") mesajeIntern(el);
     else if (id === "analize") analizeIntern(el);
+    else if (id === "sarcini") sarciniIntern(el);
     else if (id === "semnale") semnaleIntern(el, r);
     else if (id === "declaratii" && INTERN) declaratiiIntern(el);
     else if (id === "arhiva") arhivaIntern(el, r);
