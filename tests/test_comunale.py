@@ -30,7 +30,7 @@ class _Client:
                         "title": {"rendered": "Termoficare"}, "content": {"rendered": "<p>Tarife</p>"}}])
         return _R([{"id": 9, "date": "2025-01-01T00:00:00", "title": {"rendered": "Situatiile de risc"},
                     "source_url": "https://www.serviciicomunale.ro/wp-content/uploads/2025/01/risc.pdf"},
-                   {"id": 10, "source_url": "https://www.serviciicomunale.ro/wp-content/uploads/2026/06/Bilant-2025.pdf"},
+                   {"id": 10, "source_url": "http://serviciicomunale.ro/wp-content/uploads/2026/06/Bilant-2025.pdf"},
                    {"id": 11, "source_url": "https://www.serviciicomunale.ro/wp-content/uploads/poza.jpg"}])
 
 

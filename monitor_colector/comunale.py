@@ -62,6 +62,11 @@ def _toate(cl, cale, campuri, extra=None):
         page += 1
 
 
+def _cheie(url):
+    """Aceeași adresă scrisă cu http/https, cu sau fără www (articolele și biblioteca de fișiere le amestecă)."""
+    return re.sub(r"^https?://(www\.)?", "", url or "").lower()
+
+
 def _salveaza(store, sid, link, titlu, data, modificat, categorii, continut):
     _pseudo_post(store, sid, SURSA, link, titlu)
     store.db.execute("UPDATE posts SET date=?, modified=?, categories=?, content_html=?, slug=? WHERE wp_id=?",
@@ -77,14 +82,13 @@ def colecteaza(store, client=None):
     except Exception as e:   # noqa: BLE001
         log.warning("categoriile nu s-au putut citi: %s", e)
         cat = {}
-    legate = set(r[0] for r in store.db.execute(
-        "SELECT d.url FROM documents d JOIN posts p ON p.wp_id=d.wp_id WHERE p.source=? AND p.slug='sc'", (SURSA,)))
+    legate = set()   # documentele legate din articolele citite acum (toate articolele se recitesc la fiecare rulare)
 
     def documente(sid, continut, link):
         n = 0
         for d in extract_documents(continut, link):
             store.add_document(d["url"], sid, SURSA, d["text"])
-            legate.add(d["url"])
+            legate.add(_cheie(d["url"]))
             n += 1
         # și imaginile mari (scanări puse ca imagine, nu ca PDF) nu le luăm: OCR-ul merge doar pe PDF
         return n
@@ -110,13 +114,17 @@ def colecteaza(store, client=None):
             if not EXT.search(url):
                 continue
             stats["media"] += 1
-            if url in legate:
-                continue
             sid = _sid("serviciicomunale-media:" + url)
+            if _cheie(url) in legate:   # e deja legat dintr-un articol: fără dublură (și o ștergem pe cea veche, dacă există)
+                store.db.execute("DELETE FROM documents WHERE wp_id=?", (sid,))
+                store.db.execute("DELETE FROM posts WHERE wp_id=?", (sid,))
+                continue
+            legate.add(_cheie(url))
+            exista = store.db.execute("SELECT 1 FROM posts WHERE wp_id=?", (sid,)).fetchone()
             titlu = _text((m.get("title") or {}).get("rendered"))[:300] or url.rsplit("/", 1)[-1]
             _salveaza(store, sid, m.get("link") or url, titlu, m.get("date"), m.get("modified"), ["Fișier încărcat (nelegat din articole)"], "")
             store.add_document(url, sid, SURSA, titlu)
-            stats["media_noi"] += 1
+            stats["media_noi"] += 0 if exista else 1
     except Exception as e:   # noqa: BLE001
         log.warning("media: %s", e)
     store.db.commit()

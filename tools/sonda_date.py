@@ -96,7 +96,13 @@ elif fel in ("sc-lista", "sc-grep", "sc-text"):   # documentele Servicii Comunal
     else:
         rx, _, lung = arg.partition(" ") if fel == "sc-text" else (arg, "", "")
         rx, n, vazute = re.compile(rx, re.I), 0, set()
+        docs_vazute = set()
         for r in rows:
+            if r[5]:   # același fișier legat din două locuri (articol și biblioteca de fișiere): o singură dată
+                k = re.sub(r"^https?://(www\.)?", "", r[5]).lower()
+                if k in docs_vazute:
+                    continue
+                docs_vazute.add(k)
             t = ""
             if r[7] and os.path.exists(r[7]):
                 with open(r[7], encoding="utf-8", errors="replace") as f:
