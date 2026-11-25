@@ -36,6 +36,9 @@
     { id: "servicii", nume: "Servicii publice", def: "pe-scurt", sub: [["pe-scurt", "Pe scurt", "Cine face fiecare serviciu, cum îl plătești și cât costă"], ["termoficare", "Căldura (termoficare)", "Prețul căldurii, cât plătesc cei racordați și cât subvenția din bugetul local"],
       ["salubrizare", "Salubrizare", "Cine ridică gunoiul și cât e taxa de salubrizare"], ["apa", "Apa rece și canalizarea", "ACET S.A. Suceava: apa rece de la robinet și canalizarea"], ["strazi", "Curățenia străzilor și deszăpezirea"], ["iluminat", "Iluminatul public"],
       ["alte", "Piețe, cimitir, câini"], ["societate", "Servicii Comunale S.A.", "Societatea orașului: ce face, cine o conduce, ce bani primește"]] },
+    { id: "comunale", nume: "Servicii Comunale", def: "pe-scurt", logo: "servicii-comunale", sub: [["pe-scurt", "Pe scurt", "Societatea orașului: ce face, cine o conduce, ce bani primește"],
+      ["termoficare", "Căldura (termoficare)", "Prețul căldurii, subvenția și pierderile acoperite din buget"], ["hotarari", "Hotărâri", "Toate hotărârile consiliului local despre societate, pe teme"]] },
+    { id: "acet", nume: "ACET (apa)", def: "apa", logo: "acet", sub: [["apa", "Apa rece și canalizarea", "ACET S.A. Suceava, operatorul regional de apă și canalizare"]] },
     { id: "teme", nume: "Pe teme", def: "drumuri", sub: [["drumuri", "Străzi și trotuare"], ["parcari", "Parcări"], ["scoli", "Școli și grădinițe"], ["parcuri", "Parcuri și spații verzi"], ["pug", "PUG și urbanism"]] }
   ].concat(INTERN ? [{ id: "litigii", nume: "Litigii", def: "noutati", sub: [["noutati", "Noutăți"], ["dosare", "Dosare"], ["statistici", "Statistici"]] }] : [])
    .concat([{ id: "cauta", nume: "Caută", def: "cauta", sub: [["cauta", "Caută în monitor"], ["texte", "Textele documentelor"]] }]);
@@ -51,7 +54,12 @@
     angajari: function (h) { return ["primarie", "angajari"].concat(h.slice(1)); },
     texte: function () { return ["cauta", "texte"]; },
     salubrizare: function () { return ["servicii", "salubrizare"]; },
-    servicii: function (h) { return h[1] === "hotarari" ? ["servicii", "societate", "hotarari"] : h; } };
+    servicii: function (h) {
+      if (h[1] === "hotarari" || (h[1] === "societate" && h[2] === "hotarari")) return ["comunale", "hotarari"];
+      if (h[1] === "societate") return ["comunale", "pe-scurt"];
+      if (h[1] === "apa") return ["acet", "apa"];
+      return h;
+    } };
   // panoul de control (doar intern): în bara lui, separată de meniul platformei
   if (INTERN) [["sarcini", "De făcut"], ["rezumate", "Rezumate"], ["analize", "Analize"], ["semnale", "Semnale"], ["mesaje", "Mesaje"], ["declaratii", "Declarații"], ["arhiva", "Arhiva"]]
     .forEach(function (x) { SECTIUNI.push({ id: x[0], nume: x[1], admin: true }); });
@@ -129,7 +137,7 @@
     var foto = sid === "consiliu" && rr.sub === "hcl" && r && !r.rest.length && !share ? '<figure class="ph-foto"><picture><source type="image/webp" srcset="' + BASE + 'assets/img/consiliu.webp">' +
       '<img src="' + BASE + 'assets/img/consiliu.jpg" alt="Ședință a Consiliului Local al Municipiului Rădăuți" width="1024" height="541" loading="lazy"></picture></figure>' : "";
     var h = foto + '<div class="page-head' + (foto ? " cu-foto" : "") + (ilu ? " cu-ilu" : "") + '">' + (ilu ? '<div class="ph-top"><div class="ph-main">' : "") +
-      '<div class="ph-t">' + (icn ? '<span class="ph-ic">' + ic(icn) + "</span>" : "") + "<h1>" + esc(title) + "</h1>" + (share ? shareBtn(share[0], share[1]) : "") + "</div>" + scurtText(text) +
+      '<div class="ph-t">' + (rr.s && rr.s.logo ? '<img class="ph-logo" src="' + BASE + "assets/img/sigle/" + rr.s.logo + '.png" alt="" width="56" height="56">' : icn ? '<span class="ph-ic">' + ic(icn) + "</span>" : "") + "<h1>" + esc(title) + "</h1>" + (share ? shareBtn(share[0], share[1]) : "") + "</div>" + scurtText(text) +
       (ilu ? '</div><figure class="ph-ilu"><img src="' + BASE + "assets/img/sec/" + ilu + '.webp" alt="" width="720" height="480" decoding="async"></figure></div>' : "");
     if (r && r.s.id === "servicii") h += svcNav(r.sub);
     else if (r && r.s.sub && r.s.sub.length > 1) h += '<div class="subnav">' + r.s.sub.map(function (x) {
@@ -3363,6 +3371,7 @@
       var st = d[0] || {}, C = d[1] || {}, Sd = d[2] || {}, Sg = d[3], K = d[4] || {}, A = st.aprobari || {};
       var ciorne = Object.keys(C).filter(function (k) { var x = A[k]; return C[k].rezumat && (!x || x.stare === "ciorna" || x.stare === "refa"); });
       var cuVideo = {}; (st.video || []).forEach(function (v) { cuVideo[v.data] = 1; });
+      Object.keys(C).forEach(function (k) { cuVideo[k.slice(0, 10)] = 1; if (C[k].data_sedinta) cuVideo[C[k].data_sedinta] = 1; if (C[k].data) cuVideo[C[k].data] = 1; });
       var azi = new Date().toISOString().slice(0, 10), lim = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
       var faraVideo = (Sd.recente || []).concat(Sd.urmatoare || []).filter(function (c) { return c.data && c.data <= azi && c.data >= lim && !cuVideo[c.data]; });
       var asteapta = (st.video || []).filter(function (v) { return !Object.keys(C).some(function (k) { return k.indexOf(v.data) === 0; }); });
@@ -3506,6 +3515,7 @@
       el.innerHTML = head("Transcrierea ședinței din " + zi(T.data), "Transcriere automată (Whisper) a înregistrării" + (T.titlu ? " „" + esc(T.titlu) + "”" : "") + ". Are greșeli. " +
           (VB ? "Vorbitorii sunt puși de un model AI, după procesul-verbal: „probabil” înseamnă nesigur." : "Nu spune cine vorbește: vorbitorii apar după ce se publică procesul-verbal.") + " Ascultă pe înregistrare înainte de a cita.") +
         '<p><a href="#rezumate">&larr; panoul de rezumate</a> · <a href="' + esc(safeUrl(T.url) || "#") + '" rel="noopener">înregistrarea</a> · <a href="transcrieri/' + esc(encodeURIComponent(id)) + '.json" download>JSON</a></p>' +
+        '<div class="tr-vid">' + videoBox(T.url, true) + "</div>" +
         '<div class="filters"><input id="tr-q" type="search" placeholder="Caută în transcriere (ex. turbine, certificate, audit)" aria-label="Caută">' +
         (lista.length ? '<select id="tr-c" aria-label="Vorbitorul"><option value="">Toți vorbitorii</option>' + lista.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + " (" + nume[n] + ")</option>"; }).join("") + "</select>" : "") +
         '<span id="tr-n" class="muted"></span></div>' +
@@ -3532,6 +3542,12 @@
       var t; $("tr-q").addEventListener("input", function () { clearTimeout(t); t = setTimeout(arata, 200); });
       if ($("tr-c")) $("tr-c").addEventListener("change", arata);
       arata();
+      legaVideo(el);
+      if (/youtu/.test(T.url || "")) $("tr-l").addEventListener("click", function (ev) {   // minutul pornește înregistrarea de sus de acolo
+        var a = ev.target.closest("a.rz-min"); if (!a) return;
+        var p = a.textContent.split(":").map(Number), t = p[0] * 3600 + p[1] * 60 + p[2], f = el.querySelector(".tr-vid iframe");
+        if (f) { ev.preventDefault(); f.src = videoEmbedUrl(T.url, t) + "&autoplay=1"; f.scrollIntoView({ block: "nearest" }); }
+      });
     }).catch(function () { el.innerHTML = head("Transcrierea ședinței", "") + '<p class="empty">Transcrierea nu există sau nu s-a putut citi.</p>'; });
   }
   function panouRezumate(el) {
@@ -3569,6 +3585,7 @@
         var st = d[0], C = d[1] || {}, A = st.aprobari || {}, rows = {};
         // memento: ședințele ținute în ultimele 60 de zile pentru care nu s-a adăugat nicio înregistrare
         var cuVideo = {}; (st.video || []).forEach(function (v) { cuVideo[v.data] = 1; });
+        Object.keys(C).forEach(function (k) { cuVideo[k.slice(0, 10)] = 1; if (C[k].data_sedinta) cuVideo[C[k].data_sedinta] = 1; if (C[k].data) cuVideo[C[k].data] = 1; });
         var azi = new Date().toISOString().slice(0, 10), lim = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
         var lipsa = ((SED || {}).recente || []).concat((SED || {}).urmatoare || []).filter(function (c) { return c.data && c.data <= azi && c.data >= lim && !cuVideo[c.data]; })
           .sort(function (a, b) { return b.data.localeCompare(a.data); });
@@ -3586,11 +3603,30 @@
         $("rz-l").innerHTML = h;
         Array.prototype.forEach.call($("rz-l").querySelectorAll("button[data-zi]"), function (b) { b.addEventListener("click", function () { $("v-data").value = b.dataset.zi; $("v-url").focus(); window.scrollTo(0, 0); }); });
         ids.forEach(function (id) { legaCiorna(id, C[id], A[id]); });
+        legaVideo($("rz-l"));
       });
     }
     lista();
   }
   var STARE_RZ = { aprobat: ["Aprobat, public", "c"], respins: ["Respins", "p"], refa: ["Refacere cerută", "par"], ciorna: ["Ciornă", "ic"] };
+  // înregistrarea ședinței încorporată în pagină (intern): Facebook sau YouTube; se încarcă doar când e deschisă
+  function videoEmbedUrl(u, start) {
+    u = safeUrl(u) || "";
+    var y = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|live\/)|youtu\.be\/)([\w-]{11})/);
+    if (y) return "https://www.youtube-nocookie.com/embed/" + y[1] + "?rel=0" + (start ? "&start=" + Math.floor(start) : "");
+    if (/facebook\.com|fb\.watch/.test(u)) return "https://www.facebook.com/plugins/video.php?href=" + encodeURIComponent(u) + "&show_text=false";
+    return null;
+  }
+  function videoBox(u, deschis) {
+    var e = videoEmbedUrl(u);
+    return e ? '<details class="vid"' + (deschis ? " open" : "") + ' data-src="' + esc(e) + '"><summary>Vezi înregistrarea aici</summary><div class="vid-f"></div></details>' : "";
+  }
+  function legaVideo(root) {
+    Array.prototype.forEach.call((root || document).querySelectorAll("details.vid"), function (d) {
+      var pune = function () { var f = d.querySelector(".vid-f"); if (d.open && !f.firstChild) f.innerHTML = '<iframe src="' + esc(d.dataset.src) + '" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy" title="Înregistrarea ședinței"></iframe>'; };
+      d.addEventListener("toggle", pune); pune();
+    });
+  }
   var CARTOANE_C = null;   // intern/date/cartoane.json: cartoanele și textele făcute automat din rezumate (ciorne și aprobate)
   function rzVoturiPv(c, R) {
     var d = c.data_sedinta || c.data, s = VOT && (VOT.sedinte || []).filter(function (x) { return x.data === d; })[0];
@@ -3618,7 +3654,7 @@
       (R._model ? " · model " + esc(R._model) : "") + (a ? " · decizie: " + esc(a.stare) + " " + esc(zi(a.la)) + (a.de ? " (" + esc(a.de) + ")" : "") : "") + "</p>" +
       (c.eroare ? '<p class="callout">Rezumatul n-a putut fi generat: ' + esc(c.eroare) + "</p>" : "") +
       ((R.observatii || []).length ? '<div class="callout"><b>De verificat (semnalat de model):</b><ul>' + R.observatii.map(function (o) { return "<li>" + esc(o) + "</li>"; }).join("") + "</ul></div>" : "") +
-      rzVoturiPv(c, R) +
+      videoBox(c.url) + rzVoturiPv(c, R) +
       (c.rezumat || (a && a.rezumat) ? '<div class="rz-ed"><label>Rezumatul ședinței</label>' + inp("rezumat", R.rezumat, true) +
         (R.puncte || []).map(function (p, i) {
           var v = p.vot || {};
@@ -3865,7 +3901,7 @@
     Promise.all([incarcaSed(), incarcaNou(), incarcaRez()]).then(function () {
       if (!$("nou-card")) return;
       // rezumatele ședințelor sunt ale noastre, nu ale primăriei: stau într-o casetă separată, nu în fluxul „Ce a mai publicat primăria”
-      var RZ = (REZ || []).slice().sort(function (a, b) { return (b.aprobat_la || b.data).localeCompare(a.aprobat_la || a.data); });
+      var RZ = (REZ || []).slice().sort(function (a, b) { return (b.data || "").localeCompare(a.data || ""); });   // după data ședinței
       // toate ședințele convocate și încă neținute (pot fi două: una ordinară și una extraordinară), în ordinea datei
       var UU = (SED.urmatoare || []).slice().sort(function (a, b) { return (a.data + (a.ora || "")).localeCompare(b.data + (b.ora || "")); }), U = UU[0], des = (SED.consultare || []).filter(function (p) { return p.deschis; });
       var h = "";
@@ -4723,7 +4759,7 @@
       (S.length ? tile("Achiziții directe de la societate", lei(vS), "", "de la instituțiile din oraș, din 2018") : "") + "</div>" +
       (bani.length ? '<h3 style="margin-top:14px">Buget, capital, credite, audit</h3><ul class="sc-l">' + bani.slice(0, 10).map(function (x) { return "<li>" + linkHcl(x) + (x.data ? " (" + esc(zi(x.data)) + ")" : "") + ": " + esc(x.titlu.replace(/^(Hot[aă]r[aâ]re|HCL)\s*(nr\.?\s*[\d.\/]+\s*(din [\d.]+)?)?\s*/i, "").slice(0, 200)) + "</li>"; }).join("") + "</ul>" : "") + "</section>";
     if (S.length) h += '<section class="card section"><div class="h-row"><h2>Ce i-au cumpărat instituțiile</h2><a href="#bani/achizitii/furnizor/2563140">fișa furnizorului</a></div><div class="chart" id="sc-s"></div><div id="sc-sl"></div></section>';
-    h += '<section class="card section"><h2>Toate hotărârile, pe teme</h2><p><a href="#servicii/societate/hotarari">' + nr(H.length) + " hotărâri ale consiliului local</a> despre societate și serviciile ei, din " + (H.length ? Math.min.apply(null, H.map(function (x) { return x.an; })) : "") + ".</p>" +
+    h += '<section class="card section"><h2>Toate hotărârile, pe teme</h2><p><a href="#comunale/hotarari">' + nr(H.length) + " hotărâri ale consiliului local</a> despre societate și serviciile ei, din " + (H.length ? Math.min.apply(null, H.map(function (x) { return x.an; })) : "") + ".</p>" +
       '<p class="note">Bilanțurile și indicatorii societății (venituri, profit, angajați) le adăugăm într-o etapă următoare.</p></section>';
     el.innerHTML = h;
     if (S.length) {
@@ -4796,7 +4832,8 @@
   };
   function cfHtml(r) {
     if (r.rest.length && !TAB3[r.s.id + "/" + r.sub]) return "";
-    var c = CF[r.s.id + "/" + r.sub] || CF[r.s.id] || (r.s.id === "teme" ? CF["teme/" + r.sub] : null);
+    var cheie = { "comunale/pe-scurt": "servicii/societate", "comunale/hotarari": "servicii/hotarari", "comunale/termoficare": "servicii/termoficare", "acet/apa": "servicii/apa" }[r.s.id + "/" + r.sub];
+    var c = CF[cheie || r.s.id + "/" + r.sub] || CF[r.s.id] || (r.s.id === "teme" ? CF["teme/" + r.sub] : null);
     if (!c) return "";
     return '<section class="card section cf"><div class="cf-g"><div><h2>Cum funcționează</h2><p>' + c[0] + '</p></div><div><h2>Ce poți face tu</h2><ul>' +
       c[1].map(function (x) { return "<li>" + x + "</li>"; }).join("") + "</ul></div></div></section>";
@@ -4849,6 +4886,12 @@
       else if (r.sub === "societate") { if (r.rest[0] === "hotarari") temaGen(el, r, TEMA_CFG["servicii/hotarari"]); else serviciiPeScurt(el, r); }
       else temaGen(el, r, TEMA_CFG["servicii/" + r.sub]);
     }
+    else if (id === "comunale") {
+      if (r.sub === "termoficare") termoficare(el, r);
+      else if (r.sub === "hotarari") temaGen(el, r, TEMA_CFG["servicii/hotarari"]);
+      else serviciiPeScurt(el, r);
+    }
+    else if (id === "acet") temaGen(el, r, TEMA_CFG["servicii/apa"]);
     else if (id === "teme") temaGen(el, r, TEMA_CFG["teme/" + r.sub]);
     else if (id === "strada") strada(el, r);
     else if (id === "rezumate") ((r.path || "").split("/")[1] === "transcriere" ? transcriereIntern : panouRezumate)(el, r);
