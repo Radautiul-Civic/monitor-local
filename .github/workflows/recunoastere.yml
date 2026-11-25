@@ -6,6 +6,11 @@ on:
       urls:
         description: "adrese separate prin spațiu"
         default: ""
+      toate:
+        description: "da = toate linkurile spre documente, cu secțiunea"
+        default: "nu"
+      max:
+        default: "150"
 
 permissions:
   contents: read
@@ -18,6 +23,8 @@ jobs:
       - run: pip install -q requests beautifulsoup4
       - env:
           URLS: ${{ inputs.urls }}
+          TOATE: ${{ inputs.toate }}
+          MAX: ${{ inputs.max }}
         run: |
           python - <<'PY'
           import os, re, requests
@@ -40,6 +47,17 @@ jobs:
                       print(r.text[:1500])
                   continue
               s = BeautifulSoup(r.text, "html.parser")
+              if os.environ.get("TOATE") == "da":   # toate linkurile spre documente, cu titlul secțiunii în care stau
+                  n = 0
+                  for a in s.find_all("a", href=True):
+                      if not re.search(r"\.(pdf|docx?|odt|xlsx?)($|\?)", a["href"], re.I) and not re.search(r"sedint|an=\d{4}", a["href"], re.I):
+                          continue
+                      hd = a.find_previous(["h1", "h2", "h3", "h4", "h5", "summary", "button"])
+                      print("   ", (hd.get_text(" ", strip=True)[:50] if hd else "-"), "|", " ".join(a.get_text(" ").split())[:80], "|", urljoin(r.url, a["href"]))
+                      n += 1
+                      if n >= int(os.environ.get("MAX", "150")): break
+                  print("   total linkuri spre documente afișate:", n)
+                  continue
               g = s.find("meta", attrs={"name": "generator"})
               print("generator", g and g.get("content"), "| wp-content" if "wp-content" in r.text else "", "| .nsf" if ".nsf" in r.text else "", "| /files/info" if "/files/info" in r.text else "")
               base = r.url
