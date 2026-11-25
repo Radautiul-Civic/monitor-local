@@ -144,6 +144,7 @@ def main(argv=None):
     f.add_argument("--titlu", default="")
     f.add_argument("--durata", default="")
     f.add_argument("--bucati", default="bucati")
+    sub.add_parser("vorbitori", help="cine a vorbit: transcrierile ședințelor cu proces-verbal, potrivite cu acesta (AI)")
     sub.add_parser("refa", help="reface rezumatele lipsă, cerute din panou sau fără procesul-verbal care între timp a apărut")
     a = ap.parse_args(argv)
 
@@ -171,6 +172,14 @@ def main(argv=None):
 
         if a.cmd == "refa":
             print(json.dumps(refa(I), ensure_ascii=False))
+            return 0
+
+        if a.cmd == "vorbitori":
+            if not os.environ.get("ANTHROPIC_API_KEY"):
+                print("lipsește ANTHROPIC_API_KEY")
+                return 0
+            from . import vorbitori
+            print(json.dumps(vorbitori.de_facut(I), ensure_ascii=False))
             return 0
 
         # finalizeaza: transcrierea întreagă, apoi ciorna rezumatului

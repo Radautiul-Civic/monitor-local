@@ -130,12 +130,17 @@ def _json(text):
 
 
 def genereaza(ctx, segmente, video, cheie=None, model=MODEL, sesiune=None):
+    return apel(INSTRUCTIUNI, mesaj(ctx, transcriere_text(segmente), video), cheie=cheie, model=model, sesiune=sesiune, max_tokens=20000)
+
+
+def apel(sistem, continut, cheie=None, model=MODEL, sesiune=None, max_tokens=20000):
+    """Un apel la API-ul Anthropic care întoarce obiectul JSON din răspuns (cu _model și _tokeni)."""
     cheie = cheie or os.environ.get("ANTHROPIC_API_KEY")
     if not cheie:
         raise RuntimeError("lipsește ANTHROPIC_API_KEY")
     s = sesiune or requests.Session()
-    corp = {"model": model, "max_tokens": 20000, "system": INSTRUCTIUNI,
-            "messages": [{"role": "user", "content": mesaj(ctx, transcriere_text(segmente), video)}]}
+    corp = {"model": model, "max_tokens": max_tokens, "system": sistem,
+            "messages": [{"role": "user", "content": continut}]}
     antet = {"x-api-key": cheie, "anthropic-version": "2023-06-01", "content-type": "application/json"}
     # Modelul „gândește” implicit înainte să răspundă și poate consuma tot spațiul de răspuns. Pentru un rezumat nu e nevoie:
     # „between_tools” oprește gândirea dinaintea răspunsului; dacă modelul nu acceptă forma, încercăm un buget limitat.

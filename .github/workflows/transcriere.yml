@@ -158,6 +158,14 @@ jobs:
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m monitor_colector.video refa
+      - name: Cine a vorbit (transcrierea potrivită cu procesul-verbal), doar pentru ședințele cu proces-verbal publicat
+        continue-on-error: true
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m monitor_colector.video vorbitori
       - name: Ciorne de cartoane (Facebook și Instagram) pentru rezumatele aprobate, în zona internă
         continue-on-error: true
         env:

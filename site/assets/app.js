@@ -3437,22 +3437,42 @@
     if (!INTERN) return;
     var id = decodeURIComponent(r.rest[0] || "");
     el.innerHTML = head("Transcrierea ședinței", "") + '<p class="updated">Se încarcă...</p>';
-    get("transcrieri/" + encodeURIComponent(id) + ".json").then(function (T) {
-      var S = T.segmente || [], hms = function (x) { x = Math.floor(x); return Math.floor(x / 3600) + ":" + ("0" + Math.floor(x % 3600 / 60)).slice(-2) + ":" + ("0" + x % 60).slice(-2); };
+    Promise.all([get("transcrieri/" + encodeURIComponent(id) + ".json"), get("transcrieri/" + encodeURIComponent(id) + "-vorbitori.json").catch(function () { return null; })]).then(function (d) {
+      var T = d[0], VB = d[1], I = (VB && VB.interventii) || [], S = T.segmente || [];
+      var hms = function (x) { x = Math.floor(x); return Math.floor(x / 3600) + ":" + ("0" + Math.floor(x % 3600 / 60)).slice(-2) + ":" + ("0" + x % 60).slice(-2); };
       var link = function (t) { var u = safeUrl(T.url) || ""; return /youtu/.test(u) ? u + (u.indexOf("?") > 0 ? "&" : "?") + "t=" + Math.floor(t) : u; };
-      el.innerHTML = head("Transcrierea ședinței din " + zi(T.data), "Transcriere automată (Whisper) a înregistrării" + (T.titlu ? " „" + esc(T.titlu) + "”" : "") + ". Are greșeli și nu spune cine vorbește: verifică pe înregistrare înainte de a cita.") +
+      var cineLa = function (t) { for (var i = 0; i < I.length; i++) if (I[i].a <= t && t <= I[i].b + 1) return I[i]; return null; };
+      var nume = {}; I.forEach(function (x) { if (x.cine) nume[x.cine] = (nume[x.cine] || 0) + 1; });
+      var lista = Object.keys(nume).sort(function (a, b) { return nume[b] - nume[a]; });
+      el.innerHTML = head("Transcrierea ședinței din " + zi(T.data), "Transcriere automată (Whisper) a înregistrării" + (T.titlu ? " „" + esc(T.titlu) + "”" : "") + ". Are greșeli. " +
+          (VB ? "Vorbitorii sunt puși de un model AI, după procesul-verbal: „probabil” înseamnă nesigur." : "Nu spune cine vorbește: vorbitorii apar după ce se publică procesul-verbal.") + " Ascultă pe înregistrare înainte de a cita.") +
         '<p><a href="#rezumate">&larr; panoul de rezumate</a> · <a href="' + esc(safeUrl(T.url) || "#") + '" rel="noopener">înregistrarea</a> · <a href="transcrieri/' + esc(encodeURIComponent(id)) + '.json" download>JSON</a></p>' +
-        '<div class="filters"><input id="tr-q" type="search" placeholder="Caută în transcriere (ex. turbine, certificate, audit)" aria-label="Caută"><span id="tr-n" class="muted"></span></div>' +
+        '<div class="filters"><input id="tr-q" type="search" placeholder="Caută în transcriere (ex. turbine, certificate, audit)" aria-label="Caută">' +
+        (lista.length ? '<select id="tr-c" aria-label="Vorbitorul"><option value="">Toți vorbitorii</option>' + lista.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + " (" + nume[n] + ")</option>"; }).join("") + "</select>" : "") +
+        '<span id="tr-n" class="muted"></span></div>' +
+        (VB && (VB.nepotriviri || []).length ? '<details class="callout"><summary><b>Ce nu se potrivește între procesul-verbal și înregistrare</b> (' + VB.nepotriviri.length + ")</summary><ul>" +
+          VB.nepotriviri.map(function (n) { return "<li>" + esc(n.minut || "") + " " + esc(n.ce || "") + "</li>"; }).join("") + "</ul></details>" : "") +
         '<section class="card section tr-l" id="tr-l"></section>';
       var arata = function () {
-        var q = norm($("tr-q").value.trim()), n = 0;
-        $("tr-l").innerHTML = S.map(function (x, i) {
-          var ok = !q || norm(x[2]).indexOf(q) >= 0; if (!ok) return ""; n++;
-          return '<p><a class="rz-min" href="' + esc(link(x[0])) + '" rel="noopener" title="la acest minut în înregistrare">' + hms(x[0]) + "</a> " + esc(x[2]) + "</p>";
-        }).join("") || '<p class="empty">Nimic găsit.</p>';
-        $("tr-n").textContent = q ? n + " fragmente" : S.length + " fragmente, " + hms(S.length ? S[S.length - 1][1] : 0);
+        var q = norm($("tr-q").value.trim()), c = $("tr-c") ? $("tr-c").value : "", n = 0, ultim = null, h = "";
+        S.forEach(function (x) {
+          var v = cineLa(x[0]);
+          if (q && norm(x[2]).indexOf(q) < 0) return;
+          if (c && (!v || v.cine !== c)) return;
+          n++;
+          if (v !== ultim && I.length) {
+            h += '<h4 class="tr-v">' + (v && v.cine ? esc(v.cine) + (v.rol ? ' <small class="muted">' + esc(v.rol) + "</small>" : "") + (v.sigur !== "sigur" ? ' <span class="rz par" title="' + esc(v.dovada || "") + '">probabil</span>' : ' <span class="rz c" title="' + esc(v.dovada || "") + '">sigur</span>') : '<span class="muted">vorbitor neidentificat</span>') +
+              (v && v.pv ? '<span class="tr-pv" title="din procesul-verbal">PV: „' + esc(v.pv) + "”</span>" : "") + "</h4>";
+            ultim = v;
+          }
+          h += '<p><a class="rz-min" href="' + esc(link(x[0])) + '" rel="noopener" title="la acest minut în înregistrare">' + hms(x[0]) + "</a> " + esc(x[2]) + "</p>";
+        });
+        $("tr-l").innerHTML = h || '<p class="empty">Nimic găsit.</p>';
+        $("tr-n").textContent = q || c ? n + " fragmente" : S.length + " fragmente, " + hms(S.length ? S[S.length - 1][1] : 0);
       };
-      var t; $("tr-q").addEventListener("input", function () { clearTimeout(t); t = setTimeout(arata, 200); }); arata();
+      var t; $("tr-q").addEventListener("input", function () { clearTimeout(t); t = setTimeout(arata, 200); });
+      if ($("tr-c")) $("tr-c").addEventListener("change", arata);
+      arata();
     }).catch(function () { el.innerHTML = head("Transcrierea ședinței", "") + '<p class="empty">Transcrierea nu există sau nu s-a putut citi.</p>'; });
   }
   function panouRezumate(el) {
