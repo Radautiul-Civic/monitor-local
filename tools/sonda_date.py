@@ -12,7 +12,21 @@ fel, _, arg = sys.argv[1].partition(" ")
 def ascunde(t):
     t = re.sub(r"(?<!\d)[1-8]\d{12}(?!\d)", "[CNP]", t)
     t = re.sub(r"(?i)(seria?\s*[A-Z]{2}\s*(?:nr\.?|num[aă]r(?:ul)?)?\s*)\d{6}", r"\1[nr. act]", t)
-    t = re.sub(r"(?i)(domiciliat\w*\s+(?:[iî]n\s+)?)[^,;\n]{0,120}", r"\1[adresă]", t)
+    # adresa de domiciliu: tot ce urmează după „domiciliat”, până la județ inclusiv (altfel, următoarele 120 de caractere)
+    def _dom(m):
+        rest = t[m.end():m.end() + 220]
+        j = re.search(r"(?i)\bjud(?:e[tţț]ul)?\.?\s*\w+", rest)
+        return m.group(0) + "[adresă]", (j.end() if j else min(len(rest), 120))
+    out, poz = [], 0
+    for m in re.finditer(r"(?i)domiciliat\w*\s+(?:[iî]n\s+)?", t):
+        if m.start() < poz:
+            continue
+        txt, lung = _dom(m)
+        out.append(t[poz:m.start()] + txt)
+        poz = m.end() + lung
+    t = "".join(out) + t[poz:]
+    # orice altă adresă de locuință (cu apartament): „str. X, nr. 10, sc. D, et. 2, ap. 57”
+    t = re.sub(r"(?i)\b(?:str\.|strada)\s*[^,;\n]{1,40},?\s*nr\.?\s*\d+\w?(?:[,\s]*(?:bl|sc|et|ap)\.?\s*\w+){0,5}[,\s]*ap\.?\s*\d+", "[adresă]", t)
     return t
 
 
@@ -29,13 +43,13 @@ if fel == "pv-text":
     for d, tp, t in texte("pv", "session_date"):
         if d == zi:
             print("=====", tp, len(t))
-            print(t[: int(lung or 30000)])
+            print(ascunde(t[: int(lung or 30000)]))
 elif fel in ("pv-grep", "hcl-grep"):
     rx, n = re.compile(arg, re.I), 0
     src = texte("pv", "session_date") if fel == "pv-grep" else texte("hcl", "adoption_date")
     for d, tp, t in src:
         for m in rx.finditer(t):
-            print(d, "|", re.sub(r"\s+", " ", t[max(0, m.start() - 100): m.end() + 200]))
+            print(d, "|", ascunde(re.sub(r"\s+", " ", t[max(0, m.start() - 100): m.end() + 200])))
             n += 1
             if n >= 400:
                 raise SystemExit
