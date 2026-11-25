@@ -61,6 +61,19 @@ elif fel == "doc-text":   # textul documentelor publice care conțin expresia (e
             n += 1
             if n >= 6:
                 break
+elif fel == "doc-grep":   # toate documentele (hotărâri, proiecte, procese-verbale, anexe): expresia, cu contextul ei și documentul
+    rx, n = re.compile(arg, re.I), 0
+    for url, tp, src, d in c.execute("SELECT d.url, d.text_path, p.source, p.date FROM documents d LEFT JOIN posts p ON p.wp_id=d.wp_id "
+                                     "WHERE d.text_path IS NOT NULL ORDER BY p.date"):
+        if not tp or not os.path.exists(tp):
+            continue
+        with open(tp, encoding="utf-8", errors="replace") as f:
+            t = f.read()
+        for m in rx.finditer(t):
+            print((d or "")[:10], "|", src, "|", url.rsplit("/", 1)[-1][:70], "|", re.sub(r"\s+", " ", t[max(0, m.start() - 250): m.end() + 350]))
+            n += 1
+            if n >= 120:
+                raise SystemExit
 elif fel == "termo":   # seria prețurilor la termoficare (date publice, data/termoficare.json)
     import json
     d = json.load(open("data/termoficare.json", encoding="utf-8"))

@@ -30,4 +30,11 @@ jobs:
           restore-keys: date-
       - env:
           CERERE: ${{ inputs.cerere }}
-        run: python tools/sonda_date.py "$CERERE"
+        # mai multe cereri într-o rulare: despărțite prin „ ;; ”
+        run: |
+          python - <<'PY'
+          import os, subprocess
+          for c in [x.strip() for x in os.environ["CERERE"].split(" ;; ") if x.strip()]:
+              print(f"\n\n########## CERERE: {c}", flush=True)
+              subprocess.run(["python", "tools/sonda_date.py", c])
+          PY
