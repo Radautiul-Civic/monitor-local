@@ -3341,9 +3341,9 @@
     }).catch(function () { el.innerHTML = head("Mesaje de la cititori", "") + '<p class="empty">Nu am putut citi mesajele.</p>'; });
   }
   // ---------- Semnalele automate și indicele de transparență (deocamdată doar intern, până se verifică metoda) ----------
-  var SEMN_FEL = { consultare_scurta: ["Consultare sub 30 de zile", "p"], fara_anunt: ["Fără anunț de consultare găsit", "par"], publicare_tarzie: ["Publicată târziu", "par"],
+  var SEMN_FEL = { diferenta_proiect: ["Diferă de proiect", "par"], consultare_scurta: ["Consultare sub 30 de zile", "p"], fara_anunt: ["Fără anunț de consultare găsit", "par"], publicare_tarzie: ["Publicată târziu", "par"],
     fragmentare: ["Achiziții directe repetate peste prag", "p"], sub_prag: ["Chiar sub pragul achiziției directe", "par"] };
-  var SEMN_COMP = { consultare: "Consultare publică", publicare: "Publicare la timp", sedinte_planificate: "Ședințe planificate", achizitii: "Achiziții directe" };
+  var SEMN_COMP = { diferente: "Diferențe proiect - hotărâre", modificate: "Postări modificate", consultare: "Consultare publică", publicare: "Publicare la timp", sedinte_planificate: "Ședințe planificate", achizitii: "Achiziții directe" };
   function semnaleIntern(el, r) {
     if (!INTERN) return;
     el.innerHTML = head("Semnale", "") + '<p class="updated">Se încarcă...</p>';
@@ -3372,7 +3372,7 @@
         (ind.length ? '<section class="card section"><h2>Indicele de transparență al primăriei</h2><p class="note">De la 0 la 100, media a patru componente. Arată tendința, nu dă o notă de legalitate.</p>' +
           ind.map(function (x) {
             return '<h3 class="an-h">' + esc(x.an) + (x.an >= String(AN_CURENT) ? ' <small class="muted">(an în curs)</small>' : "") + '</h3><div class="grid">' + tile("Indicele", x.indice, "din 100", "") +
-              Object.keys(SEMN_COMP).map(function (k) { var v = x.componente[k], D = x.detalii;
+              ["consultare", "publicare", "sedinte_planificate", "achizitii"].map(function (k) { var v = x.componente[k], D = x.detalii;
                 var sub_ = { consultare: D.normative ? (D.normative - D.cu_problema_consultare) + " din " + D.normative + " hotărâri probabil normative fără semnal" : "nicio hotărâre normativă",
                   publicare: D.hotarari_cu_data_publicarii + " hotărâri cu data publicării", sedinte_planificate: D.de_indata + " din " + D.sedinte + " ședințe convocate de îndată",
                   achizitii: D.grupuri_fragmentare + " grupuri de achiziții directe repetate peste prag" }[k];
@@ -3389,6 +3389,14 @@
           (frag.length ? frag.map(achDoc).join("") : '<p class="empty">Niciun semnal.</p>') + "</section>" +
         '<section class="card section"><h2>Chiar sub prag <span class="nr-b n">' + sub.length + '</span></h2><p class="note">Achiziții directe între 90% și 100% din prag.</p>' +
           (sub.length ? '<details><summary>Vezi lista</summary>' + sub.map(achDoc).join("") + "</details>" : '<p class="empty">Niciun semnal.</p>') + "</section>" +
+        '<section class="card section"><h2>Ce s-a schimbat între proiect și hotărâre <span class="nr-b n">' + (S.diferente || []).length + "</span></h2>" +
+          '<p class="note">Sume noi în articolele hotărârii față de proiectul publicat. Pot fi amendamente votate sau greșeli de citire automată: se verifică pe ambele documente.</p>' +
+          ((S.diferente || []).length ? S.diferente.slice().reverse().map(hclDoc).join("") : '<p class="empty">' + (S.diferente ? "Niciun semnal." : "Se calculează la următoarea colectare.") + "</p>") + "</section>" +
+        '<section class="card section"><h2>Postări modificate după publicare <span class="nr-b n">' + (S.modificate || []).length + "</span></h2>" +
+          '<p class="note">Hotărâri, proiecte, procese-verbale și convocări al căror conținut pe site s-a schimbat după ce monitorul le-a văzut prima dată. Versiunea veche e în arhiva noastră.</p>' +
+          ((S.modificate || []).length ? '<div class="tw"><table><thead><tr><th>Ultima modificare</th><th>Postarea</th><th>Publicată</th><th class="n">Versiuni</th></tr></thead><tbody>' +
+            S.modificate.slice(0, 200).map(function (x) { return "<tr><td>" + esc(zi(x.ultima)) + '</td><td><a href="' + esc(safeUrl(x.pagina) || "#") + '" rel="noopener">' + esc((x.titlu || "").slice(0, 140)) + "</a> <small class=\"muted\">" + esc(x.sursa) + "</small></td><td>" + esc(zi(x.publicat)) + '</td><td class="n">' + x.versiuni + "</td></tr>"; }).join("") + "</tbody></table></div>"
+            : '<p class="empty">' + (S.modificate ? "Nicio postare modificată." : "Se calculează la următoarea colectare.") + "</p>") + "</section>" +
         '<section class="card section"><h2>Documente dispărute de pe site-ul primăriei <span class="nr-b n">' + disp.length + "</span></h2>" +
           '<p class="note">Fișiere văzute de arhiva noastră și care nu mai sunt pe site. Copia lor e în arhiva de siguranță, cu amprenta din momentul copierii.</p>' +
           (disp.length ? '<div class="tw"><table><thead><tr><th>Dispărut la</th><th>Fișier</th><th>Încărcat</th><th>Copie</th></tr></thead><tbody>' + disp.slice(0, 200).map(function (f) {

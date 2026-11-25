@@ -210,11 +210,90 @@ METODA = {
                  f"depășesc pragul achiziției directe ({PRAG_DIRECTA['produse_servicii']:,} lei pentru produse și servicii, {PRAG_DIRECTA['lucrari']:,} lei "
                  f"pentru lucrări, fără TVA). Nu înseamnă automat fragmentare ilegală: pot fi achiziții separate, nevoi neprevăzute sau contracte-cadru. "
                  f"În indice intră doar achizițiile primăriei; componenta pierde 10 puncte pentru fiecare astfel de grup.".replace(",", "."),
+    "diferente": "Sumele (lei, euro) din articolele hotărârii, comparate cu cele din proiectul publicat. Semnalăm doar sumele noi în hotărâre; "
+                 "pot veni dintr-un amendament votat în ședință sau din greșeli de citire automată a documentelor scanate.",
+    "modificate": "Postările primăriei (hotărâri, proiecte, procese-verbale, convocări) al căror conținut s-a schimbat după ce monitorul le-a văzut prima dată.",
     "indice": "Media componentelor de mai sus, pe un an, de la 0 la 100. Arată tendința, nu dă o notă de legalitate.",
 }
 
 
-def calculeaza(d=config.DATA_DIR, azi=None):
+# ---------- din baza de date: diferențe între proiect și hotărâre, postări modificate după publicare ----------
+
+RX_SUMA = re.compile(r"(?<![\d.,])(\d{1,3}(?:[.\s]\d{3})+|\d{4,})(?:,\d{1,2})?\s*(?:de\s+)?(lei|euro)\b")
+
+
+def articole(t):
+    """Partea dispozitivă a unui act („HOTĂRĂȘTE: Art. 1 ...”), fără preambul și semnături. Textul vine din OCR."""
+    n = norm(t or "")
+    m = re.search(r"h\s*o\s*t\s*a\s*r\s*a\s*s\s*t\s*e", n)
+    if not m:
+        m = re.search(r"\bart\.?\s*1\b", n)
+    corp = n[m.start():] if m else n
+    f = re.search(r"presedinte(le)? de sedinta|contrasemneaza|initiator,?\s*primar|intocmit", corp)
+    return corp[:f.start()] if f else corp
+
+
+def sume(t):
+    out = set()
+    for nr, mon in RX_SUMA.findall(t or ""):
+        v = int(re.sub(r"\D", "", nr))
+        if v >= 1000:
+            out.add((v, mon))
+    return out
+
+
+def _text_doc(db, url=None, wp_id=None):
+    q = ("SELECT text_path FROM documents WHERE url=? AND text_path IS NOT NULL", (url,)) if url else \
+        ("SELECT text_path FROM documents WHERE wp_id=? AND text_path IS NOT NULL ORDER BY rowid", (wp_id,))
+    parti = []
+    for (tp,) in db.execute(*q):
+        try:
+            with open(tp, encoding="utf-8", errors="replace") as f:
+                parti.append(f.read())
+        except (OSError, TypeError):
+            pass
+    return "\n".join(parti)
+
+
+def diferente_proiect_hotarare(db, de_la=DE_LA):
+    proiecte = [{"titlu": t, "postat": (d or "")[:10], "wp_id": w, "pagina": l}
+                for w, t, d, l in db.execute("SELECT wp_id, title, date, link FROM posts WHERE source='proiecte'")]
+    out = []
+    for an, nr, data, titlu, pdf, pag in db.execute("SELECT h.year, h.number, h.adoption_date, h.title, h.pdf_url, p.link FROM hcl h "
+                                                    "LEFT JOIN posts p ON p.wp_id=h.wp_id WHERE h.adoption_date >= ? ORDER BY h.adoption_date", (de_la,)):
+        if not data or not titlu:
+            continue
+        pr = anunt_pentru({"data": data, "titlu": titlu}, proiecte)
+        if not pr:
+            continue
+        sh, sp = sume(articole(_text_doc(db, url=pdf))), sume(articole(_text_doc(db, wp_id=pr["wp_id"])))
+        if not sh or not sp or sh == sp:
+            continue
+        noi, scoase = sorted(sh - sp), sorted(sp - sh)
+        if not noi:
+            continue   # doar sume lipsă din hotărâre: de obicei OCR-ul a pierdut o cifră, nu e o schimbare
+        f = lambda L: ", ".join(f"{v:,} {m}".replace(",", ".") for v, m in L)
+        out.append({"fel": "diferenta_proiect", "grav": 2, "hcl": {"an": an, "nr": nr, "data": data, "titlu": titlu, "pagina": pag, "pdf": pdf},
+                    "anunt": {"postat": pr["postat"], "titlu": pr["titlu"], "pagina": pr["pagina"]}, "noi": noi, "scoase": scoase,
+                    "text": f"În articolele hotărârii apar sume care nu sunt în proiect: {f(noi)}." + (f" Din proiect lipsesc: {f(scoase)}." if scoase else "") +
+                            " Poate fi un amendament votat sau o greșeală de citire automată: verifică pe documente."})
+    return out
+
+
+def postari_modificate(db, de_la=DE_LA):
+    """Postările primăriei (hotărâri, proiecte, procese-verbale, convocări) al căror conținut s-a schimbat după prima publicare."""
+    out = []
+    for w, src, t, l, d, n, prima, ultima in db.execute(
+            "SELECT p.wp_id, p.source, p.title, p.link, p.date, COUNT(v.content_hash), MIN(v.seen_at), MAX(v.seen_at) FROM posts p "
+            "JOIN post_versions v ON v.wp_id=p.wp_id WHERE p.source IN ('hcl','proiecte','pv','dispozitii') AND p.date >= ? "
+            "GROUP BY p.wp_id HAVING COUNT(v.content_hash) > 1 ORDER BY MAX(v.seen_at) DESC", (de_la,)):
+        out.append({"fel": "modificat", "grav": 1, "sursa": src, "titlu": t, "pagina": l, "publicat": (d or "")[:10], "versiuni": n,
+                    "prima": (prima or "")[:10], "ultima": (ultima or "")[:10],
+                    "text": f"Conținutul postării s-a schimbat după publicare ({n} versiuni văzute de monitor, ultima la {(ultima or '')[:10]})."})
+    return out
+
+
+def calculeaza(d=config.DATA_DIR, azi=None, db=None):
     liste = _citeste(d, "liste.json", {})
     voturi = _citeste(d, "voturi.json") or _citeste(os.path.join(d, "intern-date"), "voturi.json", {})
     sx = _citeste(d, "sicap-explorer.json")
@@ -229,14 +308,22 @@ def calculeaza(d=config.DATA_DIR, azi=None):
     ach = semnale_achizitii(sx)
     azi = azi or date.today()
     ani = [str(a) for a in range(int(DE_LA[:4]), azi.year + 1)]
-    return {"generat_la": azi.isoformat(), "metoda": METODA, "praguri": {"zile_consultare": ZILE_CONSULTARE, "zile_publicare": ZILE_PUBLICARE, "prag_directa": PRAG_DIRECTA},
+    extra = {}
+    if db is not None:
+        for k, fn in (("diferente", diferente_proiect_hotarare), ("modificate", postari_modificate)):
+            try:
+                extra[k] = fn(db)
+            except Exception as e:   # un semnal care nu se poate calcula nu oprește restul
+                extra[k + "_eroare"] = str(e)[:200]
+    return {**extra, "generat_la": azi.isoformat(), "metoda": METODA, "praguri": {"zile_consultare": ZILE_CONSULTARE, "zile_publicare": ZILE_PUBLICARE, "prag_directa": PRAG_DIRECTA},
             "indice": [indice(cons, n_normative, pub_zile, urg, ach, a) for a in ani],
             "consultare": cons, "publicare": pub, "urgenta": urg, "achizitii": ach[:300],
-            "numar": {"consultare": len(cons), "publicare": len(pub), "achizitii": len(ach)}}
+            "numar": {"consultare": len(cons), "publicare": len(pub), "achizitii": len(ach), "diferente": len(extra.get("diferente") or []),
+                      "modificate": len(extra.get("modificate") or [])}}
 
 
-def scrie(d=config.DATA_DIR, azi=None):
-    rez = calculeaza(d, azi)
+def scrie(d=config.DATA_DIR, azi=None, db=None):
+    rez = calculeaza(d, azi, db)
     with open(os.path.join(d, "semnale.json"), "w", encoding="utf-8") as f:
         json.dump(rez, f, ensure_ascii=False, separators=(",", ":"))
     return rez["numar"]

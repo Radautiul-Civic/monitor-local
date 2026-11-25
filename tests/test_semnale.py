@@ -54,3 +54,22 @@ def test_calendar_ics():
     assert t.count("BEGIN:VEVENT") == 3
     assert "DTSTART;TZID=Europe/Bucharest:20261127T100000" in t and "DTSTART;VALUE=DATE:20261124" in t
     assert "taxele\\, impozitele\;" in t.replace("\r\n ", "")
+
+
+def test_diferente_si_modificate(tmp_path):
+    from monitor_colector.store import Store
+    st = Store(str(tmp_path / "m.sqlite"))
+    db = st.db
+    (tmp_path / "p.txt").write_text("Proiect de hotărâre ... HOTĂRĂȘTE: Art. 1 Se aprobă suma de 1.000.000 lei pentru drumuri. Inițiator, primar", encoding="utf-8")
+    (tmp_path / "h.txt").write_text("Hotărâre ... HOTĂRĂȘTE: Art. 1 Se aprobă suma de 1.250.000 lei pentru drumuri. Președinte de ședință", encoding="utf-8")
+    db.execute("INSERT INTO posts (wp_id, source, title, date, link) VALUES (1, 'proiecte', 'Anunț - Proiect privind aprobarea sumei pentru drumurile municipale', '2026-03-01', 'p')")
+    db.execute("INSERT INTO posts (wp_id, source, title, date, link) VALUES (2, 'hcl', 'HCL 5', '2026-03-25', 'h')")
+    db.execute("INSERT INTO documents (url, wp_id, text_path) VALUES ('p.pdf', 1, ?)", (str(tmp_path / "p.txt"),))
+    db.execute("INSERT INTO documents (url, wp_id, text_path) VALUES ('h.pdf', 2, ?)", (str(tmp_path / "h.txt"),))
+    db.execute("INSERT INTO hcl (year, number, adoption_date, title, wp_id, pdf_url) VALUES (2026, 5, '2026-03-20', 'Hotărâre privind aprobarea sumei pentru drumurile municipale', 2, 'h.pdf')")
+    for h, z in (("a", "2026-03-25"), ("b", "2026-04-02")):
+        db.execute("INSERT INTO post_versions (wp_id, modified, content_hash, title, seen_at) VALUES (2, ?, ?, 'HCL 5', ?)", (z, h, z))
+    d = semnale.diferente_proiect_hotarare(db)
+    assert len(d) == 1 and d[0]["noi"] == [(1250000, "lei")] and d[0]["scoase"] == [(1000000, "lei")]
+    m = semnale.postari_modificate(db)
+    assert len(m) == 1 and m[0]["versiuni"] == 2 and m[0]["ultima"] == "2026-04-02"

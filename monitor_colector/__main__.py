@@ -203,7 +203,7 @@ def main(argv=None):
                 stats["distribuie"] = f"eroare: {e}"
             try:   # semnalele automate și indicele de transparență (deocamdată doar pe intern)
                 from . import semnale
-                stats["semnale"] = semnale.scrie(config.DATA_DIR)
+                stats["semnale"] = semnale.scrie(config.DATA_DIR, db=store.db)
             except Exception as e:
                 stats["semnale"] = f"eroare: {e}"
             try:   # date deschise: CSV-uri pentru descărcare
