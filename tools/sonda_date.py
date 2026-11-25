@@ -61,6 +61,9 @@ elif fel == "doc-text":   # textul documentelor publice care conțin expresia (e
             n += 1
             if n >= 6:
                 break
+elif fel == "pv-lista":   # data ședinței -> fișierul procesului-verbal (pentru citări)
+    for d, url in c.execute("SELECT t.session_date, d.url FROM documents d JOIN pv t ON t.wp_id=d.wp_id ORDER BY t.session_date"):
+        print(d, "|", url.rsplit("/", 1)[-1])
 elif fel == "doc-grep":   # toate documentele (hotărâri, proiecte, procese-verbale, anexe): expresia, cu contextul ei și documentul
     rx, n = re.compile(arg, re.I), 0
     for url, tp, src, d in c.execute("SELECT d.url, d.text_path, p.source, p.date FROM documents d LEFT JOIN posts p ON p.wp_id=d.wp_id "
