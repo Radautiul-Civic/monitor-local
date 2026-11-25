@@ -7,7 +7,7 @@ on:
         description: "adrese separate prin spațiu"
         default: ""
       toate:
-        description: "da = toate linkurile spre documente, cu secțiunea"
+        description: "da = toate linkurile spre documente, cu secțiunea; pagini = toate linkurile interne"
         default: "nu"
       max:
         default: "150"
@@ -71,7 +71,7 @@ jobs:
               for a in s.find_all("a", href=True):
                   t = " ".join(a.get_text(" ").split())[:70]
                   h = urljoin(base, a["href"])
-                  if (KW.search(t) or KW.search(a["href"])) and h not in seen and urlparse(h).netloc.endswith(urlparse(base).netloc.replace("www.", "")):
+                  if (os.environ.get("TOATE") == "pagini" or KW.search(t) or KW.search(a["href"])) and h not in seen and urlparse(h).netloc.endswith(urlparse(base).netloc.replace("www.", "")):
                       seen.add(h); print("   ", t, "->", h)
-                  if len(seen) > 45: break
+                  if len(seen) > int(os.environ.get("MAX", "150")): break
           PY
