@@ -47,6 +47,22 @@ switch ($in['act'] ?? '') {
     scrie($INTERN . 'video.json', $v);
     iesire(200, ['ok' => true]);
 
+  case 'video-modifica':   // corectează data unei înregistrări din listă sau o scoate (după link)
+    $url = trim($in['url'] ?? ''); $data = $in['data'] ?? ''; $scoate = !empty($in['scoate']);
+    if (!$scoate && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $data)) iesire(400, ['eroare' => 'data trebuie să fie AAAA-LL-ZZ']);
+    $v = citeste($INTERN . 'video.json'); $gasit = false; $nou = [];
+    foreach ($v as $x) {
+      if (($x['url'] ?? '') === $url) {
+        $gasit = true;
+        if ($scoate) continue;
+        $x['data_initiala'] = $x['data_initiala'] ?? ($x['data'] ?? ''); $x['data'] = $data; $x['modificat_la'] = $acum; $x['modificat_de'] = $cine;
+      }
+      $nou[] = $x;
+    }
+    if (!$gasit) iesire(400, ['eroare' => 'înregistrarea nu e în listă']);
+    scrie($INTERN . 'video.json', $nou);
+    iesire(200, ['ok' => true]);
+
   case 'mesaj':   // marchează un mesaj din formularul public ca rezolvat (sau nerezolvat)
     $i = intval($in['i'] ?? -1); $m = citeste($INTERN . 'mesaje.json');
     if ($i < 0 || $i >= count($m)) iesire(400, ['eroare' => 'mesaj inexistent']);

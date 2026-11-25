@@ -34,6 +34,22 @@ def ident(v):
     return f"{v['data']}-{vid}"
 
 
+LUNI_URL = {"ian": 1, "feb": 2, "mar": 3, "apr": 4, "mai": 5, "iun": 6, "iul": 7, "aug": 8, "sep": 9, "oct": 10,
+            "noi": 11, "noe": 11, "nov": 11, "dec": 12}
+
+
+def data_din_url(url):
+    """Data scrisă în adresa videoclipului, dacă există („sedinta-consiliului-local-24-noe2026”, „24-11-2026”), AAAA-LL-ZZ."""
+    u = (url or "").lower()
+    m = re.search(r"(?<!\d)(\d{1,2})[-_.](" + "|".join(LUNI_URL) + r")[a-z]*[-_.]?(20\d\d)(?!\d)", u)
+    if m:
+        return f"{m.group(3)}-{LUNI_URL[m.group(2)]:02d}-{int(m.group(1)):02d}"
+    m = re.search(r"(?<!\d)(\d{1,2})[-_.](\d{1,2})[-_.](20\d\d)(?!\d)", u)
+    if m and 1 <= int(m.group(2)) <= 12 and 1 <= int(m.group(1)) <= 31:
+        return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+    return None
+
+
 def plan(intern, fortat=None):
     """Prima înregistrare din listă fără transcriere (sau cea cerută explicit)."""
     lista = intern.json(VIDEO, []) or []
@@ -42,6 +58,10 @@ def plan(intern, fortat=None):
     gata = {x[:-5] for x in intern.lista(TRANSCRIERI) if x.endswith(".json")}
     for v in sorted(lista, key=lambda x: x.get("data") or ""):
         if v.get("data") and v.get("url") and ident(v) not in gata:
+            du = data_din_url(v["url"])
+            if du and du != v["data"] and v is not fortat:   # data trecută în panou nu se potrivește cu cea din link: nu transcriem sub o dată greșită
+                print(f"sar peste {v['url']}: în panou are data {v['data']}, în link scrie {du}; corectează data în panou", file=sys.stderr)
+                continue
             return dict(v, id=ident(v))
     return None
 

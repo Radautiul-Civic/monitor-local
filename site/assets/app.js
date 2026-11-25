@@ -3550,6 +3550,17 @@
       });
     }).catch(function () { el.innerHTML = head("Transcrierea ședinței", "") + '<p class="empty">Transcrierea nu există sau nu s-a putut citi.</p>'; });
   }
+  // data scrisă în adresa videoclipului (ex. „...-24-noe2026”, „24-11-2026”), ca să prindem o dată greșită aleasă în panou
+  var LUNI_URL = { ian: 1, feb: 2, mar: 3, apr: 4, mai: 5, iun: 6, iul: 7, aug: 8, sep: 9, oct: 10, noi: 11, noe: 11, nov: 11, dec: 12 };
+  function dataDinUrl(u) {
+    u = (u || "").toLowerCase();
+    var p = function (n) { return (n < 10 ? "0" : "") + n; };
+    var m = u.match(new RegExp("(?:^|[^\\d])(\\d{1,2})[-_.](" + Object.keys(LUNI_URL).join("|") + ")[a-z]*[-_.]?(20\\d\\d)(?!\\d)"));
+    if (m) return m[3] + "-" + p(LUNI_URL[m[2]]) + "-" + p(+m[1]);
+    m = u.match(/(?:^|[^\d])(\d{1,2})[-_.](\d{1,2})[-_.](20\d\d)(?!\d)/);
+    if (m && +m[2] >= 1 && +m[2] <= 12 && +m[1] >= 1 && +m[1] <= 31) return m[3] + "-" + p(+m[2]) + "-" + p(+m[1]);
+    return null;
+  }
   function panouRezumate(el) {
     if (!INTERN) return;
     el.innerHTML = head("Rezumatele ședințelor (panou)", "Adaugă înregistrarea unei ședințe; fluxul „Transcriere ședințe” o transcrie (Whisper) și scrie ciorna rezumatului. Aici o citești, o corectezi și o aprobi; abia atunci apare pe pagina publică a ședinței.") +
@@ -3575,6 +3586,8 @@
     $("v-add").addEventListener("click", function () {
       var d = $("v-data").value, u = $("v-url").value.trim();
       $("v-msg").textContent = "Se salvează...";
+      var du = dataDinUrl(u);
+      if (du && d && du !== d && !window.confirm("În link scrie data " + zi(du) + ", iar tu ai ales " + zi(d) + ". Adaugi totuși cu data " + zi(d) + "?")) { $("v-msg").textContent = "Neadăugată: verifică data."; return; }
       apiPost({ act: "video", data: d, url: u }).then(function (r) { $("v-msg").textContent = r.nota || "Adăugată. Apare mai jos ca „în așteptare”."; $("v-url").value = ""; lista(); })
         .catch(function (e) { $("v-msg").textContent = "Eroare: " + e.message; });
     });
@@ -3597,10 +3610,23 @@
           lipsa.map(function (c) { return '<div class="doc"><div class="h"><span class="id">' + esc(zi(c.data)) + "</span> " + esc(TIP[c.tip] || "") + (c.ora ? ", ora " + esc(c.ora) : "") +
             ' <button type="button" class="btn-s" data-zi="' + esc(c.data) + '">Completează data</button></div></div>'; }).join("") + "</section>" : "") +
           (asteapta.length ? '<section class="card section"><h2>În așteptarea transcrierii</h2>' + asteapta.map(function (x) {
-          return '<div class="doc"><div class="h"><span class="id">' + esc(zi(x.v.data)) + '</span><span class="muted">adăugată ' + esc(zi(x.v.adaugat_la)) + '</span></div><div class="m"><a href="' + esc(safeUrl(x.v.url) || "#") + '" rel="noopener">' + esc(x.v.url) + "</a></div></div>";
+          var du = dataDinUrl(x.v.url), nep = du && du !== x.v.data;
+          return '<div class="doc' + (nep ? " v-nep" : "") + '"><div class="h"><span class="id">' + esc(zi(x.v.data)) + '</span><span class="muted">adăugată ' + esc(zi(x.v.adaugat_la)) + "</span></div>" +
+            (nep ? '<p class="note"><b>Data nu se potrivește cu linkul:</b> în link scrie ' + esc(zi(du)) + ". Până o corectezi, înregistrarea nu se transcrie.</p>" : "") +
+            '<div class="m"><a href="' + esc(safeUrl(x.v.url) || "#") + '" rel="noopener">' + esc(x.v.url) + "</a></div>" +
+            '<div class="filters v-mod"><input type="date" value="' + esc(nep ? du : x.v.data) + '" aria-label="Data corectă a ședinței"><button type="button" class="btn-s" data-act="data" data-url="' + esc(x.v.url) + '">Schimbă data</button>' +
+            '<button type="button" class="btn-s" data-act="scoate" data-url="' + esc(x.v.url) + '">Scoate din listă</button></div></div>';
         }).join("") + "</section>" : "") +
           (ids.length ? ids.map(function (id) { return ciornaHtml(id, C[id], A[id]); }).join("") : '<section class="card section"><p class="empty">Nicio ciornă încă.</p></section>');
         $("rz-l").innerHTML = h;
+        Array.prototype.forEach.call($("rz-l").querySelectorAll(".v-mod button"), function (b) {
+          b.addEventListener("click", function () {
+            var sc = b.dataset.act === "scoate", d = b.parentNode.querySelector("input").value;
+            if (sc && !window.confirm("Scoți înregistrarea din lista de transcris?")) return;
+            b.disabled = true;
+            apiPost(sc ? { act: "video-modifica", url: b.dataset.url, scoate: 1 } : { act: "video-modifica", url: b.dataset.url, data: d }).then(lista).catch(function (e) { b.disabled = false; alert(e.message); });
+          });
+        });
         Array.prototype.forEach.call($("rz-l").querySelectorAll("button[data-zi]"), function (b) { b.addEventListener("click", function () { $("v-data").value = b.dataset.zi; $("v-url").focus(); window.scrollTo(0, 0); }); });
         ids.forEach(function (id) { legaCiorna(id, C[id], A[id]); });
         legaVideo($("rz-l"));

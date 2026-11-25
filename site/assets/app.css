@@ -932,3 +932,5 @@ details.alerte .al-f{margin-top:8px;max-width:640px}
 details.vid{margin:10px 0}details.vid summary{cursor:pointer;font-weight:600}
 .vid-f iframe{width:100%;max-width:820px;aspect-ratio:16/9;border:0;border-radius:10px;background:#000;display:block;margin-top:8px}
 .tr-vid{position:sticky;top:0;z-index:2;background:var(--bg,#f6f3ec)}
+.doc.v-nep{border-left:3px solid var(--warn);padding-left:10px}
+.v-mod{margin-top:6px;gap:6px}
