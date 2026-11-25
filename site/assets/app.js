@@ -37,7 +37,7 @@
       ["salubrizare", "Salubrizare", "Cine ridică gunoiul și cât e taxa de salubrizare"], ["apa", "Apa rece și canalizarea", "ACET S.A. Suceava: apa rece de la robinet și canalizarea"], ["strazi", "Curățenia străzilor și deszăpezirea"], ["iluminat", "Iluminatul public"],
       ["alte", "Piețe, cimitir, câini"], ["societate", "Servicii Comunale S.A.", "Societatea orașului: ce face, cine o conduce, ce bani primește"]] },
     { id: "comunale", nume: "Servicii Comunale", def: "pe-scurt", logo: "servicii-comunale", sub: [["pe-scurt", "Pe scurt", "Societatea orașului: ce face, cine o conduce, ce bani primește"],
-      ["termoficare", "Căldura (termoficare)", "Prețul căldurii, subvenția și pierderile acoperite din buget"], ["hotarari", "Hotărâri", "Toate hotărârile consiliului local despre societate, pe teme"]] },
+      ["termoficare", "Căldura (termoficare)", "Prețul căldurii, subvenția și pierderile acoperite din buget"], ["hotarari", "Hotărâri", "Toate hotărârile consiliului local despre societate, pe teme"]].concat(INTERN ? [["documente", "Documentele societății", "Ce publică Servicii Comunale pe site-ul ei: bilanțuri, audit, hotărâri AGA, achiziții, regulamente"]] : []) },
     { id: "acet", nume: "ACET (apa)", def: "apa", logo: "acet", sub: [["apa", "Apa rece și canalizarea", "ACET S.A. Suceava, operatorul regional de apă și canalizare"]] },
     { id: "teme", nume: "Pe teme", def: "drumuri", sub: [["drumuri", "Străzi și trotuare"], ["parcari", "Parcări"], ["scoli", "Școli și grădinițe"], ["parcuri", "Parcuri și spații verzi"], ["pug", "PUG și urbanism"]] }
   ].concat(INTERN ? [{ id: "litigii", nume: "Litigii", def: "noutati", sub: [["noutati", "Noutăți"], ["dosare", "Dosare"], ["statistici", "Statistici"]] }] : [])
@@ -4728,6 +4728,44 @@
   }
 
   // ---------- Servicii Comunale: pe scurt ----------
+  // Documentele de pe serviciicomunale.ro (doar intern: unele au CNP, adrese, acte de identitate)
+  var SCDOC = null;
+  function comunaleDocumente(el, r) {
+    var cap = head("Documentele Servicii Comunale", "Tot ce publică societatea pe site-ul ei (serviciicomunale.ro): articolele, paginile și fișierele încărcate, colectate zilnic. Textul documentelor scanate se recunoaște automat (OCR) și se poate căuta cu sonda (sc-grep, sc-text). Unele documente conțin date personale (CNP, adresă, act de identitate): nu se reproduc în materiale.", r);
+    if (!SCDOC) {
+      el.innerHTML = cap + '<p class="updated">Se încarcă lista...</p>';
+      get(DATA + "comunale-documente.json").then(function (d) { SCDOC = d; comunaleDocumente(el, r); })
+        .catch(function () { el.innerHTML = cap + '<section class="card section"><p>Lista apare după următoarea colectare zilnică.</p></section>'; });
+      return;
+    }
+    var A = SCDOC.articole || [], cats = {};
+    A.forEach(function (a) { (a.categorii || []).forEach(function (c) { cats[c] = (cats[c] || 0) + 1; }); });
+    var nd = A.reduce(function (s, a) { return s + (a.documente || []).length; }, 0),
+      ntxt = A.reduce(function (s, a) { return s + (a.documente || []).filter(function (d) { return d.text; }).length; }, 0);
+    var h = cap + '<section class="card section"><div class="grid">' + tile("Articole și pagini", nr(A.length), "", "de pe serviciicomunale.ro") +
+      tile("Documente", nr(nd), "", "PDF, Word, Excel") + tile("Cu text citit", nr(ntxt), "", "restul așteaptă descărcarea sau OCR-ul") + "</div>" +
+      '<div class="flt" style="margin-top:12px"><input id="scd-q" type="search" placeholder="Caută în titluri (ex. bilanț, AGA, audit, termoficare)" style="min-width:260px"> ' +
+      '<select id="scd-c"><option value="">Toate categoriile</option>' + Object.keys(cats).sort().map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + " (" + cats[c] + ")</option>"; }).join("") + "</select></div>" +
+      '<div id="scd-l" style="margin-top:12px"></div></section>';
+    el.innerHTML = h;
+    var stare = function (d) { return d.text ? (d.ocr ? "text recunoscut (OCR)" : "text") : d.scanat ? "scanat, OCR în curs" : "nedescărcat încă"; };
+    var arata = function () {
+      var q = norm(document.getElementById("scd-q").value || ""), c = document.getElementById("scd-c").value;
+      var L = A.filter(function (a) {
+        return (!c || (a.categorii || []).indexOf(c) >= 0) && (!q || norm(a.titlu + " " + (a.documente || []).map(function (d) { return d.titlu; }).join(" ") + " " + (a.rezumat || "")).indexOf(q) >= 0);
+      });
+      document.getElementById("scd-l").innerHTML = L.length ? L.map(function (a) {
+        return '<div class="doc"><div class="h"><span class="id">' + esc(a.data ? zi(a.data) : "fără dată") + "</span> " + (a.categorii || []).map(function (c) { return '<span class="tag">' + esc(c) + "</span>"; }).join(" ") +
+          ' <a href="' + esc(a.pagina) + '" target="_blank" rel="noopener">' + esc(a.titlu) + "</a></div>" +
+          (a.rezumat && !(a.documente || []).length ? '<p class="note">' + esc(a.rezumat.slice(0, 300)) + "</p>" : "") +
+          ((a.documente || []).length ? '<ul class="sc-l">' + a.documente.map(function (d) { return '<li><a href="' + esc(d.url) + '" target="_blank" rel="noopener">' + esc(d.titlu) + "</a>" + (d.pagini ? " (" + d.pagini + " pag.)" : "") + ' <span class="muted">' + stare(d) + "</span></li>"; }).join("") + "</ul>" : "") + "</div>";
+      }).join("") : '<p class="muted">Niciun rezultat.</p>';
+    };
+    document.getElementById("scd-q").addEventListener("input", arata);
+    document.getElementById("scd-c").addEventListener("change", arata);
+    arata();
+  }
+
   function serviciiPeScurt(el, r) {
     var cap = head("Servicii Comunale S.A. Rădăuți", "Societatea pe acțiuni a orașului, care face termoficarea, curățenia străzilor și deszăpezirea și lucrări cerute de primărie și de instituțiile din oraș. Municipiul Rădăuți votează în adunarea generală a acționarilor prin reprezentanții numiți de consiliul local.", r);
     if (!TEME || BUG === undefined || (!SX && !SX_ERR) || !SED || !TERMO) {
@@ -4889,6 +4927,7 @@
     else if (id === "comunale") {
       if (r.sub === "termoficare") termoficare(el, r);
       else if (r.sub === "hotarari") temaGen(el, r, TEMA_CFG["servicii/hotarari"]);
+      else if (r.sub === "documente" && INTERN) comunaleDocumente(el, r);
       else serviciiPeScurt(el, r);
     }
     else if (id === "acet") temaGen(el, r, TEMA_CFG["servicii/apa"]);

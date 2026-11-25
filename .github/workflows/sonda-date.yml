@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       cerere:
-        description: "pv-text <AAAA-LL-ZZ> | pv-grep <regex> | hcl-grep <regex>"
+        description: "pv-text <AAAA-LL-ZZ> | pv-grep <regex> | hcl-grep <regex> | doc-grep <regex> | sc-lista | sc-grep <regex> | sc-text <regex> <N> (mai multe: separate prin ;;)"
         required: true
 
 permissions:

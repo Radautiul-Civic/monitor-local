@@ -35,7 +35,7 @@ CATEGORIES = {
 }
 
 # Surse care nu intră în indexul public de căutare și nici în paginile publice (decizie 23.11.2026: declarațiile doar intern)
-SURSE_DOAR_INTERN = ("decl_avere_cl", "decl_interese_cl")
+SURSE_DOAR_INTERN = ("decl_avere_cl", "decl_interese_cl", "comunale")   # comunale: documentele Servicii Comunale (CNP în contracte, AGA)
 
 # Categorii din API-ul WordPress al arhivei (site-ul vechi): sursa internă -> slug.
 # ID-urile postărilor din arhivă se salvează mutate (concursuri.ID_ARHIVA + id), ca să nu se suprapună cu cele de pe site.

@@ -8,6 +8,14 @@ c = sqlite3.connect("data/monitor.sqlite")
 fel, _, arg = sys.argv[1].partition(" ")
 
 
+# jurnalele fluxurilor sunt vizibile: CNP-urile, seriile de buletin și adresele personale se ascund la afișare
+def ascunde(t):
+    t = re.sub(r"(?<!\d)[1-8]\d{12}(?!\d)", "[CNP]", t)
+    t = re.sub(r"(?i)(seria?\s*[A-Z]{2}\s*(?:nr\.?|num[aă]r(?:ul)?)?\s*)\d{6}", r"\1[nr. act]", t)
+    t = re.sub(r"(?i)(domiciliat\w*\s+(?:[iî]n\s+)?)[^,;\n]{0,120}", r"\1[adresă]", t)
+    return t
+
+
 def texte(tabel, data_col):
     for d, tp in c.execute(f"SELECT t.{data_col}, d.text_path FROM documents d JOIN {tabel} t ON t.wp_id=d.wp_id "
                            f"WHERE d.text_path IS NOT NULL ORDER BY t.{data_col}"):
@@ -57,7 +65,7 @@ elif fel == "doc-text":   # textul documentelor publice care conțin expresia (e
             t = f.read()
         if rx.search(t) or rx.search(url):
             print("=====", url, len(t))
-            print(t[: int(lung or 20000)])
+            print(ascunde(t[: int(lung or 20000)]))
             n += 1
             if n >= 6:
                 break
@@ -73,10 +81,42 @@ elif fel == "doc-grep":   # toate documentele (hotărâri, proiecte, procese-ver
         with open(tp, encoding="utf-8", errors="replace") as f:
             t = f.read()
         for m in rx.finditer(t):
-            print((d or "")[:10], "|", src, "|", url.rsplit("/", 1)[-1][:70], "|", re.sub(r"\s+", " ", t[max(0, m.start() - 250): m.end() + 350]))
+            print((d or "")[:10], "|", src, "|", url.rsplit("/", 1)[-1][:70], "|", ascunde(re.sub(r"\s+", " ", t[max(0, m.start() - 250): m.end() + 350])))
             n += 1
             if n >= 120:
                 raise SystemExit
+elif fel in ("sc-lista", "sc-grep", "sc-text"):   # documentele Servicii Comunale (serviciicomunale.ro)
+    rows = c.execute("SELECT p.date, p.title, p.link, p.categories, p.content_html, d.url, d.link_text, d.text_path, d.text_layer, d.ocr_at, d.pages "
+                     "FROM posts p LEFT JOIN documents d ON d.wp_id=p.wp_id WHERE p.source='comunale' ORDER BY p.date").fetchall()
+    if fel == "sc-lista":
+        print("articole:", len({r[2] for r in rows}), "| documente:", sum(1 for r in rows if r[5]), "| cu text:", sum(1 for r in rows if r[7]))
+        for r in rows:
+            stare = ("text" if r[8] else ("OCR" if r[9] else "scanat, fără OCR încă")) if r[7] or r[9] else ("nedescărcat" if r[5] else "-")
+            print((r[0] or "")[:10], "|", r[3], "|", r[1][:90], "|", (r[5] or "").rsplit("/", 1)[-1][:80], "|", r[10] or "", "pag |", stare)
+    else:
+        rx, _, lung = arg.partition(" ") if fel == "sc-text" else (arg, "", "")
+        rx, n, vazute = re.compile(rx, re.I), 0, set()
+        for r in rows:
+            t = ""
+            if r[7] and os.path.exists(r[7]):
+                with open(r[7], encoding="utf-8", errors="replace") as f:
+                    t = f.read()
+            if r[2] not in vazute:   # și textul articolului (anunțurile fără document)
+                vazute.add(r[2])
+                t = re.sub(r"<[^>]+>", " ", r[4] or "") + "\n" + t
+            if fel == "sc-text":
+                if rx.search(t) or rx.search(r[1] or "") or rx.search(r[5] or ""):
+                    print("=====", (r[0] or "")[:10], "|", r[1], "|", r[5] or r[2], len(t))
+                    print(ascunde(t[: int(lung or 20000)]))
+                    n += 1
+                    if n >= 8:
+                        break
+                continue
+            for m in rx.finditer(t):
+                print((r[0] or "")[:10], "|", (r[5] or r[2]).rsplit("/", 1)[-1][:70], "|", ascunde(re.sub(r"\s+", " ", t[max(0, m.start() - 250): m.end() + 350])))
+                n += 1
+                if n >= 150:
+                    raise SystemExit
 elif fel == "termo":   # seria prețurilor la termoficare (date publice, data/termoficare.json)
     import json
     d = json.load(open("data/termoficare.json", encoding="utf-8"))

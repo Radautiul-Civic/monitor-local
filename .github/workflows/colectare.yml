@@ -61,6 +61,12 @@ jobs:
         env:
           MC_DELAY: "1.0"
 
+      - name: Documentele Servicii Comunale (serviciicomunale.ro; doar în zona internă)
+        run: python -m monitor_colector.comunale
+        continue-on-error: true
+        env:
+          MC_DELAY: "1.0"
+
       - name: Descărcare documente (în tranșe, ca prima rulare să nu fie interminabilă)
         run: python -m monitor_colector descarca --max 1000
         continue-on-error: true

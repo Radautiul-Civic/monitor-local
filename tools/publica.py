@@ -151,7 +151,7 @@ def public_date():
     di = os.path.join(d, "intern-date")   # voturi, consilieri etc.; litigiile rămân interne
     if os.path.isdir(di):
         for n in sorted(os.listdir(di)):
-            if n.endswith(".json") and n not in ("litigii.json", "declaratii.json"):
+            if n.endswith(".json") and n not in ("litigii.json", "declaratii.json", "comunale-documente.json"):
                 out[n] = os.path.join(di, n)
     # componența: fără linkurile la declarațiile de avere și de interese (decizie 23.11.2026: doar intern)
     try:
