@@ -910,3 +910,6 @@ details.alerte .al-f{margin-top:8px;max-width:640px}
 .rz-v2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.rz-v2 h4{margin:8px 0 4px}.rz-v2 ol{margin:0;padding-left:20px;font-size:.9rem}
 .rz-chk{display:flex;gap:8px;align-items:flex-start;margin:12px 0 4px;font-weight:600}
 @media(max-width:700px){.rz-v2{grid-template-columns:1fr}}
+
+.v-bloc{margin-top:10px}.v-bloc textarea{width:100%;box-sizing:border-box;font:inherit;font-size:.88rem;margin:6px 0}
+.tr-l p{margin:4px 0;line-height:1.45}.tr-l .rz-min{margin-right:6px}

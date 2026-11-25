@@ -3432,11 +3432,51 @@
         (C.length ? lista(C) : '<p class="empty">Nicio ciornă încă. Apar după ce aprobi un rezumat de ședință (la următoarea rulare a fluxului de transcriere).</p>') + "</section>";
     });
   }
+  // transcrierea unei ședințe, ușor de citit și de căutat (doar intern): pentru verificarea a ceea ce s-a spus
+  function transcriereIntern(el, r) {
+    if (!INTERN) return;
+    var id = decodeURIComponent(r.rest[0] || "");
+    el.innerHTML = head("Transcrierea ședinței", "") + '<p class="updated">Se încarcă...</p>';
+    get("transcrieri/" + encodeURIComponent(id) + ".json").then(function (T) {
+      var S = T.segmente || [], hms = function (x) { x = Math.floor(x); return Math.floor(x / 3600) + ":" + ("0" + Math.floor(x % 3600 / 60)).slice(-2) + ":" + ("0" + x % 60).slice(-2); };
+      var link = function (t) { var u = safeUrl(T.url) || ""; return /youtu/.test(u) ? u + (u.indexOf("?") > 0 ? "&" : "?") + "t=" + Math.floor(t) : u; };
+      el.innerHTML = head("Transcrierea ședinței din " + zi(T.data), "Transcriere automată (Whisper) a înregistrării" + (T.titlu ? " „" + esc(T.titlu) + "”" : "") + ". Are greșeli și nu spune cine vorbește: verifică pe înregistrare înainte de a cita.") +
+        '<p><a href="#rezumate">&larr; panoul de rezumate</a> · <a href="' + esc(safeUrl(T.url) || "#") + '" rel="noopener">înregistrarea</a> · <a href="transcrieri/' + esc(encodeURIComponent(id)) + '.json" download>JSON</a></p>' +
+        '<div class="filters"><input id="tr-q" type="search" placeholder="Caută în transcriere (ex. turbine, certificate, audit)" aria-label="Caută"><span id="tr-n" class="muted"></span></div>' +
+        '<section class="card section tr-l" id="tr-l"></section>';
+      var arata = function () {
+        var q = norm($("tr-q").value.trim()), n = 0;
+        $("tr-l").innerHTML = S.map(function (x, i) {
+          var ok = !q || norm(x[2]).indexOf(q) >= 0; if (!ok) return ""; n++;
+          return '<p><a class="rz-min" href="' + esc(link(x[0])) + '" rel="noopener" title="la acest minut în înregistrare">' + hms(x[0]) + "</a> " + esc(x[2]) + "</p>";
+        }).join("") || '<p class="empty">Nimic găsit.</p>';
+        $("tr-n").textContent = q ? n + " fragmente" : S.length + " fragmente, " + hms(S.length ? S[S.length - 1][1] : 0);
+      };
+      var t; $("tr-q").addEventListener("input", function () { clearTimeout(t); t = setTimeout(arata, 200); }); arata();
+    }).catch(function () { el.innerHTML = head("Transcrierea ședinței", "") + '<p class="empty">Transcrierea nu există sau nu s-a putut citi.</p>'; });
+  }
   function panouRezumate(el) {
     if (!INTERN) return;
     el.innerHTML = head("Rezumatele ședințelor (panou)", "Adaugă înregistrarea unei ședințe; fluxul „Transcriere ședințe” o transcrie (Whisper) și scrie ciorna rezumatului. Aici o citești, o corectezi și o aprobi; abia atunci apare pe pagina publică a ședinței.") +
       '<section class="card section"><h2>Adaugă o înregistrare</h2><div class="filters"><input id="v-data" type="date" aria-label="Data ședinței"><input id="v-url" type="url" placeholder="Linkul videoclipului (Facebook sau YouTube), ex. https://www.facebook.com/61559725245078/videos/..." aria-label="Link"><button class="btn" id="v-add" type="button">Adaugă</button></div>' +
       '<p class="note" id="v-msg">Transcrierea pornește automat la cel mult 6 ore după adăugare (sau imediat, din GitHub: Actions → „Transcriere ședințe și rezumate” → Run workflow). O ședință de două ore se transcrie în câteva ore.</p></section><div id="rz-l"><p class="updated">Se încarcă...</p></div>';
+    var inainte = document.querySelector("#v-msg");
+    inainte.insertAdjacentHTML("afterend", '<details class="v-bloc"><summary><b>Adaugă mai multe deodată</b> (ședințele din trecut)</summary>' +
+      '<p class="note">Câte una pe rând: data ședinței și linkul, de exemplu <code>2025-03-31 https://www.facebook.com/61559725245078/videos/123...</code>. Data poate fi scrisă și 31.03.2025. Ședințele lungi transmise în două părți: două rânduri cu aceeași dată.</p>' +
+      '<textarea id="v-bloc" rows="8" placeholder="2025-03-31 https://www.facebook.com/..."></textarea><button class="btn" id="v-bloc-add" type="button">Adaugă toate</button> <span id="v-bloc-msg" class="muted"></span></details>');
+    $("v-bloc-add").addEventListener("click", function () {
+      var linii = $("v-bloc").value.split(/\n/).map(function (l) { return l.trim(); }).filter(Boolean), bune = [], rele = [];
+      linii.forEach(function (l) {
+        var m = l.match(/(\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})/), u = l.match(/https:\/\/\S+/);
+        if (!m || !u) { rele.push(l); return; }
+        var d = m[1].indexOf(".") > 0 ? m[1].split(".").reverse().map(function (x) { return x.length < 2 ? "0" + x : x; }).join("-") : m[1];
+        bune.push({ data: d, url: u[0] });
+      });
+      var msg = $("v-bloc-msg"), ok = 0, er = [];
+      msg.textContent = "Se adaugă " + bune.length + "...";
+      bune.reduce(function (p, x) { return p.then(function () { return apiPost({ act: "video", data: x.data, url: x.url }).then(function () { ok++; }, function (e) { er.push(x.data + ": " + e.message); }); }); }, Promise.resolve())
+        .then(function () { msg.textContent = ok + " adăugate" + (er.length ? "; erori: " + er.join("; ") : "") + (rele.length ? "; rânduri fără dată sau link: " + rele.length : "") + "."; if (!er.length && !rele.length) $("v-bloc").value = ""; lista(); });
+    });
     $("v-add").addEventListener("click", function () {
       var d = $("v-data").value, u = $("v-url").value.trim();
       $("v-msg").textContent = "Se salvează...";
@@ -3494,7 +3534,7 @@
     var s = (a && a.stare) || "ciorna", R = (a && a.stare === "aprobat" && a.rezumat) || c.rezumat || {}, k = "c-" + id;
     var inp = function (f, v, mare) { return mare ? '<textarea data-f="' + f + '" rows="' + Math.min(10, Math.max(2, Math.ceil(String(v || "").length / 110))) + '">' + esc(v || "") + "</textarea>" : '<input data-f="' + f + '" value="' + esc(v || "") + '">'; };
     return '<section class="card section rz-c" id="' + k + '"><div class="h-row"><h2>Ședința din ' + esc(zi(c.data_sedinta || c.data)) + ' <span class="rz ' + STARE_RZ[s][1] + '">' + STARE_RZ[s][0] + "</span></h2>" +
-      '<span class="lnks"><a href="' + esc(safeUrl(c.url) || "#") + '" rel="noopener">înregistrarea</a><a href="' + esc(c.transcriere || "#") + '" target="_blank">transcrierea (JSON)</a></span></div>' +
+      '<span class="lnks"><a href="' + esc(safeUrl(c.url) || "#") + '" rel="noopener">înregistrarea</a><a href="#rezumate/transcriere/' + esc(encodeURIComponent(id)) + '">transcrierea</a></span></div>' +
       '<p class="note">' + esc(c.titlu || "") + (c.durata ? " · " + Math.round(c.durata / 60) + " minute" : "") + " · " + (c.are_pv ? "cu procesul-verbal" : "fără procesul-verbal (nepublicat la generare)") +
       (R._model ? " · model " + esc(R._model) : "") + (a ? " · decizie: " + esc(a.stare) + " " + esc(zi(a.la)) + (a.de ? " (" + esc(a.de) + ")" : "") : "") + "</p>" +
       (c.eroare ? '<p class="callout">Rezumatul n-a putut fi generat: ' + esc(c.eroare) + "</p>" : "") +
@@ -4731,7 +4771,7 @@
     }
     else if (id === "teme") temaGen(el, r, TEMA_CFG["teme/" + r.sub]);
     else if (id === "strada") strada(el, r);
-    else if (id === "rezumate") panouRezumate(el);
+    else if (id === "rezumate") ((r.path || "").split("/")[1] === "transcriere" ? transcriereIntern : panouRezumate)(el, r);
     else if (id === "texte") texte(el);
     else if (id === "despre") (r.sub === "glosar" ? glosarPagina : despre)(el, r);
     else if (id === "mesaje") mesajeIntern(el);

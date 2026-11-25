@@ -5,7 +5,7 @@ name: Transcriere ședințe și rezumate
 # urcă transcrierea în zona internă și scrie ciorna rezumatului (API Anthropic). Ciorna se aprobă din panoul intern.
 on:
   schedule:
-    - cron: "40 */6 * * *"   # la fiecare 6 ore; dacă nu e nimic nou, se termină în câteva minute
+    - cron: "40 */2 * * *"   # la fiecare 2 ore, ca să se golească lista ședințelor din trecut; dacă nu e nimic nou, se termină în câteva minute
   workflow_dispatch:
     inputs:
       url:
