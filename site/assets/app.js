@@ -61,7 +61,7 @@
       return h;
     } };
   // panoul de control (doar intern): în bara lui, separată de meniul platformei
-  if (INTERN) [["sarcini", "De făcut"], ["rezumate", "Rezumate"], ["analize", "Analize"], ["semnale", "Semnale"], ["mesaje", "Mesaje"], ["declaratii", "Declarații"], ["arhiva", "Arhiva"]]
+  if (INTERN) [["sarcini", "De făcut"], ["dosar", "Dosar pe temă"], ["rezumate", "Rezumate"], ["analize", "Analize"], ["semnale", "Semnale"], ["mesaje", "Mesaje"], ["declaratii", "Declarații"], ["arhiva", "Arhiva"]]
     .forEach(function (x) { SECTIUNI.push({ id: x[0], nume: x[1], admin: true }); });
   SECTIUNI.push({ id: "despre", nume: "Despre", def: "despre", sub: [["despre", "Despre monitor"], ["glosar", "Glosar"]] });
 
@@ -3550,6 +3550,222 @@
       });
     }).catch(function () { el.innerHTML = head("Transcrierea ședinței", "") + '<p class="empty">Transcrierea nu există sau nu s-a putut citi.</p>'; });
   }
+  // ---------- Dosar pe temă (doar intern): cauți, alegi documentele, descarci un fișier pentru un chat AI ----------
+  var DOS = { intern: null, tr: null, sel: null, rez: null };
+  var DOS_FEL = { dispozitii: "Dispoziție", rapoarte: "Raport", hcl_anexe: "Anexă la hotărâre", comunale: "Servicii Comunale", tr: "Transcriere ședință" };
+  function dosFel(f) { return FELURI[f] || DOS_FEL[f] || f; }
+  function dosAscunde(t) {   // ca monitor_colector/ascunde.py: CNP, act de identitate, domiciliu
+    t = String(t || "").replace(/(^|[^\d])[1-8]\d{12}(?!\d)/g, "$1[CNP]").replace(/(seria?\s*[A-Z]{2}\s*(?:nr\.?|num[aă]r(?:ul)?)?\s*)\d{6}/gi, "$1[nr. act]");
+    var out = "", poz = 0, re = /domiciliat\w*\s+(?:[iî]n\s+)?/gi, m;
+    while ((m = re.exec(t))) {
+      if (m.index < poz) continue;
+      var rest = t.slice(re.lastIndex, re.lastIndex + 220), j = rest.match(/\bjud(?:e[tţț]ul)?\.?\s*[\wăâîșşțţ]+/i);
+      out += t.slice(poz, m.index) + m[0] + "[adresă]"; poz = re.lastIndex + (j ? j.index + j[0].length : Math.min(rest.length, 120));
+    }
+    t = out + t.slice(poz);
+    return t.replace(/\b(?:str\.|strada)\s*[^,;\n]{1,40},?\s*nr\.?\s*\d+\w?(?:[,\s]*(?:bl|sc|et|ap)\.?\s*\w+){0,5}[,\s]*ap\.?\s*\d+/gi, "[adresă]");
+  }
+  function dosSel() {
+    if (DOS.sel) return DOS.sel;
+    try { DOS.sel = JSON.parse(localStorage.getItem("mc-dosar") || "{}") || {}; } catch (e) { DOS.sel = {}; }
+    return DOS.sel;
+  }
+  function dosSalveaza() { try { localStorage.setItem("mc-dosar", JSON.stringify(DOS.sel || {})); } catch (e) {} }
+  function dosIntern() { return DOS.intern ? Promise.resolve(DOS.intern) : get(DATA + "dosar-intern.json").then(function (d) { DOS.intern = d.docs || []; return DOS.intern; }).catch(function () { DOS.intern = []; return DOS.intern; }); }
+  function dosTranscrieri() {   // toate transcrierile (se încarcă doar dacă le ceri)
+    if (DOS.tr) return DOS.tr;
+    DOS.tr = get(DATA + "rezumate.json").catch(function () { return {}; }).then(function (C) {
+      var ids = Object.keys(C || {}).filter(function (k) { return /^\d{4}-\d{2}-\d{2}-/.test(k); }), out = [], i = 0;
+      function urm() {
+        if (i >= ids.length) return Promise.resolve(out);
+        var lot = ids.slice(i, i + 4); i += 4;
+        return Promise.all(lot.map(function (id) {
+          return get("transcrieri/" + encodeURIComponent(id) + ".json").then(function (T) {
+            var S = T.segmente || [];
+            out.push({ k: "tr:" + id, sursa: "tr", fel: "tr", id: id, titlu: "Transcrierea ședinței din " + zi(T.data || id.slice(0, 10)) + (T.titlu ? " („" + T.titlu + "”)" : ""),
+              data: T.data || id.slice(0, 10), url: T.url || "", link: "#rezumate/transcriere/" + encodeURIComponent(id), seg: S, text: S.map(function (s) { return s[2]; }).join(" ") });
+          }).catch(function () {});
+        })).then(urm);
+      }
+      return urm();
+    });
+    return DOS.tr;
+  }
+  function dosPotrivire(text, R) {   // toate cuvintele (ca început de cuvânt) și toate expresiile exacte
+    var n = " " + ftNormPoz(String(text || "")).replace(/\s+/g, " ");
+    return R.tok.every(function (w) { return new RegExp("[^a-z0-9]" + w.replace(/[^a-z0-9]/g, "")).test(n); }) && R.fraze.every(function (f) { return n.indexOf(f) >= 0; });
+  }
+  function dosPozitii(text, R) {
+    var n = ftNormPoz(String(text || "")), cuv = R.fraze.length ? R.fraze : R.tok, poz = [];
+    cuv.forEach(function (w) { var j = 0; while ((j = n.indexOf(w, j)) >= 0 && poz.length < 400) { if (j === 0 || !/[a-z0-9]/.test(n[j - 1])) poz.push([j, j + w.length]); j += w.length; } });
+    return poz.sort(function (a, b) { return a[0] - b[0]; });
+  }
+  function dosFragmente(text, R, max, lat) {   // ferestre în jurul aparițiilor, unite când se suprapun
+    lat = lat || 450;
+    var poz = dosPozitii(text, R), fer = [];
+    poz.forEach(function (p) {
+      var a = Math.max(0, p[0] - lat), b = Math.min(text.length, p[1] + lat), u = fer[fer.length - 1];
+      if (u && a <= u[1]) u[1] = Math.max(u[1], b); else fer.push([a, b]);
+    });
+    return fer.slice(0, max || 8).map(function (f) { return (f[0] > 0 ? "… " : "") + text.slice(f[0], f[1]).replace(/\s+/g, " ").trim() + (f[1] < text.length ? " …" : ""); });
+  }
+  function dosFragmenteTr(it, R, max) {   // transcriere: segmentele găsite, cu câte două înainte și după, și minutul
+    var S = it.seg || [], hms = function (x) { x = Math.floor(x); return Math.floor(x / 3600) + ":" + ("0" + Math.floor(x % 3600 / 60)).slice(-2) + ":" + ("0" + x % 60).slice(-2); };
+    var gasite = [], fer = [];
+    S.forEach(function (s, i) { if (dosPozitii(s[2], { tok: R.tok, fraze: [] }).length || R.fraze.some(function (f) { return ftNormPoz(s[2]).indexOf(f) >= 0; })) gasite.push(i); });
+    gasite.forEach(function (i) { var a = Math.max(0, i - 2), b = Math.min(S.length - 1, i + 2), u = fer[fer.length - 1]; if (u && a <= u[1] + 1) u[1] = b; else fer.push([a, b]); });
+    return fer.slice(0, max || 8).map(function (f) { return "[" + hms(S[f[0]][0]) + "] " + S.slice(f[0], f[1] + 1).map(function (s) { return s[2]; }).join(" "); });
+  }
+  function dosText(it) {   // textul complet al unui document din dosar
+    if (it.sursa === "ft") return ftText(it.id);
+    if (it.sursa === "sc") return dosIntern().then(function (L) { var x = L.filter(function (d) { return d.id === it.id; })[0]; return x ? x.text : ""; });
+    return dosTranscrieri().then(function (L) { var x = L.filter(function (d) { return d.k === it.k; })[0]; if (x) it.seg = x.seg; return x ? x.text : ""; });
+  }
+  function dosIntern2Item(d) { return { k: "sc:" + d.id, sursa: "sc", fel: "comunale", id: d.id, titlu: d.titlu, data: d.data, url: d.url, link: "#comunale/documente" }; }
+  function dosFt2Item(d) { return { k: "ft:" + d[0], sursa: "ft", fel: d[1], id: d[0], titlu: d[2], data: d[3] || (d[4] ? String(d[4]) : null), url: d[7], link: d[6] }; }
+
+  function dosarIntern(el) {
+    if (!INTERN) return;
+    var S = dosSel();
+    el.innerHTML = head("Dosar pe temă", "Cauți o temă în tot ce are monitorul, alegi documentele și descarci un singur fișier, pe care îl încarci într-un chat AI (de exemplu în proiectul „RC - Monitor local”) sau îl salvezi în documentele proiectului. Datele personale (CNP, act de identitate, domiciliu) se ascund la export.") +
+      '<section class="card section"><div class="filters"><input type="search" id="ds-q" placeholder="Tema: cuvinte din text, de ex. termoficare pierderi; „expresie exactă” între ghilimele" aria-label="Tema dosarului">' +
+      '<input id="ds-a1" type="number" min="2000" max="2100" placeholder="din anul" aria-label="Din anul" style="max-width:8em"><input id="ds-a2" type="number" min="2000" max="2100" placeholder="până în" aria-label="Până în anul" style="max-width:8em">' +
+      '<button class="btn" id="ds-go" type="button">Caută</button></div><div class="ds-feluri" id="ds-f"><span class="muted">Se încarcă felurile de documente...</span></div>' +
+      '<p class="note">Găsește documentele care conțin toate cuvintele (poți scrie doar începutul unui cuvânt). Poți face mai multe căutări: ce bifezi se adună în același dosar și rămâne bifat și dacă revii pe pagină.</p></section>' +
+      '<section class="card section ds-cos"><h2>Dosarul tău <span class="nr-b n" id="ds-n">0</span></h2><div id="ds-lista"></div>' +
+      '<div class="filters"><input id="ds-titlu" placeholder="Titlul dosarului (ex. Termoficare 2024-2026)" aria-label="Titlul dosarului">' +
+      '<select id="ds-mod" aria-label="Ce intră din fiecare document"><option value="fr">Fragmentele relevante (recomandat)</option><option value="tot">Textul complet</option></select>' +
+      '<button class="btn" id="ds-exp" type="button">Pregătește fișierul</button><button class="btn-s" id="ds-gol" type="button">Golește dosarul</button></div><div id="ds-out"></div></section>' +
+      '<div id="ds-rez"></div>';
+    var feluri = {};
+    function cos() {
+      var k = Object.keys(S).sort(function (a, b) { return String(S[b].data || "").localeCompare(String(S[a].data || "")); });
+      $("ds-n").textContent = k.length;
+      $("ds-lista").innerHTML = k.length ? '<ol class="ds-l">' + k.map(function (x) { var it = S[x]; return '<li><span class="tag">' + esc(dosFel(it.fel)) + "</span> " + (it.data ? '<span class="muted">' + esc(zi(it.data)) + "</span> " : "") + esc(it.titlu || "(fără titlu)") +
+        ' <span class="muted">(căutat: „' + esc(it.q) + '”)</span> <button type="button" class="btn-s" data-scoate="' + esc(x) + '">scoate</button></li>'; }).join("") + "</ol>" : '<p class="empty">Niciun document încă. Caută mai sus și bifează.</p>';
+      Array.prototype.forEach.call($("ds-lista").querySelectorAll("button[data-scoate]"), function (b) { b.addEventListener("click", function () { delete S[b.dataset.scoate]; dosSalveaza(); cos(); bifeaza(); }); });
+    }
+    function bifeaza() { Array.prototype.forEach.call(document.querySelectorAll("#ds-rez input[data-k]"), function (c) { c.checked = !!S[c.dataset.k]; }); }
+    cos();
+    Promise.all([ftMeta().catch(function () { return { docs: [] }; }), dosIntern()]).then(function (d) {
+      var nrF = {}; (d[0].docs || []).forEach(function (x) { nrF[x[1]] = (nrF[x[1]] || 0) + 1; });
+      nrF.comunale = d[1].length; nrF.tr = null;
+      $("ds-f").innerHTML = Object.keys(nrF).sort(function (a, b) { return (nrF[b] || 0) - (nrF[a] || 0); }).map(function (f) {
+        return '<label class="ds-fel"><input type="checkbox" value="' + esc(f) + '"' + (f === "tr" || f === "cu" || f === "ac" ? "" : " checked") + "> " + esc(dosFel(f)) + (nrF[f] != null ? ' <span class="muted">(' + nr(nrF[f]) + ")</span>" : ' <span class="muted">(se încarcă la căutare)</span>') + "</label>";
+      }).join(" ");
+    });
+    function cauta() {
+      var q = $("ds-q").value.trim(), R = ftInterpreteaza(q), out = $("ds-rez");
+      if (!R.tok.length && !R.fraze.length) { out.innerHTML = '<section class="card section"><p class="empty">Scrie cuvinte de cel puțin trei litere.</p></section>'; return; }
+      var alese = Array.prototype.map.call(document.querySelectorAll("#ds-f input:checked"), function (c) { return c.value; });
+      var a1 = +$("ds-a1").value || 0, a2 = +$("ds-a2").value || 9999;
+      var inAni = function (it) { var an = +(String(it.data || "").slice(0, 4)) || 0; return !an ? !(a1 || a2 < 9999) : an >= a1 && an <= a2; };
+      out.innerHTML = '<section class="card section"><p class="updated">Se caută' + (alese.indexOf("tr") >= 0 && !DOS.tr ? " (prima dată se încarcă și transcrierile, durează puțin)" : "") + "...</p></section>";
+      var ftFel = alese.filter(function (f) { return f !== "comunale" && f !== "tr"; });
+      Promise.all([
+        ftFel.length ? ftCauta(q, ftFel).then(function (X) { return X.gol ? { items: [], ignorate: X.ignorate } : { items: X.ids.map(function (i) { return dosFt2Item(FT.docs[i]); }), ignorate: X.ignorate }; }) : { items: [] },
+        alese.indexOf("comunale") >= 0 ? dosIntern().then(function (L) { return L.filter(function (x) { return dosPotrivire(x.text + " " + x.titlu, R); }).map(dosIntern2Item); }) : [],
+        alese.indexOf("tr") >= 0 ? dosTranscrieri().then(function (L) { return L.filter(function (x) { return dosPotrivire(x.text, R); }); }) : []
+      ]).then(function (d) {
+        var L = d[0].items.concat(d[1], d[2]).filter(inAni).sort(function (a, b) { return String(b.data || "").localeCompare(String(a.data || "")); });
+        var ign = d[0].ignorate || [];
+        var shown = 0;
+        out.innerHTML = '<section class="card section"><h2>Rezultate <span class="nr-b n">' + nr(L.length) + "</span></h2>" + (ign.length ? '<p class="note">Ignorat la hotărâri, procese-verbale etc. (apar în aproape toate documentele): ' + esc(ign.join(", ")) + ".</p>" : "") +
+          (L.length ? '<div class="filters"><button type="button" class="btn-s" id="ds-toate">Bifează tot ce e afișat</button><button type="button" class="btn-s" id="ds-niciunul">Debifează tot ce e afișat</button></div>' : '<p class="empty">Niciun document nu conține toate cuvintele.</p>') +
+          '<div id="ds-l"></div><button class="more" id="ds-more" hidden>Arată mai multe</button></section>';
+        function arata(n) {
+          var b = L.slice(shown, shown + n); shown += b.length;
+          $("ds-l").insertAdjacentHTML("beforeend", b.map(function (it) {
+            return '<div class="doc ds-it"><label class="h"><input type="checkbox" data-k="' + esc(it.k) + '"' + (S[it.k] ? " checked" : "") + '> <span class="tag">' + esc(dosFel(it.fel)) + "</span>" + (it.data ? '<span class="muted">' + esc(zi(it.data)) + "</span>" : "") + "</label>" +
+              '<div class="t">' + (it.link ? '<a href="' + esc(it.link) + '">' + esc(it.titlu || "(fără titlu)") + "</a>" : esc(it.titlu || "(fără titlu)")) + '</div><div class="fr muted" data-fr="' + esc(it.k) + '">se încarcă fragmentul...</div>' +
+              '<div class="m">' + (safeUrl(it.url) ? '<a href="' + esc(safeUrl(it.url)) + '" rel="noopener">' + (it.sursa === "tr" ? "înregistrarea" : "documentul original") + "</a>" : "") + "</div></div>";
+          }).join(""));
+          b.forEach(function (it) {
+            Array.prototype.forEach.call($("ds-l").querySelectorAll('input[data-k="' + it.k.replace(/"/g, "") + '"]'), function (c) {
+              c.addEventListener("change", function () { if (c.checked) S[it.k] = { k: it.k, sursa: it.sursa, fel: it.fel, id: it.id, titlu: it.titlu, data: it.data, url: it.url, link: it.link, q: q }; else delete S[it.k]; dosSalveaza(); cos(); });
+            });
+            dosText(it).then(function (t) {
+              var f = $("ds-l").querySelector('[data-fr="' + it.k.replace(/"/g, "") + '"]'); if (!f) return;
+              var fr = it.sursa === "tr" ? dosFragmenteTr(it, R, 1) : dosFragmente(t, R, 1, 160);
+              f.textContent = fr.length ? dosAscunde(fr[0]) : (R.fraze.length ? "(nu conține expresia exactă; probabil nu e relevant)" : "");
+            });
+          });
+          $("ds-more").hidden = shown >= L.length;
+        }
+        if (L.length) {
+          arata(40);
+          $("ds-more").addEventListener("click", function () { arata(40); });
+          $("ds-toate").addEventListener("click", function () { L.slice(0, shown).forEach(function (it) { S[it.k] = { k: it.k, sursa: it.sursa, fel: it.fel, id: it.id, titlu: it.titlu, data: it.data, url: it.url, link: it.link, q: q }; }); dosSalveaza(); cos(); bifeaza(); });
+          $("ds-niciunul").addEventListener("click", function () { L.slice(0, shown).forEach(function (it) { delete S[it.k]; }); dosSalveaza(); cos(); bifeaza(); });
+        }
+        if (!$("ds-titlu").value) $("ds-titlu").value = q.replace(/["„”]/g, "");
+      });
+    }
+    $("ds-go").addEventListener("click", cauta);
+    $("ds-q").addEventListener("keydown", function (e) { if (e.key === "Enter") cauta(); });
+    $("ds-gol").addEventListener("click", function () { if (!Object.keys(S).length || !window.confirm("Golești dosarul?")) return; Object.keys(S).forEach(function (k) { delete S[k]; }); dosSalveaza(); cos(); bifeaza(); $("ds-out").innerHTML = ""; });
+    $("ds-exp").addEventListener("click", function () {
+      var k = Object.keys(S).sort(function (a, b) { return String(a.data || "9999").localeCompare(String(b.data || "9999")); });   // în ordine cronologică
+      if (!k.length) { $("ds-out").innerHTML = '<p class="empty">Dosarul e gol.</p>'; return; }
+      var tot = $("ds-mod").value === "tot", titlu = ($("ds-titlu").value || "dosar").replace(/[_\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
+      $("ds-out").innerHTML = '<p class="updated">Se pregătește (0 din ' + k.length + ")...</p>";
+      var gata = 0, baza = location.origin + location.pathname;
+      var lot = function (i) {
+        if (i >= k.length) return Promise.resolve();
+        return Promise.all(k.slice(i, i + 6).map(function (x) {
+          var it = S[x];
+          return dosText(it).then(function (t) {
+            var R = ftInterpreteaza(it.q || ""), corp;
+            if (tot) corp = it.sursa === "tr" ? (it.seg || []).map(function (s) { var x2 = Math.floor(s[0]); return "[" + Math.floor(x2 / 3600) + ":" + ("0" + Math.floor(x2 % 3600 / 60)).slice(-2) + ":" + ("0" + x2 % 60).slice(-2) + "] " + s[2]; }).join("\n") : t;
+            else corp = (it.sursa === "tr" ? dosFragmenteTr(it, R, 12) : dosFragmente(t, R, 10)).map(function (f) { return "> " + f; }).join("\n\n") || "(fragmentul nu a fost găsit în text; vezi documentul original)";
+            it._corp = dosAscunde(corp).replace(/—/g, " - ");
+            $("ds-out").firstChild.textContent = "Se pregătește (" + (++gata) + " din " + k.length + ")...";
+          });
+        })).then(function () { return lot(i + 6); });
+      };
+      lot(0).then(function () {
+        var azi = zi(new Date().toISOString().slice(0, 10)), cautari = [];
+        k.forEach(function (x) { if (cautari.indexOf(S[x].q) < 0) cautari.push(S[x].q); });
+        var listaDoc = k.map(function (x, i) { var it = S[x]; return (i + 1) + ". " + (it.data ? zi(it.data) + " | " : "") + dosFel(it.fel) + " | " + it.titlu + (safeUrl(it.url) ? " | " + it.url : ""); }).join("\n");
+        var instr = "## Instrucțiuni pentru chat\n\n" +
+          "- Folosește doar documentele din acest dosar. Dacă un răspuns nu reiese din ele, spune asta și spune ce document ar lipsi.\n" +
+          "- La fiecare afirmație, citează documentul: felul, numărul și data, cu linkul original din listă.\n" +
+          "- Textele documentelor scanate sunt citite automat (OCR) și pot avea greșeli: cifrele, numele și voturile se verifică pe documentul original înainte de publicare.\n" +
+          "- Transcrierile ședințelor sunt automate: citatele și voturile se verifică pe înregistrare, la minutul indicat.\n" +
+          "- " + (tot ? "Fiecare document apare cu textul complet." : "Din fiecare document apar doar fragmentele în care se găsesc cuvintele căutate; pentru context, deschide documentul original.") + "\n" +
+          "- Datele personale (CNP, act de identitate, domiciliu) au fost ascunse.\n\n";
+        var blocuri = k.map(function (x, i) {
+          var it = S[x];
+          return "## " + (i + 1) + ". " + it.titlu + "\n\nFelul: " + dosFel(it.fel) + (it.data ? ". Data: " + zi(it.data) : "") + ".\n" + (safeUrl(it.url) ? "Original: " + it.url + "\n" : "") + (it.link ? "În monitor (intern): " + baza + it.link + "\n" : "") +
+            "\n" + (tot ? "Textul:\n\n```\n" + it._corp + "\n```" : "Fragmente:\n\n" + it._corp) + "\n";
+        });
+        var LIM = 250000, parti = [[]], lung = 0;
+        blocuri.forEach(function (b) { if (lung + b.length > LIM && parti[parti.length - 1].length) { parti.push([]); lung = 0; } parti[parti.length - 1].push(b); lung += b.length; });
+        var fis = parti.map(function (p, i) {
+          var n = parti.length, cap = "# Dosar: " + titlu + (n > 1 ? " (partea " + (i + 1) + " din " + n + ")" : "") + "\n\n" +
+            "Generat la " + azi + " din Monitorul local al Asociației Rădăuțiul Civic (date din surse publice: site-ul Primăriei Rădăuți, site-ul Servicii Comunale, înregistrările ședințelor). " +
+            "Căutări: " + cautari.map(function (c) { return "„" + c + "”"; }).join("; ") + ". Documente: " + k.length + (n > 1 ? ", împărțite în " + n + " fișiere" : "") + ".\n\n" + instr +
+            "## Lista documentelor\n\n" + listaDoc + "\n\n";
+          return { nume: "Dosar " + titlu + (n > 1 ? " partea " + (i + 1) + " din " + n : "") + ".md", text: cap + p.join("\n") };
+        });
+        $("ds-out").innerHTML = '<p class="note">' + (fis.length > 1 ? "Dosarul e mare, așa că e împărțit în " + fis.length + " fișiere. Încarcă-le pe toate în același chat." : "Fișierul e gata.") + " Îl poți încărca într-un chat nou al proiectului sau îl poți salva în documentele proiectului, ca să-l vadă toate chaturile.</p>" +
+          fis.map(function (f, i) { return '<div class="filters"><button type="button" class="btn" data-f="' + i + '">Descarcă „' + esc(f.nume) + '”</button><button type="button" class="btn-s" data-c="' + i + '">Copiază textul</button><span class="muted">' + nr(Math.round(f.text.length / 1000)) + " mii de caractere</span></div>"; }).join("");
+        Array.prototype.forEach.call($("ds-out").querySelectorAll("button[data-f]"), function (b) {
+          b.addEventListener("click", function () {
+            var f = fis[+b.dataset.f], a = document.createElement("a");
+            a.href = URL.createObjectURL(new Blob([f.text], { type: "text/markdown;charset=utf-8" })); a.download = f.nume;
+            document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+          });
+        });
+        Array.prototype.forEach.call($("ds-out").querySelectorAll("button[data-c]"), function (b) {
+          b.addEventListener("click", function () {
+            var f = fis[+b.dataset.c];
+            (navigator.clipboard ? navigator.clipboard.writeText(f.text) : Promise.reject()).then(function () { b.textContent = "Copiat"; }, function () { b.textContent = "Nu s-a putut copia; descarcă fișierul"; });
+          });
+        });
+      });
+    });
+  }
   // data scrisă în adresa videoclipului (ex. „...-24-noe2026”, „24-11-2026”), ca să prindem o dată greșită aleasă în panou
   var LUNI_URL = { ian: 1, feb: 2, mar: 3, apr: 4, mai: 5, iun: 6, iul: 7, aug: 8, sep: 9, oct: 10, noi: 11, noe: 11, nov: 11, dec: 12 };
   function dataDinUrl(u) {
@@ -4964,6 +5180,7 @@
     else if (id === "despre") (r.sub === "glosar" ? glosarPagina : despre)(el, r);
     else if (id === "mesaje") mesajeIntern(el);
     else if (id === "analize") analizeIntern(el);
+    else if (id === "dosar") dosarIntern(el, r);
     else if (id === "sarcini") sarciniIntern(el);
     else if (id === "semnale") semnaleIntern(el, r);
     else if (id === "declaratii" && INTERN) declaratiiIntern(el);

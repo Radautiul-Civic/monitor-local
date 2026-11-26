@@ -221,6 +221,11 @@ def main(argv=None):
                 stats["cautare_text"] = cautare_text.construieste(store, config.DATA_DIR)
             except Exception as e:
                 stats["cautare_text"] = f"eroare: {e}"
+            try:   # textele documentelor doar interne (Servicii Comunale), pentru dosarele pe temă
+                from . import cautare_text
+                stats["dosar_intern"] = cautare_text.construieste_intern(store, config.DATA_DIR)
+            except Exception as e:
+                stats["dosar_intern"] = f"eroare: {e}"
             from . import buget
             bx = buget.export(store)
             if bx["entitati"]:

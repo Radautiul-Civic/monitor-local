@@ -182,6 +182,9 @@ def intern_date():
         for n in sorted(os.listdir(di)):
             if n.endswith(".json"):
                 out[n] = os.path.join(di, n)
+    # textele documentelor doar interne (Servicii Comunale), pentru dosarele pe temă
+    if os.path.exists(os.path.join(d, "_intern", "dosar-intern.json")):
+        out["dosar-intern.json"] = os.path.join(d, "_intern", "dosar-intern.json")
     # rapoartele de verificare (înainte erau artefacte GitHub, vizibile oricui are cont): acum doar intern
     import zipfile
     rap = [os.path.join(d, n) for n in RAPOARTE if os.path.exists(os.path.join(d, n))]

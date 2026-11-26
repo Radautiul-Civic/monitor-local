@@ -134,3 +134,35 @@ def construieste(store, data_dir=config.DATA_DIR, prag_comun=0.6, minim=20):
     os.replace(os.path.join(tmp, "idx"), os.path.join(out_dir, "idx"))
     shutil.rmtree(tmp, ignore_errors=True)
     return {"documente": len(docs), "cuvinte": len(index), "comune": len(comune), "bucati": len(shards)}
+
+
+def construieste_intern(store, data_dir=config.DATA_DIR, surse=("comunale",)):
+    """Textele documentelor care stau doar în zona internă (documentele Servicii Comunale), pentru dosarele pe temă:
+    data/_intern/dosar-intern.json, urcat numai în intern/date/. Datele personale (CNP, act, domiciliu) sunt ascunse.
+    Declarațiile de avere și de interese nu intră."""
+    from .ascunde import ascunde
+    db = store.db
+    rows = db.execute("SELECT d.url, d.link_text, d.text_path, p.title, p.date, p.link FROM documents d JOIN posts p ON p.wp_id=d.wp_id "
+                      f"WHERE d.text_path IS NOT NULL AND p.source IN ({','.join('?' * len(surse))}) ORDER BY p.date DESC", surse).fetchall()
+    docs, vazute = [], set()
+    for r in rows:
+        cheie = re.sub(r"^https?://(www\.)?", "", r["url"]).lower()
+        if cheie in vazute:   # același fișier legat din articol și din biblioteca de fișiere
+            continue
+        try:
+            with open(r["text_path"], encoding="utf-8") as f:
+                text = f.read()
+        except OSError:
+            continue
+        if len(text.strip()) < 40:
+            continue
+        vazute.add(cheie)
+        titlu = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", r["title"] or r["link_text"] or os.path.basename(r["url"]))).strip()[:300]
+        docs.append({"id": "sc-" + _id(r["url"]), "fel": "comunale", "titlu": titlu, "data": (r["date"] or "")[:10] or None,
+                     "pagina": r["link"], "url": r["url"], "text": ascunde(text)})
+    d = os.path.join(data_dir, "_intern")
+    os.makedirs(d, exist_ok=True)
+    from datetime import datetime
+    with open(os.path.join(d, "dosar-intern.json"), "w", encoding="utf-8") as f:
+        json.dump({"generat_la": datetime.now().isoformat(timespec="seconds"), "docs": docs}, f, ensure_ascii=False, separators=(",", ":"))
+    return {"documente": len(docs)}

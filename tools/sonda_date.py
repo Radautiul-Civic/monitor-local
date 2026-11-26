@@ -9,25 +9,8 @@ fel, _, arg = sys.argv[1].partition(" ")
 
 
 # jurnalele fluxurilor sunt vizibile: CNP-urile, seriile de buletin și adresele personale se ascund la afișare
-def ascunde(t):
-    t = re.sub(r"(?<!\d)[1-8]\d{12}(?!\d)", "[CNP]", t)
-    t = re.sub(r"(?i)(seria?\s*[A-Z]{2}\s*(?:nr\.?|num[aă]r(?:ul)?)?\s*)\d{6}", r"\1[nr. act]", t)
-    # adresa de domiciliu: tot ce urmează după „domiciliat”, până la județ inclusiv (altfel, următoarele 120 de caractere)
-    def _dom(m):
-        rest = t[m.end():m.end() + 220]
-        j = re.search(r"(?i)\bjud(?:e[tţț]ul)?\.?\s*\w+", rest)
-        return m.group(0) + "[adresă]", (j.end() if j else min(len(rest), 120))
-    out, poz = [], 0
-    for m in re.finditer(r"(?i)domiciliat\w*\s+(?:[iî]n\s+)?", t):
-        if m.start() < poz:
-            continue
-        txt, lung = _dom(m)
-        out.append(t[poz:m.start()] + txt)
-        poz = m.end() + lung
-    t = "".join(out) + t[poz:]
-    # orice altă adresă de locuință (cu apartament): „str. X, nr. 10, sc. D, et. 2, ap. 57”
-    t = re.sub(r"(?i)\b(?:str\.|strada)\s*[^,;\n]{1,40},?\s*nr\.?\s*\d+\w?(?:[,\s]*(?:bl|sc|et|ap)\.?\s*\w+){0,5}[,\s]*ap\.?\s*\d+", "[adresă]", t)
-    return t
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from monitor_colector.ascunde import ascunde  # noqa: E402
 
 
 def texte(tabel, data_col):
