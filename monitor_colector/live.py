@@ -73,9 +73,21 @@ def ruleaza(url, zi, intern, model_nume=None):
         intern.scrie("intern/date/live.json", {"id": cid, "data": zi, "url": url, "titlu": titlu, "in_curs": in_curs, "actualizat": acum, "pana_la": pana})
 
     scrie(True)   # panoul arată imediat că a pornit
+    marime, schimbat = -1, time.time()
     while True:
-        gata = proc.poll() is not None
         fisiere = sorted(f for f in os.listdir(folder) if f.endswith(".wav"))
+        # după ce transmisiunea se încheie, ffmpeg rămâne agățat de manifest: dacă 6 minute nu mai vine sunet nou, îl oprim noi
+        m = sum(os.path.getsize(os.path.join(folder, f)) for f in fisiere) + 10 ** 12 * len(fisiere)
+        if m != marime:
+            marime, schimbat = m, time.time()
+        elif proc.poll() is None and time.time() - schimbat > 360:
+            print("niciun sunet nou de 6 minute: transmisiunea s-a încheiat", flush=True)
+            proc.terminate()
+            try:
+                proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        gata = proc.poll() is not None
         complete = fisiere if gata else fisiere[:-1]   # ultima bucată e încă în scriere cât timp descărcarea merge
         if facute < len(complete):
             f = os.path.join(folder, complete[facute])
