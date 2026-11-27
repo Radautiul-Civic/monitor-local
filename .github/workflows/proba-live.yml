@@ -23,6 +23,10 @@ jobs:
           with Intern() as I:
               L = I.json("intern/date/live.json") or {}
               T = I.json("intern/transcrieri/%s.json" % L.get("id")) if L.get("id") else None
+              for f in sorted(x for x in I.lista("intern/transcrieri") if x.startswith("live-")):
+                  X = I.json("intern/transcrieri/" + f) or {}
+                  Sg = X.get("segmente") or []
+                  print("fisier:", f, "| in_curs:", X.get("live"), "| actualizat:", X.get("actualizat"), "| pana_la:", X.get("pana_la"), "| fragmente:", len(Sg), "| de la secunda", Sg[0][0] if Sg else None, "la", Sg[-1][1] if Sg else None)
           S = (T or {}).get("segmente") or []
           print("live:", {k: L.get(k) for k in ("id", "in_curs", "actualizat", "pana_la")}, "| fragmente:", len(S), "| caractere:", sum(len(s[2]) for s in S))
           PY
