@@ -379,11 +379,76 @@ FELURI_PAT = [("vanzare", "Vânzare", r"\bvanzar|\bvinzar|instrainar"),
               ("domeniu", "Trecere între domeniul public și privat, inventar", r"trecer\w* .{0,80}domeni|domeniul (public|privat) .{0,60}(includer|declarar|inventar)|inventar\w* bunuri|atestar\w* .{0,40}domeni|apartenent")]
 
 
+# cine primește imobilul: din titlul hotărârii („către SC X SRL”, „către numitul Y”, „domnului Z”)
+R_BENEF = re.compile(r"(?:\bc[aă]tre|\bnumit(?:ul|a|ilor|ii)|\bdomnul(?:ui)?|\bdoamn(?:a|ei)|\bd-?lui|\bd-?nei|\bfirm(?:a|ei)|\bin favoarea|\bîn favoarea)\s+(?:numit(?:ul|a|ii)\s+|firma\s+|domnul(?:ui)?\s+|doamn(?:a|ei)\s+)?"
+                     r"(.{3,110}?)(?=\s*(?:,|;|\(|\bfara licitati|\bfără licitați|\bprin licitati|\bprin licitați|\ba un(?:ei|ui)\b|\ba terenului|\ba imobilului|\ba spatiului|\ba spațiului|"
+                     r"\bin vederea|\bîn vederea|\bpe termen|\bpe o perioad|\bpentru\b|\bsituat|\bin suprafat|\bîn suprafaț|-\s*luptator|$))", re.I)
+TIP_BENEF = [("firma", "Firmă", r"\bs\.?\s?c\.?\s|\bsrl\b|s\.r\.l|\bs\.?a\.?$|\bs\.a\.|\bpfa\b|\bi\.?i\.?\b|intreprindere|societate\w* (comercial|profesional)|\bfirma\b|cabinet|notarial|delgaz|e\.?on|orange|vodafone|telekom|rcs|digi\b"),
+             ("partid", "Partid politic", r"partid|\bpnl\b|\bpsd\b|\busr\b|\baur\b|uniunea (salvati|democrat)"),
+             ("cult", "Cult religios", r"paroh|biseric|protopop|arhiepiscop|manastir|comunitat\w* (evre|penticostal|baptist)|cultul"),
+             ("ong", "Asociație sau fundație", r"asociati|fundati|\bclub\w* sportiv|sindicat|uniunea|societatea (pentru|cultural)|filiala"),
+             ("institutie", "Instituție publică", r"scoal|scoli|colegi|liceu|gradinit|spital|inspectorat|minister|consiliul judetean|directi[ae]|politi|jandarm|\bisu\b|agenti[ae]|judecatori|parchet|"
+                                                  r"primaria|comuna|orasul|municipiul|statul roman|casa de (asigurari|pensii|cultura)|biblioteca|muzeu|universitat|servicii comunale|\bacet\b|\banl\b|ocolul silvic|\bdsp\b|\bdsv")]
+R_NU_BENEF = re.compile(r"unitatea administrativ|^municipiul radauti|^uat\b|^(?:chiria|proprietar|actual|titular|locatar|beneficiar|persoan|ocupant|detinator|constructi|locuint|populati|cetateni|domeniul|consiliul local)", re.I)
+MOD_PAT = [("directa", "Direct, fără licitație", r"fara licitati|vanzar\w* direct|incredintar\w* direct|atribuir\w* direct|negocier\w* direct|drept\w* de preemti"),
+           ("licitatie", "Prin licitație publică", r"licitati")]
+# valoarea din textul hotărârii: prețul de vânzare, prețul de pornire la licitație, redevența, chiria
+R_VAL = re.compile(r"(pret\w*\s+de\s+vanzare|pret\w*\s+de\s+pornire|pret\w*\s+minim|suma\s+totala\s+de|valoare\w*\s+de\s+(?:concesionare|vanzare|piata|inventar|circulatie)|valoare\w*\s+(?:totala|estimata)|"
+                   r"redevent\w*|chiri\w*|tarif\w*)[^.;\n]{0,160}?(\d[\d. ]*(?:,\d+)?)\s*(lei|ron|euro|eur)\b\s*(/\s*(?:mp|m2|ha|luna|an)(?:\s*/\s*(?:luna|an|zi))?|pe\s+(?:mp|luna|an)|lunar|anual)?")
+
+
+def beneficiar(titlu):
+    """(nume, tip) al celui care primește imobilul, din titlul hotărârii; (None, None) dacă titlul nu-l numește."""
+    for m in R_BENEF.finditer(titlu or ""):
+        n = re.sub(r"\s+", " ", m.group(1)).strip(" ,.-„”\"“")
+        n = re.sub(r"(?i)^(SC|S\.C\.)\s*[„“\"”]?\s*(.+?)\s*[”“\"]?\s*(SRL|S\.R\.L\.?|SA|S\.A\.?)$", r"\2 \3", n).replace("S.R.L", "SRL").strip(" .")
+        n = re.sub(r"(?i)\s+(din\s+)?(mun\w*\.?\s+)?r[aă]d[aă]u[tţț]i$", "", n).strip(" ,.")
+        n = re.sub(r"(?i)^(SC|S\.C\.)\s+(?=.*\b(SRL|SA|S\.A\.?)$)", "", n).strip()
+        tn = norm(n)
+        if len(tn) < 4 or R_NU_BENEF.search(tn) or not re.search(r"[A-ZĂÂÎȘŞȚŢ]", n) or re.fullmatch(r"[\W\dIi ]+", n):
+            continue
+        tip = next((k for k, _, rx in TIP_BENEF if re.search(rx, tn)), None)
+        if not tip:
+            cuv = n.replace("-", " ").split()
+            if not (2 <= len(cuv) <= 5 and all(c[:1].isupper() or c.lower() in ("si", "și", "şi") for c in cuv)):
+                continue
+            tip = "persoana"
+        return n[:90], tip
+    return None, None
+
+
+def valoare_pat(text, fel):
+    """Suma principală din textul hotărârii: {valoare, moneda, unitate, ce, fragment}. Prima sumă legată de preț, redevență sau chirie."""
+    t = norm(re.sub(r"\s+", " ", text or ""))[:14000]
+    cand = []
+    for m in R_VAL.finditer(t):
+        v = suma(m.group(2))
+        if not v or v < 1:
+            continue
+        ce = m.group(1).split()[0]
+        ce = "pret" if ce.startswith(("pret", "suma", "valoare")) else "redeventa" if ce.startswith("redevent") else "chirie" if ce.startswith("chiri") else "tarif"
+        un = re.sub(r"\s+", "", m.group(4) or "").replace("pe", "/").replace("lunar", "/luna").replace("anual", "/an")
+        cand.append({"valoare": round(v, 2), "moneda": "eur" if m.group(3).startswith("eur") else "lei", "unitate": un or None, "ce": ce,
+                     "fragment": t[max(0, m.start() - 20): m.end() + 30]})
+    if not cand:
+        return None
+    prefer = {"vanzare": ("pret",), "concesionare": ("redeventa", "pret"), "inchiriere": ("chirie", "tarif", "pret")}.get(fel, ("pret", "redeventa", "chirie"))
+    for ce in prefer:
+        for c in cand:
+            if c["ce"] == ce:
+                return dict(c, altele=len(cand) - 1)
+    return dict(cand[0], altele=len(cand) - 1)
+
+
 def patrimoniu(db, coord=None):
     from . import geocod
-    H = db.execute("SELECT year, number, adoption_date, title FROM hcl WHERE title IS NOT NULL ORDER BY adoption_date DESC, number DESC").fetchall()
+    from .voturi import _text_hcl
+    col = {r[1] for r in db.execute("PRAGMA table_info(hcl)")}
+    H = db.execute(f"SELECT year, number, adoption_date, title, {'wp_id' if 'wp_id' in col else 'NULL'}, {'pdf_url' if 'pdf_url' in col else 'NULL'} "
+                   "FROM hcl WHERE title IS NOT NULL ORDER BY adoption_date DESC, number DESC").fetchall()
     out = []
-    for an, nr, data, titlu in H:
+    patrimoniu.persoane = {}   # numele persoanelor fizice: doar pentru zona internă (vezi scrie)
+    for an, nr, data, titlu, wp_id, pdf_url in H:
         t = norm(titlu)
         if not re.search(r"teren|imobil|cladir|spatiu|locuint|domeniul (public|privat)|parcel|lot\b", t):
             continue
@@ -393,6 +458,28 @@ def patrimoniu(db, coord=None):
         if not fel:
             continue
         x = {"an": an, "nr": nr, "data": data, "fel": fel, "titlu": clean_title(titlu)[:400]}
+        x["mod"] = next((k for k, _, rx in MOD_PAT if re.search(rx, t)), None)
+        if re.search(r"^.{0,60}(respinger|revocar|abrogar|incetar|reziliar)", t):
+            x["stare"] = "respinsa" if "respinger" in t[:80] else "incetare"
+        elif re.search(r"modificar|completar|prelungir|act\w* aditional", t[:140]):
+            x["stare"] = "modificare"
+        bn, bt = beneficiar(titlu)
+        if bt:
+            x["benef_tip"] = bt
+            if bt == "persoana":   # agregarea pe persoane fizice rămâne internă; titlul hotărârii e oricum public
+                patrimoniu.persoane[f"{an}/{nr}"] = bn
+            else:
+                x["benef"] = bn
+        try:
+            v = valoare_pat(_text_hcl(db, wp_id, pdf_url, 16000), fel)
+        except Exception:   # noqa: BLE001
+            v = None
+        if v:
+            x["valoare"], x["moneda"], x["val_ce"] = v["valoare"], v["moneda"], v["ce"]
+            if v["unitate"]:
+                x["val_unitate"] = v["unitate"]
+            if v["altele"]:
+                x["val_altele"] = v["altele"]
         m = re.search(r"\b(?:str(?:ada|\.)?|calea|b-dul|bulevardul|aleea|piata)\s*\.?\s*([A-ZĂÂÎȘŞȚŢ0-9][\w\-\.ăâîșşțţĂÂÎȘŞȚŢ ]{1,40}?)(?=\s*(?:nr\.?|n\s*r|fn|f\.n|,|;|\.|\(|identific|in\s|în\s|din\s|$))", titlu)
         if m:
             s = m.group(0).strip(" ,.")
@@ -614,6 +701,14 @@ def scrie(store, data_dir, azi=None):
             stats[nume] = len(v) if isinstance(v, (list, dict)) and not (isinstance(v, dict) and "lista" in v) else len(v["lista"])
         except Exception as e:   # o temă care pică nu le oprește pe celelalte
             stats[nume] = f"eroare: {e}"
+    # numele persoanelor fizice din hotărârile de patrimoniu: doar în zona internă (intern/date/patrimoniu-persoane.json)
+    try:
+        di = os.path.join(data_dir, "_intern")
+        os.makedirs(di, exist_ok=True)
+        with open(os.path.join(di, "patrimoniu-persoane.json"), "w", encoding="utf-8") as f:
+            json.dump(getattr(patrimoniu, "persoane", {}), f, ensure_ascii=False, separators=(",", ":"))
+    except OSError:
+        pass
     # lista completă a taxelor, extrasă cu modelul de limbaj din hotărârile anuale (cu cache; vezi taxe_ai.py)
     if isinstance(rez.get("taxe"), dict):
         try:

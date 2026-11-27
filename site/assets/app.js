@@ -2342,23 +2342,75 @@
   var PAT_IC = { vanzare: '<path d="M4 12l8-8h7v7l-8 8z"/><circle cx="15.5" cy="8.5" r="1.5"/>', concesionare: '<circle cx="8" cy="12" r="3.5"/><path d="M11.5 12H20M17 12v3M14.5 12v2"/>',
     inchiriere: '<path d="M4 11l8-6 8 6v8H4z"/><path d="M10 19v-5h4v5"/>', schimb: '<path d="M5 9h12l-3-3M19 15H7l3 3"/>', folosinta: '<path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/>',
     uz: '<path d="M4 18h16M7 18V9l5-4 5 4v9"/>', cumparare: '<path d="M5 7h14l-1.5 9h-11z"/><path d="M9 7a3 3 0 0 1 6 0"/>', domeniu: '<rect x="5" y="5" width="14" height="14" rx="1"/><path d="M5 12h14M12 5v14"/>' };
+  var BEN_TIP = { firma: "Firmă", persoana: "Persoană fizică", partid: "Partid politic", ong: "Asociație sau fundație", cult: "Cult religios", institutie: "Instituție publică" };
+  var MOD_PATR = { directa: "Direct, fără licitație", licitatie: "Prin licitație publică" };
+  var PAT_PERS;   // numele persoanelor fizice din hotărâri: doar în zona internă
+  function patValoare(x) {   // „14.661 lei”, „12,5 lei/mp/lună”
+    if (!x.valoare) return "";
+    var v = x.valoare >= 100 ? nr(Math.round(x.valoare)) : String(x.valoare).replace(".", ",");
+    return v + (x.moneda === "eur" ? " euro" : " lei") + (x.val_unitate ? x.val_unitate.replace("luna", "lună") : "");
+  }
   function pagPatrimoniu(el, cap, D) {
+    if (INTERN && PAT_PERS === undefined) {
+      el.innerHTML = cap + '<p class="updated">Se încarcă...</p>';
+      get(DATA + "patrimoniu-persoane.json").catch(function () { return {}; }).then(function (m) { PAT_PERS = m || {}; pagPatrimoniu(el, cap, D); });
+      return;
+    }
+    if (INTERN) D.forEach(function (x) { if (x.benef_tip === "persoana" && !x.benef && PAT_PERS[x.an + "/" + x.nr]) x.benef = PAT_PERS[x.an + "/" + x.nr]; });
+    // evidența pe beneficiari: firme, asociații, partide, culte, instituții (persoanele fizice, pe nume, doar pe intern)
+    var ben = {}, peTip = {}, peMod = {};
+    D.forEach(function (x) {
+      if (x.benef_tip) peTip[x.benef_tip] = (peTip[x.benef_tip] || 0) + 1;
+      if (x.mod) peMod[x.mod] = (peMod[x.mod] || 0) + 1;
+      if (!x.benef) return;
+      var k = norm(x.benef).replace(/[^a-z0-9]+/g, " ").replace(/\b(sc|sa|srl|s|c|a|r|l|suceava|radauti|romania)\b/g, " ").replace(/\s+/g, "").trim() || norm(x.benef), b = ben[k] = ben[k] || { nume: x.benef, tip: x.benef_tip, n: 0, feluri: {}, mp: 0, lei: 0, ani: {} };
+      b.n++; b.feluri[x.fel] = (b.feluri[x.fel] || 0) + 1; b.ani[x.an] = 1;
+      if (x.suprafata && !x.stare) b.mp += x.suprafata;
+      if (x.valoare && x.moneda === "lei" && !x.val_unitate && !x.stare) b.lei += x.valoare;
+    });
+    var benL = Object.keys(ben).map(function (k) { return ben[k]; }).sort(function (a, b) { return b.n - a.n || b.lei - a.lei; });
+    var vanz = D.filter(function (x) { return x.fel === "vanzare" && x.valoare && x.moneda === "lei" && !x.val_unitate && !x.stare; });
+    var totV = vanz.reduce(function (s, x) { return s + x.valoare; }, 0);
     var pe = {}; D.forEach(function (x) { pe[x.fel] = (pe[x.fel] || 0) + 1; });
     var anC = String(new Date().getFullYear()), vAn = D.filter(function (x) { return x.fel === "vanzare" && x.an == anC; }).length;
     el.innerHTML = cap + '<div class="grid">' + tile("Hotărâri despre terenuri și clădiri", nr(D.length), "", "din 2013 până azi") + tile("Vânzări", nr(pe.vanzare || 0), "", vAn + " în " + anC) +
-      tile("Concesionări și închirieri", nr((pe.concesionare || 0) + (pe.inchiriere || 0)), "", "") + tile("Pe hartă", nr(D.filter(function (x) { return x.lat; }).length), "", "unde strada din titlu a putut fi găsită") + "</div>" +
+      tile("Concesionări și închirieri", nr((pe.concesionare || 0) + (pe.inchiriere || 0)), "", "") + tile("Pe hartă", nr(D.filter(function (x) { return x.lat; }).length), "", "unde strada din titlu a putut fi găsită") +
+      tile("Vânzări cu prețul în hotărâre", nr(Math.round(totV)), "lei", nr(vanz.length) + " hotărâri; prețuri de vânzare sau de pornire la licitație, citite automat") + "</div>" +
       '<section class="card section"><h2>Pe tipuri</h2>' + hbl(Object.keys(FEL_PAT).filter(function (k) { return pe[k]; }).map(function (k) { return { l: FEL_PAT[k][0], v: pe[k] }; }), nr, D.length) + "</section>" +
       '<section class="card section"><h2>Pe hartă</h2><p class="note">Poziția e cea a străzii (sau a adresei) din titlul hotărârii, găsită automat; e aproximativă. Hotărârile despre aceeași stradă sunt așezate una lângă alta, în jurul punctului. Apasă pe un tip din legendă ca să-l ascunzi sau să-l arăți.</p>' +
       '<div class="legend inv-lg pat-lg">' + Object.keys(FEL_PAT).filter(function (k) { return pe[k]; }).map(function (k) { return '<button type="button" class="on" data-k="' + k + '"><i class="pm-l" style="--c:' + FEL_PAT[k][1] + '"><svg viewBox="0 0 24 24">' + PAT_IC[k] + "</svg></i>" + esc(FEL_PAT[k][0]) + " (" + pe[k] + ")</button>"; }).join("") + "</div>" +
       '<div class="map" id="pat-map"></div></section>' +
+      '<section class="card section"><h2>Cum se dau: cu sau fără licitație</h2>' + hbl(Object.keys(MOD_PATR).filter(function (k) { return peMod[k]; }).map(function (k) { return { l: MOD_PATR[k], v: peMod[k] }; }), nr, (peMod.directa || 0) + (peMod.licitatie || 0)) +
+      '<p class="note">După titlul hotărârii: „fără licitație”, „vânzare directă”, „drept de preempțiune” sau „prin licitație publică”. Hotărârile al căror titlu nu spune cum nu sunt numărate.</p></section>' +
+      '<section class="card section"><h2>Cine primește</h2>' + hbl(Object.keys(BEN_TIP).filter(function (k) { return peTip[k]; }).sort(function (a, b) { return peTip[b] - peTip[a]; }).map(function (k) { return { l: BEN_TIP[k], v: peTip[k] }; }), nr, D.length) +
+      '<p class="note">Beneficiarul e citit automat din titlul hotărârii („către...”). Multe hotărâri nu numesc pe nimeni în titlu: licitațiile au câștigătorul stabilit ulterior, iar în hotărârile recente numele sunt anonimizate de primărie.' +
+      (INTERN ? " Pe intern, persoanele fizice apar cu numele din titlu; pe pagina publică apar doar ca „persoană fizică”." : " Persoanele fizice nu sunt grupate pe nume.") + "</p>" +
+      (benL.length ? '<div class="tw"><table class="pat-b"><thead><tr><th>Beneficiar</th><th>Fel</th><th class="n">Hotărâri</th><th>Operațiuni</th><th class="n">Suprafață</th><th class="n">Valoare în hotărâri</th></tr></thead><tbody>' +
+        benL.slice(0, 400).map(function (b, i) { return '<tr' + (i >= 15 ? ' class="pat-mai" hidden' : "") + '><td><a href="#" data-ben="' + esc(b.nume) + '">' + esc(b.nume) + "</a></td><td>" + esc(BEN_TIP[b.tip] || "") + '</td><td class="n">' + b.n + "</td><td>" +
+          Object.keys(b.feluri).map(function (f) { return esc(FEL_PAT[f][0].toLowerCase()) + (b.feluri[f] > 1 ? " (" + b.feluri[f] + ")" : ""); }).join(", ") + '</td><td class="n">' + (b.mp ? nr(Math.round(b.mp)) + " mp" : "") + '</td><td class="n">' + (b.lei ? nr(Math.round(b.lei)) + " lei" : "") + "</td></tr>"; }).join("") +
+        "</tbody></table></div>" + (benL.length > 15 ? '<button class="more" id="pat-bm">Arată toți beneficiarii (' + benL.length + ")</button>" : "") : "") + "</section>" +
+      (vanz.length ? '<section class="card section"><h2>Cele mai mari valori</h2><p class="note">Suma e citită automat din textul hotărârii (prețul de vânzare, prețul de pornire la licitație, valoarea de concesionare). Verific-o în hotărâre înainte de a o folosi; la hotărârile cu mai multe imobile e doar prima sumă.</p>' +
+        D.filter(function (x) { return x.valoare && x.moneda === "lei" && !x.val_unitate; }).sort(function (a, b) { return b.valoare - a.valoare; }).slice(0, 10).map(function (x) {
+          return '<div class="doc"><div class="h"><span class="id">' + linkHcl(x) + '</span><span class="tag" style="border-color:' + FEL_PAT[x.fel][1] + '">' + esc(FEL_PAT[x.fel][0]) + "</span><b>" + esc(patValoare(x)) + '</b><span class="muted">' + esc(zi(x.data)) + '</span></div><div class="t">' + esc(x.titlu) + "</div></div>"; }).join("") + "</section>" : "") +
       '<section class="card section"><h2>Toate hotărârile</h2><div id="pat-l"></div></section>';
-    lista($("pat-l"), D, { placeholder: "Caută: stradă, număr cadastral, firmă", unitate: ["hotărâre", "hotărâri"], an: function (x) { return String(x.an); }, text: function (x) { return x.titlu + " " + (x.strada || "") + " " + (x.cadastral || ""); },
-      extraFilter: { html: '<select aria-label="Tipul"><option value="">Toate tipurile</option>' + Object.keys(FEL_PAT).map(function (k) { return '<option value="' + k + '">' + FEL_PAT[k][0] + "</option>"; }).join("") + "</select>", test: function (x, e) { return x.fel === e; } },
+    lista($("pat-l"), D, { placeholder: "Caută: stradă, număr cadastral, firmă", unitate: ["hotărâre", "hotărâri"], an: function (x) { return String(x.an); }, text: function (x) { return x.titlu + " " + (x.strada || "") + " " + (x.cadastral || "") + " " + (x.benef || ""); },
+      extraFilter: { html: '<select aria-label="Tipul"><option value="">Toate tipurile</option>' + Object.keys(FEL_PAT).map(function (k) { return '<option value="' + k + '">' + FEL_PAT[k][0] + "</option>"; }).join("") + "</select>" +
+          '<select aria-label="Cine primește"><option value="">Orice beneficiar</option>' + Object.keys(BEN_TIP).map(function (k) { return '<option value="' + k + '">' + BEN_TIP[k] + "</option>"; }).join("") + '<option value="-">Fără beneficiar în titlu</option></select>' +
+          '<select aria-label="Cum se dă"><option value="">Cu sau fără licitație</option><option value="directa">Direct, fără licitație</option><option value="licitatie">Prin licitație publică</option></select>' +
+          '<select aria-label="Valoarea"><option value="">Orice valoare</option><option value="are">Cu valoare în hotărâre</option><option value="10k">Peste 10.000 lei</option><option value="100k">Peste 100.000 lei</option></select>',
+        test: function (x, e, v) {
+          return (!v[0] || x.fel === v[0]) && (!v[1] || (v[1] === "-" ? !x.benef_tip : x.benef_tip === v[1])) && (!v[2] || x.mod === v[2]) &&
+            (!v[3] || (x.valoare && (v[3] === "are" || (x.moneda === "lei" && !x.val_unitate && x.valoare >= (v[3] === "10k" ? 1e4 : 1e5)))));
+        } },
       item: function (x) {
         return '<div class="doc"><div class="h"><span class="id">' + linkHcl(x) + '</span><span class="tag" style="border-color:' + FEL_PAT[x.fel][1] + '">' + esc(FEL_PAT[x.fel][0]) + "</span>" +
-          (x.strada ? '<span class="muted">' + esc(x.strada) + "</span>" : "") + (x.suprafata ? '<span class="muted">' + nr(x.suprafata) + " mp</span>" : "") + '<span class="muted">' + esc(zi(x.data)) + "</span></div>" +
-          '<div class="t">' + esc(x.titlu) + "</div></div>";
+          (x.strada ? '<span class="muted">' + esc(x.strada) + "</span>" : "") + (x.suprafata ? '<span class="muted">' + nr(x.suprafata) + " mp</span>" : "") + (x.valoare ? "<b>" + esc(patValoare(x)) + "</b>" : "") + '<span class="muted">' + esc(zi(x.data)) + "</span></div>" +
+          '<div class="t">' + esc(x.titlu) + '</div><div class="m">' + (x.benef_tip ? '<span class="tag">' + esc(x.benef ? x.benef : BEN_TIP[x.benef_tip]) + "</span> " : "") + (x.mod ? '<span class="tag">' + esc(MOD_PATR[x.mod]) + "</span> " : "") +
+          (x.stare ? '<span class="tag">' + ({ respinsa: "proiect respins", incetare: "revocare sau încetare", modificare: "modificare sau prelungire" })[x.stare] + "</span>" : "") + "</div></div>";
       } });
+    if ($("pat-bm")) $("pat-bm").addEventListener("click", function () { Array.prototype.forEach.call(el.querySelectorAll("tr.pat-mai"), function (t) { t.hidden = false; }); $("pat-bm").hidden = true; });
+    Array.prototype.forEach.call(el.querySelectorAll("a[data-ben]"), function (a) { a.addEventListener("click", function (e) {
+      e.preventDefault(); var q = $("pat-l").querySelector("input"); q.value = a.dataset.ben; q.dispatchEvent(new Event("input")); $("pat-l").scrollIntoView({ block: "start" }); }); });
     incarcaLeaflet().then(function () {
       var Lf = window.L, m = Lf.map("pat-map", { scrollWheelZoom: false }).setView([47.8445, 25.9195], 14);
       Lf.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(m);
