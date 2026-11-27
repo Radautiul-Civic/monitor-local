@@ -31,14 +31,18 @@ def durata(url):
         return None, None
 
 
-def bucata(url, a, b, fisier="live-bucata"):
-    for f in os.listdir("."):
-        if f.startswith(fisier + "."):
-            os.remove(f)
-    subprocess.run(["yt-dlp", "-q", "-f", "bestaudio/best", "--download-sections", f"*{int(a)}-{int(b)}", "--force-overwrites", "-o", fisier + ".%(ext)s", url],
-                   capture_output=True, text=True, timeout=600)
-    f = next((x for x in os.listdir(".") if x.startswith(fisier + ".")), None)
-    return f
+SEG = int(os.environ.get("MC_LIVE_SEG", "180"))   # secunde pe bucată
+
+
+def porneste_flux(url, folder="live-seg"):
+    """Un singur proces care descarcă transmisiunea de la început, continuu, și o taie în bucăți de SEG secunde (flac, mono, 16 kHz).
+    Descărcarea pe sărite („de la minutul X”) nu merge la o transmisiune în curs: de fiecare dată ar relua de la început."""
+    os.makedirs(folder, exist_ok=True)
+    for f in os.listdir(folder):
+        os.remove(os.path.join(folder, f))
+    cmd = (f"yt-dlp -q -f 'bestaudio/best' -o - '{url}' | ffmpeg -hide_banner -loglevel error -i pipe:0 -vn -ac 1 -ar 16000 "
+           f"-f segment -segment_time {SEG} -c:a flac {folder}/seg%05d.flac")
+    return subprocess.Popen(["bash", "-o", "pipefail", "-c", cmd]), folder
 
 
 def ruleaza(url, zi, intern, model_nume=None):
@@ -50,50 +54,43 @@ def ruleaza(url, zi, intern, model_nume=None):
             break
         except Exception as e:   # noqa: BLE001
             print("modelul", nume, "nu s-a încărcat:", str(e)[:120], flush=True)
-    cid, segmente, off, start, titlu = f"live-{zi}", [], 0.0, time.time(), None
-    ultima, neschimbat_din, erori = None, time.time(), 0
+    cid, segmente, facute, start = f"live-{zi}", [], 0, time.time()
+    _, titlu = durata(url)
+    proc, folder = porneste_flux(url)
 
     def scrie(in_curs):
         acum = datetime.now().isoformat(timespec="seconds")
-        intern.scrie(f"{TRANSCRIERI}/{cid}.json", {"data": zi, "url": url, "titlu": titlu, "live": in_curs, "actualizat": acum, "pana_la": round(off), "segmente": segmente})
-        intern.scrie("intern/date/live.json", {"id": cid, "data": zi, "url": url, "titlu": titlu, "in_curs": in_curs, "actualizat": acum, "pana_la": round(off)})
+        pana = facute * SEG
+        intern.scrie(f"{TRANSCRIERI}/{cid}.json", {"data": zi, "url": url, "titlu": titlu, "live": in_curs, "actualizat": acum, "pana_la": pana, "segmente": segmente})
+        intern.scrie("intern/date/live.json", {"id": cid, "data": zi, "url": url, "titlu": titlu, "in_curs": in_curs, "actualizat": acum, "pana_la": pana})
 
-    while time.time() - start < LIMITA:
-        d, t = durata(url)
-        if d is None:
-            erori += 1
-            if erori >= 6:
-                break
-            time.sleep(40)
+    scrie(True)   # panoul arată imediat că a pornit
+    while True:
+        gata = proc.poll() is not None
+        fisiere = sorted(f for f in os.listdir(folder) if f.endswith(".flac"))
+        complete = fisiere if gata else fisiere[:-1]   # ultima bucată e încă în scriere cât timp descărcarea merge
+        if facute < len(complete):
+            f = os.path.join(folder, complete[facute])
+            off = facute * SEG
+            try:
+                segs, _ = model.transcribe(audio(f), language="ro", beam_size=3, vad_filter=True, condition_on_previous_text=False, initial_prompt=PROMPT)
+                noi = [[round(s.start + off, 1), round(s.end + off, 1), s.text.strip()] for s in segs]
+            except Exception as e:   # noqa: BLE001
+                print("transcrierea bucății a eșuat:", str(e)[:200], flush=True)
+                noi = []
+            segmente += noi
+            facute += 1
+            os.remove(f)
+            scrie(True)
+            print(f"bucata {facute}: până la {facute * SEG} s; {len(noi)} fragmente; {len(complete) - facute} bucăți în așteptare; au trecut {int(time.time() - start)} s", flush=True)
             continue
-        erori, titlu = 0, t or titlu
-        if ultima is None or d > ultima + 1:
-            ultima, neschimbat_din = d, time.time()
-        terminat = time.time() - neschimbat_din > 420   # durata nu mai crește de 7 minute: transmisiunea s-a încheiat
-        disponibil = d - 8 - off
-        if disponibil < (5 if terminat else MINIM):
-            if terminat:
-                break
-            time.sleep(30)
-            continue
-        b = off + min(disponibil, PAS)
-        f = bucata(url, off, b)
-        if not f:
-            print("bucata", int(off), "-", int(b), "nu s-a putut lua", flush=True)
-            time.sleep(40)
-            continue
-        try:
-            segs, _ = model.transcribe(audio(f), language="ro", beam_size=3, vad_filter=True, condition_on_previous_text=False, initial_prompt=PROMPT)
-            noi = [[round(s.start + off, 1), round(s.end + off, 1), s.text.strip()] for s in segs]
-        except Exception as e:   # noqa: BLE001
-            print("transcrierea bucății a eșuat:", str(e)[:200], flush=True)
-            noi = []
-        segmente += noi
-        off = b
-        scrie(True)
-        print(f"până la {int(off)} s din {int(d)} s; {len(noi)} fragmente noi; întârziere {int(d - off)} s", flush=True)
+        if gata or time.time() - start > LIMITA:
+            break
+        time.sleep(10)
+    if proc.poll() is None:
+        proc.terminate()
     scrie(False)
-    return {"id": cid, "secunde": round(off), "fragmente": len(segmente)}
+    return {"id": cid, "secunde": facute * SEG, "fragmente": len(segmente), "iesire_descarcare": proc.poll()}
 
 
 def main(argv=None):
