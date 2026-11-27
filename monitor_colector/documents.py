@@ -5,6 +5,7 @@ OCR-ul folosește pdftoppm (poppler-utils) + tesseract cu limba română (tesser
 import hashlib
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -82,6 +83,37 @@ def text_layer(pdf_path):
         return None, None
 
 
+_FORMULAR = re.compile(r"\bF10\b[\s\S]*\bF20\b")   # formularul ANAF: F10 (bilanț), F20 (cont de profit și pierdere)
+
+
+def fara_cifre(text):
+    """Situațiile financiare depuse pe formularul ANAF au textul (etichetele) extractibil, dar cifrele nu: un astfel de
+    document trebuie citit tot prin OCR, altfel lipsesc exact sumele."""
+    t = text or ""
+    if len(t) < 800 or not _FORMULAR.search(t):
+        return False
+    sume = re.findall(r"(?<![\d.,])(?:\d{1,3}(?:\.\d{3})+|(?!(?:19|20)\d\d(?!\d))\d{4,})(?:,\d+)?(?![\d.])", t)
+    return len(sume) < 10 * len(t) / 1000   # un bilanț completat are ~20 de sume la 1.000 de caractere; doar etichetele, sub 7
+
+
+def marcheaza_formulare(store):
+    """Documentele deja citite din stratul de text care sunt formulare fără cifre: trimise la OCR (o singură dată)."""
+    n = 0
+    for r in store.db.execute("SELECT url, text_path, local_path FROM documents WHERE text_layer=1 AND ocr_at IS NULL AND text_path IS NOT NULL").fetchall():
+        if not (r["local_path"] or "").lower().endswith(".pdf"):
+            continue
+        try:
+            with open(r["text_path"], encoding="utf-8") as f:
+                t = f.read()
+        except OSError:
+            continue
+        if fara_cifre(t):
+            store.update_document(r["url"], text_layer=0)
+            n += 1
+    store.db.commit()
+    return n
+
+
 def extract_text(pdf_path):
     reader = PdfReader(pdf_path)
     return "\n\f".join((p.extract_text() or "") for p in reader.pages)
@@ -144,10 +176,14 @@ def process_downloads(store, session, data_dir=config.DATA_DIR, limit=None, dela
             fields.update(pages=pages, text_layer=has_text)
             if has_text:
                 tp = text_path_for(info["local_path"])
+                t = extract_text(info["local_path"])
                 with open(tp, "w", encoding="utf-8") as f:
-                    f.write(extract_text(info["local_path"]))
+                    f.write(t)
                 fields["text_path"] = tp
                 stats["cu_text"] += 1
+                if fara_cifre(t):   # formular cu etichete, fără cifre: îl citim și prin OCR
+                    fields["text_layer"] = 0
+                    stats["scanate"] += 1
             elif has_text == 0:
                 stats["scanate"] += 1
         store.update_document(url, **fields)
@@ -162,6 +198,7 @@ def process_ocr(store, lang=config.OCR_LANG, limit=None, minutes=None):
     începe documente noi, iar ce s-a terminat rămâne salvat."""
     stats = {"ocr": 0, "pagini": 0, "erori": 0, "oprit_la_buget": False}
     deadline = time.time() + minutes * 60 if minutes else None
+    stats["formulare"] = marcheaza_formulare(store)
     if not ocr_available(lang):
         raise RuntimeError(f"Lipsește pdftoppm, tesseract sau limba „{lang}” (apt install tesseract-ocr-{lang})")
     for row in store.documents_to_ocr(limit):
