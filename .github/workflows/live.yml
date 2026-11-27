@@ -1,0 +1,40 @@
+name: Transcriere în direct (ședință live)
+
+# Pornește-l când începe transmisiunea: la câteva minute ia bucata nouă de sunet, o transcrie și o adaugă în zona internă
+# (Rezumate → „În direct acum”). Se oprește singur la câteva minute după ce se încheie transmisiunea sau după 5 ore și jumătate.
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Linkul direct al transmisiunii (facebook.com/<pagina>/videos/<număr>/, nu linkul scurt de share)"
+        required: true
+      data:
+        description: "Data ședinței, AAAA-LL-ZZ"
+        required: true
+
+concurrency:
+  group: live
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install -q yt-dlp faster-whisper numpy
+      - env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          URL: ${{ inputs.url }}
+          DATA: ${{ inputs.data }}
+        run: python -m monitor_colector.live "$URL" "$DATA"
