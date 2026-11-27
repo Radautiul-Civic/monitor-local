@@ -19,16 +19,17 @@ from datetime import datetime
 
 from . import config
 from .ascunde import ascunde
-from .voturi import normalizeaza
+from .voturi import _lev, normalizeaza
 
 MAJ = "A-ZĂÂÎȘŞȚŢ"
 MIN = "a-zăâîșşțţ"
-TITLU = r"(?:D[lI1!]\.?|D-[lI]\.?|D-ul|D-lui|D-na|D-nei|Dna\.?|D-ra|Domnul|Doamna|Domnisoara)"
+# formele (și greșelile de OCR) ale lui „Dl”, „D-ul”, „Dna”: DI, D!, Di, DL, D-ui, D-uj, D-ul_, Dna_, ID-ul...
+TITLU = r"(?:I?[DdP][-_]?(?:[lI1!iLj]{1,2}|u[lijtn]|ual|nul|n[aâă]|nei|lui|ra|s?oara|omnul|oamna|omnisoara)\.?)"
 NUME = rf"[{MAJ}][\w\-{MIN}]+(?:[ \t]*-[ \t]*[{MAJ}][\w\-{MIN}]+|[ \t]+[{MAJ}][\w\-{MIN}]+){{0,2}}"
 FUNCTIE = r"(?:[Pp]rimar\w*|[Vv]iceprimar\w*|[Ss]ecretar\w*(?:[ \t]+[Gg]eneral\w*)?|[Pp]re[sșş]edinte\w*(?:[ \t]+de[ \t]+[sșş]edin[tțţ][aă])?)"
 # „Dl Jecalo intervine...”, „D-ul Primar spune...”, „Dna consilier Blanaru precizează...”, „Intervine dl Primar și spune...”
 R_VORB = re.compile(
-    rf"^[ \t_|]*(?:(?P<inv>Intervine|Ia[ \t]+cuv[aâ]ntul)[ \t]+)?(?:{TITLU}[ \t]+)?(?:[Cc]onsilier\w*[ \t]+(?:[Ll]ocal[ \t]+)?)?_?"
+    rf"^[ \t_|]*(?:(?:Apoi|Totodat[aă]|[IÎ]n continuare),?[ \t]+)?(?:(?P<inv>Intervine|Ia[ \t]+cuv[aâ]ntul)[ \t]+)?(?:(?P<tit>{TITLU})[ \t_-]+)?(?:[Cc]onsilier\w*[ \t]+(?:[Ll]ocal[ \t]+)?)?_?"
     rf"(?P<cine>{FUNCTIE}|{NUME})(?:[ \t]*\((?P<par>[^)\n]{{3,80}})\))?[ \t,]+(?P<verb>[{MIN}]+)")
 # început de paragraf care nu e intervenție: votul, trecerea la alt punct, formule ale secretariatului
 R_ALT = re.compile(r"^(?:se trece la|intrucat nu|din totalul|in urma desfasurarii|comisia|se supune|a (?:iesit|revenit|intrat)|lipse)")
@@ -100,7 +101,19 @@ def _paragrafe(text):
     return [re.sub(r"\s+", " ", p) for p in out]
 
 
+def _functie(cn):
+    """primar / viceprimar / secretar / presedinte, și cu greșeli de OCR („Prirbar”, „Segretar”)."""
+    w = cn.split()[0] if cn else ""
+    for f, tol in (("viceprimar", 2), ("primar", 1), ("primarul", 1), ("secretar", 2), ("secretarul", 2), ("presedinte", 2), ("presedintele", 2)):
+        if w.startswith(f) or (abs(len(w) - len(f)) <= tol and _lev(w, f, tol) <= tol):
+            return f.replace("primarul", "primar").replace("secretarul", "secretar").replace("presedintele", "presedinte")
+    return None
+
+
 def _verb_ok(m):
+    # un nume fără „Dl/Dna” în față nu e un vorbitor („Astfel spune...”, „ACET precizează...”); funcțiile pot apărea și fără
+    if not m.group("tit") and not _functie(normalizeaza(m.group("cine"))):
+        return False
     return normalizeaza(m.group("verb")) in VERBE or bool(m.group("inv"))
 
 
@@ -146,14 +159,14 @@ def extrage(text):
             continue
         cine = re.sub(r"\s+", " ", re.sub(r"\s*-\s*", "-", m.group("cine"))).strip()
         cn = normalizeaza(cine)
-        rol, nume = None, cine
-        if cn.startswith("primar"):
+        rol, nume, fct = None, cine, _functie(cn)
+        if fct == "primar":
             rol, nume = "primar", primar or "Primarul"
-        elif cn.startswith("viceprimar"):
+        elif fct == "viceprimar":
             rol, nume = "viceprimar", "Viceprimarul"
-        elif cn.startswith("secretar"):
+        elif fct == "secretar":
             rol, nume = "secretar", "Secretarul general"
-        elif cn.startswith("presedinte"):
+        elif fct == "presedinte":
             rol, nume = "presedinte", "Președintele de ședință"
         elif cn.split()[0] in FUNCTII_NENUMITE:
             rol, nume = "functie", FUNCTII_NENUMITE[cn.split()[0]]
@@ -194,7 +207,35 @@ def _potriveste(nume, zi, consilieri):
     if len(cand) > 1:
         in_per = [c for c in cand if any(a <= zi <= b for a, b in c.get("perioade") or [])]
         cand = in_per or cand
-    return cand[0] if len(cand) == 1 else None
+    if len(cand) == 1:
+        return cand[0]
+    if cand or len(tok) != 1:
+        return None
+    # un singur cuvânt (numele de familie), cu greșeli de OCR: „Jecaio”, „Grjincu”, „Oiarean”
+    w = next(iter(tok))
+    if len(w) < 5:
+        return None
+    tol = 1 if len(w) < 7 else 2
+    apr = [c for c in consilieri if any(abs(len(w) - len(x)) <= tol and _lev(w, x, tol) <= tol for x in _cheie(c["nume"]).split() if len(x) >= 5)]
+    if len(apr) > 1:
+        apr = [c for c in apr if any(a <= zi <= b for a, b in c.get("perioade") or [])]
+    return apr[0] if len(apr) == 1 else None
+
+
+def _unifica(persoane):
+    """Variantele de OCR ale aceluiași nume, la cei care nu sunt consilieri („Cerneţchi”/„Cernetcehi”, „Koffler”/„Kofiler”):
+    {cheia variantei: cheia formei celei mai frecvente}."""
+    simple = sorted((p for p in persoane.values() if not p["id"] and ":" not in p["k"] and len(p["k"].split()) == 1 and len(p["k"]) >= 5), key=lambda p: -p["n"])
+    spre, capete = {}, []
+    for p in simple:
+        w = p["k"]
+        tol = 1 if len(w) < 7 else 2
+        g = next((c for c in capete if abs(len(c) - len(w)) <= tol and _lev(w, c, tol) <= tol), None)
+        if g:
+            spre[w] = g
+        else:
+            capete.append(w)
+    return spre
 
 
 def construieste(store, data_dir=config.DATA_DIR):
@@ -215,7 +256,7 @@ def construieste(store, data_dir=config.DATA_DIR):
         vazute.add((r["session_date"], len(text)))
         zi, fisier = r["session_date"], r["url"].rsplit("/", 1)[-1]
         for x in extrage(text):
-            c = None if x["rol"] in ("secretar", "viceprimar", "presedinte", "functie") else _potriveste(x["cine"], zi, consilieri)
+            c = None if x["rol"] in ("secretar", "viceprimar", "presedinte", "functie") or (x["rol"] or "").startswith("invitat") else _potriveste(x["cine"], zi, consilieri)
             nume = c["nume"] if c else x["cine"]
             k = (x["rol"] + ":" if x["rol"] in ("secretar", "viceprimar", "presedinte", "functie") else "") + _cheie(nume)
             p = persoane.setdefault(k, {"k": k, "nume": nume, "id": c["id"] if c else None, "roluri": Counter(), "n": 0, "teme": Counter(), "ani": Counter()})
@@ -225,6 +266,16 @@ def construieste(store, data_dir=config.DATA_DIR):
             for t in x["teme"]:
                 p["teme"][t] += 1
             pe_an.setdefault(zi[:4], []).append([zi, x["punct"], x["titlu"], k, x["rol"], x["text"], x["teme"], x["tipuri"], fisier, r["url"]])
+    spre = _unifica(persoane)
+    for k, g in spre.items():
+        a, b = persoane.pop(k), persoane[g]
+        b["n"] += a["n"]
+        for c in ("roluri", "teme", "ani"):
+            b[c].update(a[c])
+    if spre:
+        for L in pe_an.values():
+            for x in L:
+                x[3] = spre.get(x[3], x[3])
     d = os.path.join(data_dir, "_intern")
     os.makedirs(d, exist_ok=True)
     for n in os.listdir(d):
