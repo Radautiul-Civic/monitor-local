@@ -3559,6 +3559,9 @@
     el.innerHTML = head("Transcrierea ședinței", "") + '<p class="updated">Se încarcă...</p>';
     Promise.all([get("transcrieri/" + encodeURIComponent(id) + ".json"), get("transcrieri/" + encodeURIComponent(id) + "-vorbitori.json").catch(function () { return null; })]).then(function (d) {
       var T = d[0], VB = d[1], I = (VB && VB.interventii) || [], S = T.segmente || [];
+      if (T.live) setTimeout(function () {   // în direct: reîncarcă la un minut, cât timp pagina e tot aceasta și nu se caută nimic
+        if (location.hash.indexOf("rezumate/transcriere/" + encodeURIComponent(id)) >= 0 && !($("tr-q") && $("tr-q").value)) { var y = window.scrollY; transcriereIntern(el, r); setTimeout(function () { window.scrollTo(0, y); }, 400); }
+      }, 60000);
       var hms = function (x) { x = Math.floor(x); return Math.floor(x / 3600) + ":" + ("0" + Math.floor(x % 3600 / 60)).slice(-2) + ":" + ("0" + x % 60).slice(-2); };
       var link = function (t) { var u = safeUrl(T.url) || ""; return /youtu/.test(u) ? u + (u.indexOf("?") > 0 ? "&" : "?") + "t=" + Math.floor(t) : u; };
       var cineLa = function (t) { for (var i = 0; i < I.length; i++) if (I[i].a <= t && t <= I[i].b + 1) return I[i]; return null; };
@@ -4001,7 +4004,16 @@
             '<button type="button" class="btn-s" data-act="scoate" data-url="' + esc(x.v.url) + '">Scoate din listă</button></div></div>';
         }).join("") + "</section>" : "") +
           (ids.length ? ids.map(function (id) { return ciornaHtml(id, C[id], A[id]); }).join("") : '<section class="card section"><p class="empty">Nicio ciornă încă.</p></section>');
-        $("rz-l").innerHTML = h;
+        $("rz-l").innerHTML = '<div id="rz-live"></div>' + h;
+        get(DATA + "live.json?v=" + Date.now()).then(function (Lv) {
+          if (!Lv || !Lv.id || !$("rz-live")) return;
+          var vechi = (Date.now() - new Date(Lv.actualizat).getTime()) > 36 * 3600e3;
+          if (!Lv.in_curs && vechi) return;
+          $("rz-live").innerHTML = '<section class="card section rz-lipsa"><h2>' + (Lv.in_curs ? "În direct acum" : "Transmisiune încheiată") + ": ședința din " + esc(zi(Lv.data)) + "</h2>" +
+            '<p class="note">Transcriere de lucru, făcută pe măsură ce se desfășoară ședința (cu câteva minute întârziere). Are greșeli și nu spune cine vorbește. ' +
+            "Transcrisă până la minutul " + Math.floor((Lv.pana_la || 0) / 60) + ", actualizată la " + esc(String(Lv.actualizat).slice(11, 16)) + ' (ora serverului, UTC).</p>' +
+            '<p><a class="btn" href="#rezumate/transcriere/' + encodeURIComponent(Lv.id) + '">Deschide transcrierea în direct</a></p></section>';
+        }).catch(function () {});
         Array.prototype.forEach.call($("rz-l").querySelectorAll(".v-mod button"), function (b) {
           b.addEventListener("click", function () {
             var sc = b.dataset.act === "scoate", d = b.parentNode.querySelector("input").value;
