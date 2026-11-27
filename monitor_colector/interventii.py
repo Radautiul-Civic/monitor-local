@@ -291,3 +291,58 @@ def construieste(store, data_dir=config.DATA_DIR):
                    "teme": [[k, e] for k, e, _ in TEME], "persoane": P,
                    "campuri": ["data", "punct", "titlu", "persoana", "rol", "text", "teme", "tipuri", "fisier", "url"]}, f, ensure_ascii=False, separators=(",", ":"))
     return {"interventii": sum(len(L) for L in pe_an.values()), "persoane": len(P), "ani": len(pe_an)}
+
+
+# ---------------------------------------------------------------- din înregistrări (transcrieri cu vorbitori)
+R_ROL_NUME = re.compile(r"(?i)^(?:domnul|doamna|dl\.?|dna\.?|consilier\w*(?:\s+local\w*)?|primarul|primar|viceprimarul|viceprimar|secretarul(?:\s+general)?|"
+                        r"pre[sșş]edintele(?:\s+de\s+[sșş]edin[tțţ][aă])?|directorul(?:\s+\w+)?|administratorul(?:\s+\w+)?|arhitectul(?:[\s-]+[sșş]ef)?)\s+")
+
+
+def _fara_rol(nume):
+    n = nume or ""
+    for _ in range(3):
+        n2 = R_ROL_NUME.sub("", n).strip()
+        if n2 == n or not n2:
+            break
+        n = n2
+    return n
+
+
+def fise_video(intern, data_dir=config.DATA_DIR):
+    """Fișele declarațiilor din înregistrări: pentru fiecare transcriere care are vorbitorii puși (vorbitori.py), intervențiile
+    cu vorbitor, minutul, cuvintele din transcriere și fragmentul corespunzător din procesul-verbal, plus nepotrivirile dintre
+    înregistrare și procesul-verbal. Se scrie direct în zona internă: intern/date/interventii-video.json (strict intern)."""
+    from .video import TRANSCRIERI
+    consilieri = _consilieri(data_dir)
+    fisiere = sorted(f for f in intern.lista(TRANSCRIERI) if f.endswith("-vorbitori.json"))
+    out, nepotriviri, sedinte = [], [], []
+    for f in fisiere:
+        cid = f[:-len("-vorbitori.json")]
+        v, tr = intern.json(f"{TRANSCRIERI}/{f}"), intern.json(f"{TRANSCRIERI}/{cid}.json")
+        if not v or not tr or not tr.get("segmente"):
+            continue
+        zi, S = tr.get("data") or cid[:10], tr["segmente"]
+        n = 0
+        for x in v.get("interventii") or []:
+            if not x.get("cine") or (x.get("rol") or "").startswith("pre") and x["b"] - x["a"] < 25:   # conducerea ședinței
+                continue
+            text = " ".join(s[2] for s in S if x["a"] - 1 <= s[0] <= x["b"])
+            if len(text) < 40:
+                continue
+            nume = _fara_rol(x["cine"])
+            c = _potriveste(nume, zi, consilieri)
+            sn = normalizeaza(text + " " + (x.get("pv") or ""))
+            tipuri = [k for k, rx in TIPURI if rx.search(sn)]
+            exec_ = (x.get("rol") or "") in ("primar", "viceprimar", "funcționar", "functionar")
+            if (R_ANGAJ_EXEC if exec_ else R_ANGAJ).search(sn):
+                tipuri.append("angajament")
+            out.append([zi, x["a"], x["b"], _cheie(c["nume"] if c else nume), c["nume"] if c else x["cine"], x.get("rol"), x.get("sigur") or "probabil",
+                        ascunde(text)[:2000], x.get("pv"), [k for k, _, rx in TEME_RX if rx.search(sn)], tipuri, cid])
+            n += 1
+        for y in v.get("nepotriviri") or []:
+            nepotriviri.append([zi, y.get("minut"), (y.get("ce") or "")[:500], cid])
+        sedinte.append({"id": cid, "data": zi, "url": tr.get("url"), "titlu": tr.get("titlu"), "interventii": n})
+    intern.scrie("intern/date/interventii-video.json", {
+        "generat_la": datetime.now().isoformat(timespec="seconds"), "sedinte": sedinte, "nepotriviri": nepotriviri,
+        "campuri": ["data", "de_la", "pana_la", "persoana", "nume", "rol", "sigur", "text", "pv", "teme", "tipuri", "id"], "interventii": out})
+    return {"sedinte": len(sedinte), "interventii": len(out), "nepotriviri": len(nepotriviri)}

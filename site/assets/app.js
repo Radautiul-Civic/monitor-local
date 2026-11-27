@@ -3625,7 +3625,8 @@
       $("sp").innerHTML = '<section class="card section"><p class="note"><b>Cum citești:</b> procesul-verbal e rezumatul făcut de secretariat, nu o stenogramă, iar textul e citit automat (OCR) și poate avea greșeli. ' +
         "Numele apar de obicei doar cu numele de familie. Înainte de a cita pe cineva, verifică pe PDF și, unde există, pe înregistrare.</p>" +
         '<div class="grid">' + tile("Intervenții", nr(ani.reduce(function (s, a) { return s + X.ani[a]; }, 0)), "", ani.length ? "din " + ani[0] + " până în " + ani[ani.length - 1] : "") + tile("Persoane", nr(X.persoane.length), "", "consilieri, primari, funcționari, invitați") + "</div>" +
-        '<div class="filters"><select id="sp-p" aria-label="Persoana"><option value="">Toate persoanele</option>' + X.persoane.filter(function (p) { return p.n >= 3; }).map(function (p) {
+        '<div class="filters"><select id="sp-s" aria-label="Sursa"><option value="pv">Din procesele-verbale</option><option value="video">Din înregistrări (transcrieri)</option><option value="nep">Nepotriviri: înregistrare față de procesul-verbal</option></select>' +
+        '<select id="sp-p" aria-label="Persoana"><option value="">Toate persoanele</option>' + X.persoane.filter(function (p) { return p.n >= 3; }).map(function (p) {
           return '<option value="' + esc(p.k) + '">' + esc(p.nume) + " (" + esc(SPUS_ROL[p.rol] || p.rol) + ", " + p.n + ")</option>"; }).join("") + "</select>" +
         '<select id="sp-t" aria-label="Tema"><option value="">Toate temele</option>' + X.teme.map(function (t) { return '<option value="' + esc(t[0]) + '">' + esc(t[1]) + "</option>"; }).join("") + "</select>" +
         '<select id="sp-f" aria-label="Felul intervenției"><option value="">Orice fel</option>' + Object.keys(SPUS_TIP).map(function (k) { return '<option value="' + k + '">' + SPUS_TIP[k] + "</option>"; }).join("") + "</select>" +
@@ -3638,7 +3639,24 @@
       function arata() {
         var c = ++cerere, fp = $("sp-p").value, ft = $("sp-t").value, ff = $("sp-f").value, a1 = +$("sp-a1").value, a2 = +$("sp-a2").value, cuv = (norm($("sp-q").value).match(/[a-z0-9]{3,}/g) || []);
         $("sp-out").innerHTML = '<p class="updated">Se încarcă...</p>';
-        spusAni(Math.min(a1, a2), Math.max(a1, a2)).then(function (L) {
+        var sursa = $("sp-s").value;
+        var hms = function (x) { x = Math.floor(x); return Math.floor(x / 3600) + ":" + ("0" + Math.floor(x % 3600 / 60)).slice(-2) + ":" + ("0" + x % 60).slice(-2); };
+        if (sursa !== "pv" && !SPUS.video) SPUS.video = get(DATA + "interventii-video.json").catch(function () { return { interventii: [], nepotriviri: [], sedinte: [] }; });
+        if (sursa === "nep") {
+          SPUS.video.then(function (V) {
+            if (c !== cerere) return;
+            var N = (V.nepotriviri || []).filter(function (x) { var a = +String(x[0]).slice(0, 4); return a >= Math.min(a1, a2) && a <= Math.max(a1, a2) && (!cuv.length || cuv.every(function (w) { return norm(x[2]).indexOf(w) >= 0; })); })
+              .sort(function (a, b) { return b[0].localeCompare(a[0]) || String(a[1]).localeCompare(String(b[1])); });
+            $("sp-out").innerHTML = '<section class="card section"><h2>Nepotriviri <span class="nr-b n">' + N.length + '</span></h2><p class="note">Ce spune procesul-verbal și nu se aude în înregistrare, sau invers, mai ales la voturi și la cine ce a spus. ' +
+              "Sunt semnalate de un model AI la potrivirea transcrierii cu procesul-verbal: fiecare se verifică ascultând minutul, înainte de orice concluzie. Apar doar ședințele care au și înregistrare transcrisă, și proces-verbal (" + (V.sedinte || []).length + " până acum).</p>" +
+              (N.map(function (x) { return '<div class="doc"><div class="h"><span class="id">' + esc(zi(x[0])) + '</span> <a href="#rezumate/transcriere/' + encodeURIComponent(x[3]) + '">minutul ' + esc(x[1] || "?") + '</a></div><div class="t sp-tx">' + esc(x[2]) + "</div></div>"; }).join("") || '<p class="empty">Nicio nepotrivire semnalată în perioada aleasă.</p>') + "</section>";
+          });
+          return;
+        }
+        (sursa === "video" ? SPUS.video.then(function (V) {   // aceeași formă ca la procesele-verbale, cu minutul, siguranța și fragmentul din PV
+          return (V.interventii || []).filter(function (x) { var a = +String(x[0]).slice(0, 4); return a >= Math.min(a1, a2) && a <= Math.max(a1, a2); })
+            .map(function (x) { if (!P[x[3]]) P[x[3]] = { k: x[3], nume: x[4], rol: x[5] || "altul", n: 0 }; var y = [x[0], null, "", x[3], x[5], x[7], x[9], x[10], "", ""]; y.video = { a: x[1], sigur: x[6], pv: x[8], id: x[11] }; return y; });
+        }) : spusAni(Math.min(a1, a2), Math.max(a1, a2))).then(function (L) {
           if (c !== cerere) return;
           L = L.filter(function (x) {
             if (fp && x[3] !== fp) return false;
@@ -3669,7 +3687,9 @@
               return '<div class="doc"><div class="h"><span class="id">' + esc(zi(x[0])) + "</span> <b>" + esc(pp.nume || x[3]) + "</b>" + (x[4] ? ' <span class="muted">' + esc(SPUS_ROL[x[4]] || x[4]) + "</span>" : "") +
                 x[7].map(function (t) { return ' <span class="tag">' + esc(SPUS_TIP[t] || t) + "</span>"; }).join("") + "</div>" +
                 (x[2] ? '<div class="m"><span class="muted">' + (x[1] === "diverse" ? "Diverse" : x[1] != null ? "Punctul " + x[1] : "Înainte de ordinea de zi") + ": " + esc(x[2]) + "</span></div>" : "") +
-                '<div class="t sp-tx">' + esc(x[5]) + '</div><div class="m">' + x[6].map(function (t) { return '<span class="tag">' + esc(temeE[t] || t) + "</span>"; }).join(" ") +
+                (x.video ? '<div class="m"><span class="tag">' + (x.video.sigur === "sigur" ? "vorbitor sigur" : "vorbitor probabil") + '</span> <a href="#rezumate/transcriere/' + encodeURIComponent(x.video.id) + '">minutul ' + hms(x.video.a) + " în transcriere</a></div>" : "") +
+                '<div class="t sp-tx">' + esc(x[5]) + "</div>" + (x.video ? '<div class="m"><span class="muted">' + (x.video.pv ? "În procesul-verbal: „" + esc(x.video.pv) + "”" : "Nu are corespondent în procesul-verbal.") + "</span></div>" : "") +
+                '<div class="m">' + x[6].map(function (t) { return '<span class="tag">' + esc(temeE[t] || t) + "</span>"; }).join(" ") +
                 ' <a href="#consiliu/sedinte/' + esc(x[0]) + '">ședința</a>' + (safeUrl(x[9]) ? ' <a href="' + esc(safeUrl(x[9])) + '" rel="noopener">procesul-verbal (' + esc(x[8]) + ")</a>" : "") + "</div></div>";
             }).join(""));
             $("sp-more").hidden = shown >= L.length;
@@ -3679,10 +3699,11 @@
             $("sp-exp").addEventListener("click", function () {
               var M = L.slice(0, 600).reverse(), titlu = "Cine ce a spus" + (p ? " - " + p.nume : "") + (ft ? " - " + temeE[ft] : "");
               var t = "# " + titlu + "\n\nGenerat la " + zi(new Date().toISOString().slice(0, 10)) + " din Monitorul local al Asociației Rădăuțiul Civic. Document intern, nu se distribuie.\n\n" +
-                "Sursa: procesele-verbale ale ședințelor Consiliului Local Rădăuți, publicate pe primariaradauti.ro. Procesul-verbal e rezumatul secretariatului, nu o stenogramă; textul e citit automat (OCR) și poate avea greșeli. " +
+                (sursa === "video" ? "Sursa: transcrierile automate ale înregistrărilor ședințelor Consiliului Local Rădăuți, cu vorbitorii puși de un model AI după procesul-verbal. Transcrierea și atribuirea au greșeli. " :
+                "Sursa: procesele-verbale ale ședințelor Consiliului Local Rădăuți, publicate pe primariaradauti.ro. Procesul-verbal e rezumatul secretariatului, nu o stenogramă; textul e citit automat (OCR) și poate avea greșeli. ") +
                 "Înainte de a cita pe cineva, verifică pe PDF și pe înregistrare. Perioada: " + Math.min(a1, a2) + " - " + Math.max(a1, a2) + ". Intervenții: " + M.length + (L.length > M.length ? " (cele mai recente din " + L.length + ")" : "") + ".\n\n" +
                 M.map(function (x) { var pp = P[x[3]] || {}; return "## " + zi(x[0]) + " - " + (pp.nume || x[3]) + (x[4] ? " (" + (SPUS_ROL[x[4]] || x[4]) + ")" : "") + "\n\n" +
-                  (x[2] ? (x[1] === "diverse" ? "Diverse" : x[1] != null ? "Punctul " + x[1] : "Înainte de ordinea de zi") + ": " + x[2] + "\n\n" : "") + "> " + x[5] + "\n\nFișier: " + x[8] + (x[9] ? " (" + x[9] + ")" : "") +
+                  (x[2] ? (x[1] === "diverse" ? "Diverse" : x[1] != null ? "Punctul " + x[1] : "Înainte de ordinea de zi") + ": " + x[2] + "\n\n" : "") + "> " + x[5] + "\n\n" + (x.video ? "Sursa: transcrierea automată a înregistrării, minutul " + hms(x.video.a) + " (vorbitor " + x.video.sigur + "; de verificat pe înregistrare)" + (x.video.pv ? ". În procesul-verbal: „" + x.video.pv + "”" : ". Fără corespondent în procesul-verbal") : "Fișier: " + x[8] + (x[9] ? " (" + x[9] + ")" : "")) +
                   (x[6].length ? ". Teme: " + x[6].map(function (k) { return temeE[k] || k; }).join(", ") : "") + ".\n"; }).join("\n");
               var a = document.createElement("a");
               a.href = URL.createObjectURL(new Blob([t.replace(/—/g, " - ")], { type: "text/markdown;charset=utf-8" })); a.download = titlu.replace(/[_\\/:*?"<>|]+/g, " ") + ".md";
@@ -3691,7 +3712,7 @@
           }
         });
       }
-      ["sp-p", "sp-t", "sp-f", "sp-a1", "sp-a2"].forEach(function (id) { $(id).addEventListener("change", arata); });
+      ["sp-s", "sp-p", "sp-t", "sp-f", "sp-a1", "sp-a2"].forEach(function (id) { $(id).addEventListener("change", arata); });
       var tq; $("sp-q").addEventListener("input", function () { clearTimeout(tq); tq = setTimeout(arata, 250); });
       arata();
     }).catch(function () { $("sp").innerHTML = '<p class="empty">Registrul nu e încă pregătit. Apare după următoarea colectare zilnică.</p>'; });

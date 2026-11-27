@@ -200,6 +200,11 @@ def main(argv=None):
                 return 0
             from . import vorbitori
             print(json.dumps(vorbitori.de_facut(I), ensure_ascii=False))
+            try:   # fișele declarațiilor din înregistrări, pentru registrul intern „Cine ce a spus”
+                from . import interventii
+                print(json.dumps({"fise_video": interventii.fise_video(I)}, ensure_ascii=False))
+            except Exception as e:   # noqa: BLE001
+                print(json.dumps({"fise_video": f"eroare: {e}"}, ensure_ascii=False))
             return 0
 
         # finalizeaza: transcrierea întreagă, apoi ciorna rezumatului

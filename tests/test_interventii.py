@@ -60,3 +60,28 @@ def test_construieste(tmp_path):
     assert L[0][0] == "2026-09-24" and L[0][8] == "pv-sed-24.09.2026.pdf"
     # nimic în afara folderului intern
     assert not os.path.exists(tmp_path / "intern-date" / "interventii-index.json")
+
+
+def test_fise_video(tmp_path):
+    class Fals:
+        def __init__(self):
+            self.scris = {}
+
+        def lista(self, folder):
+            return ["2026-09-24-1.json", "2026-09-24-1-vorbitori.json"]
+
+        def json(self, p, implicit=None):
+            if p.endswith("-vorbitori.json"):
+                return {"interventii": [{"a": 10, "b": 40, "cine": "primarul Loghin Bogdan-Andrei", "rol": "primar", "sigur": "sigur", "pv": "DI Primar precizează că vom efectua un audit"},
+                                        {"a": 41, "b": 50, "cine": None, "rol": None, "sigur": "probabil", "pv": None}],
+                        "nepotriviri": [{"minut": "0:10:00", "ce": "PV spune 7 voturi, în înregistrare se aud 8"}]}
+            return {"data": "2026-09-24", "url": "https://x/v", "segmente": [[10, 20, "În perioada viitoare vom efectua un audit extern la termoficare."], [20, 40, "Costă 3.672.304 lei."], [41, 50, "Altcineva."]]}
+
+        def scrie(self, p, d):
+            self.scris[p] = d
+    f = Fals()
+    r = I.fise_video(f, str(tmp_path))
+    assert r == {"sedinte": 1, "interventii": 1, "nepotriviri": 1}
+    d = f.scris["intern/date/interventii-video.json"]
+    x = d["interventii"][0]
+    assert x[3] == "andrei bogdan loghin" and x[6] == "sigur" and "angajament" in x[10] and "cifre" in x[10] and "termoficare" in x[9]
