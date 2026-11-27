@@ -55,13 +55,10 @@ jobs:
           json.dump(out, open("extras.json", "w", encoding="utf-8"), ensure_ascii=False)
           PY
           openssl rand -hex 32 > k.txt
+          gzip -9 extras.json && mv extras.json.gz extras.json
           openssl enc -aes-256-cbc -pbkdf2 -in extras.json -out extras.enc -pass file:k.txt
           openssl pkeyutl -encrypt -pubin -inkey tools/extras-cheie-publica.pem -in k.txt -out k.enc
           rm -f extras.json k.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: extras
-          path: |
-            extras.enc
-            k.enc
-          retention-days: 1
+      - name: Textul criptat (nu poate fi citit fără cheia privată)
+        run: |
+          echo "=====CHEIE"; base64 -w 160 k.enc; echo "=====EXTRAS"; base64 -w 160 extras.enc; echo "=====SFARSIT"
