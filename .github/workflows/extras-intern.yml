@@ -1,0 +1,67 @@
+name: Extras criptat din transcrierile interne
+
+# Scoate fragmentele dintr-o transcriere internă care se potrivesc cu o expresie și le pune într-un fișier CRIPTAT
+# (cheia publică: tools/extras-cheie-publica.pem). Jurnalul e public, deci aici apar doar cifre, niciodată text.
+on:
+  workflow_dispatch:
+    inputs:
+      fisiere:
+        description: "expresie pentru numele fișierelor din intern/transcrieri"
+        default: "^live-"
+      cauta:
+        description: "expresie căutată în text (fără diacritice, litere mici); gol = tot"
+        default: ""
+      context:
+        description: "câte fragmente înainte și după"
+        default: "25"
+
+permissions:
+  contents: read
+
+jobs:
+  e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FISIERE: ${{ inputs.fisiere }}
+          CAUTA: ${{ inputs.cauta }}
+          CONTEXT: ${{ inputs.context }}
+        run: |
+          python - <<'PY'
+          import os, re, json
+          from monitor_colector.intern_ftp import Intern
+          from monitor_colector.voturi import normalizeaza
+          rf, rc, ctx = re.compile(os.environ["FISIERE"]), os.environ["CAUTA"], int(os.environ["CONTEXT"])
+          out = []
+          with Intern() as I:
+              for f in sorted(x for x in I.lista("intern/transcrieri") if rf.search(x) and x.endswith(".json")):
+                  X = I.json("intern/transcrieri/" + f) or {}
+                  S = X.get("segmente") or []
+                  if not S:
+                      continue
+                  if rc:
+                      idx = [i for i, s in enumerate(S) if re.search(rc, normalizeaza(s[2]))]
+                      keep = sorted({j for i in idx for j in range(max(0, i - ctx), min(len(S), i + ctx + 1))})
+                  else:
+                      idx, keep = [], list(range(len(S)))
+                  print("fisier:", f, "| fragmente:", len(S), "| potriviri:", len(idx), "| extrase:", len(keep), "| actualizat:", X.get("actualizat"), "| in_curs:", X.get("live"))
+                  out.append({"fisier": f, "data": X.get("data"), "url": X.get("url"), "actualizat": X.get("actualizat"), "potriviri": [S[i][0] for i in idx],
+                              "segmente": [S[i] for i in keep]})
+          json.dump(out, open("extras.json", "w", encoding="utf-8"), ensure_ascii=False)
+          PY
+          openssl rand -hex 32 > k.txt
+          openssl enc -aes-256-cbc -pbkdf2 -in extras.json -out extras.enc -pass file:k.txt
+          openssl pkeyutl -encrypt -pubin -inkey tools/extras-cheie-publica.pem -in k.txt -out k.enc
+          rm -f extras.json k.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extras
+          path: |
+            extras.enc
+            k.enc
+          retention-days: 1
