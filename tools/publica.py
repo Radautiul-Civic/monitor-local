@@ -182,6 +182,12 @@ def intern_date():
         for n in sorted(os.listdir(di)):
             if n.endswith(".json"):
                 out[n] = os.path.join(di, n)
+    # cine ce a spus (registrul intervențiilor din procesele-verbale): strict intern
+    di2 = os.path.join(d, "_intern")
+    if os.path.isdir(di2):
+        for n in sorted(os.listdir(di2)):
+            if n.startswith("interventii-") and n.endswith(".json"):
+                out[n] = os.path.join(di2, n)
     # textele documentelor doar interne (Servicii Comunale), pentru dosarele pe temă
     if os.path.exists(os.path.join(d, "_intern", "dosar-intern.json")):
         out["dosar-intern.json"] = os.path.join(d, "_intern", "dosar-intern.json")

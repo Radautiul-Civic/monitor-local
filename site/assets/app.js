@@ -61,7 +61,7 @@
       return h;
     } };
   // panoul de control (doar intern): în bara lui, separată de meniul platformei
-  if (INTERN) [["sarcini", "De făcut"], ["dosar", "Dosar pe temă"], ["rezumate", "Rezumate"], ["analize", "Analize"], ["semnale", "Semnale"], ["mesaje", "Mesaje"], ["declaratii", "Declarații"], ["arhiva", "Arhiva"]]
+  if (INTERN) [["sarcini", "De făcut"], ["dosar", "Dosar pe temă"], ["spus", "Cine ce a spus"], ["rezumate", "Rezumate"], ["analize", "Analize"], ["semnale", "Semnale"], ["mesaje", "Mesaje"], ["declaratii", "Declarații"], ["arhiva", "Arhiva"]]
     .forEach(function (x) { SECTIUNI.push({ id: x[0], nume: x[1], admin: true }); });
   SECTIUNI.push({ id: "despre", nume: "Despre", def: "despre", sub: [["despre", "Despre monitor"], ["glosar", "Glosar"]] });
 
@@ -3550,6 +3550,100 @@
       });
     }).catch(function () { el.innerHTML = head("Transcrierea ședinței", "") + '<p class="empty">Transcrierea nu există sau nu s-a putut citi.</p>'; });
   }
+  // ---------- Cine ce a spus (STRICT INTERN): intervențiile din procesele-verbale, pe persoane și pe teme ----------
+  var SPUS = { idx: null, ani: {} };
+  var SPUS_TIP = { intrebare: "Întrebare", propunere: "Propunere", angajament: "Angajament", cifre: "Cu cifre", conflict: "Conflict de interese" };
+  var SPUS_ROL = { primar: "primar", viceprimar: "viceprimar", secretar: "secretar general", presedinte: "președinte de ședință", consilier: "consilier local", functie: "funcție", altul: "alt vorbitor" };
+  function spusIncarca() {
+    if (SPUS.idx) return Promise.resolve(SPUS.idx);
+    return get(DATA + "interventii-index.json").then(function (d) { SPUS.idx = d; return d; });
+  }
+  function spusAni(a1, a2) {   // intervențiile din anii ceruți (fișier pe an, încărcat o singură dată)
+    var ani = Object.keys(SPUS.idx.ani).filter(function (a) { return +a >= a1 && +a <= a2; });
+    return Promise.all(ani.map(function (a) { return SPUS.ani[a] ? SPUS.ani[a] : (SPUS.ani[a] = get(DATA + "interventii-" + a + ".json").catch(function () { return []; })); }))
+      .then(function (L) { return [].concat.apply([], L); });
+  }
+  function spusIntern(el, r) {
+    if (!INTERN) return;
+    el.innerHTML = head("Cine ce a spus", "Intervențiile consemnate în procesele-verbale ale ședințelor, pe persoane și pe teme. Pagină strict internă: nu se publică și nu se distribuie.") + '<div id="sp"><p class="updated">Se încarcă...</p></div>';
+    spusIncarca().then(function (X) {
+      var ani = Object.keys(X.ani).sort(), temeE = {}; X.teme.forEach(function (t) { temeE[t[0]] = t[1]; });
+      var P = {}; X.persoane.forEach(function (p) { P[p.k] = p; });
+      var q0 = r.q || {};
+      $("sp").innerHTML = '<section class="card section"><p class="note"><b>Cum citești:</b> procesul-verbal e rezumatul făcut de secretariat, nu o stenogramă, iar textul e citit automat (OCR) și poate avea greșeli. ' +
+        "Numele apar de obicei doar cu numele de familie. Înainte de a cita pe cineva, verifică pe PDF și, unde există, pe înregistrare.</p>" +
+        '<div class="grid">' + tile("Intervenții", nr(ani.reduce(function (s, a) { return s + X.ani[a]; }, 0)), "", ani.length ? "din " + ani[0] + " până în " + ani[ani.length - 1] : "") + tile("Persoane", nr(X.persoane.length), "", "consilieri, primari, funcționari, invitați") + "</div>" +
+        '<div class="filters"><select id="sp-p" aria-label="Persoana"><option value="">Toate persoanele</option>' + X.persoane.filter(function (p) { return p.n >= 3; }).map(function (p) {
+          return '<option value="' + esc(p.k) + '">' + esc(p.nume) + " (" + esc(SPUS_ROL[p.rol] || p.rol) + ", " + p.n + ")</option>"; }).join("") + "</select>" +
+        '<select id="sp-t" aria-label="Tema"><option value="">Toate temele</option>' + X.teme.map(function (t) { return '<option value="' + esc(t[0]) + '">' + esc(t[1]) + "</option>"; }).join("") + "</select>" +
+        '<select id="sp-f" aria-label="Felul intervenției"><option value="">Orice fel</option>' + Object.keys(SPUS_TIP).map(function (k) { return '<option value="' + k + '">' + SPUS_TIP[k] + "</option>"; }).join("") + "</select>" +
+        '<select id="sp-a1" aria-label="Din anul">' + ani.map(function (a) { return "<option>" + a + "</option>"; }).join("") + '</select><select id="sp-a2" aria-label="Până în anul">' + ani.map(function (a) { return "<option>" + a + "</option>"; }).join("") + "</select>" +
+        '<input type="search" id="sp-q" placeholder="Cuvinte din intervenție (ex. audit, turbine)" aria-label="Caută în intervenții"></div></section><div id="sp-out"></div>';
+      $("sp-a1").value = q0.a1 && X.ani[q0.a1] ? q0.a1 : ani[Math.max(0, ani.length - 3)]; $("sp-a2").value = ani[ani.length - 1];
+      if (q0.p && P[q0.p]) { $("sp-p").value = q0.p; $("sp-a1").value = ani[0]; }
+      if (q0.t && temeE[q0.t]) $("sp-t").value = q0.t;
+      var cerere = 0;
+      function arata() {
+        var c = ++cerere, fp = $("sp-p").value, ft = $("sp-t").value, ff = $("sp-f").value, a1 = +$("sp-a1").value, a2 = +$("sp-a2").value, cuv = (norm($("sp-q").value).match(/[a-z0-9]{3,}/g) || []);
+        $("sp-out").innerHTML = '<p class="updated">Se încarcă...</p>';
+        spusAni(Math.min(a1, a2), Math.max(a1, a2)).then(function (L) {
+          if (c !== cerere) return;
+          L = L.filter(function (x) {
+            if (fp && x[3] !== fp) return false;
+            if (ft && x[6].indexOf(ft) < 0) return false;
+            if (ff ? x[7].indexOf(ff) < 0 : (x[7][0] === "conflict" && !fp)) return false;   // anunțurile de conflict de interese apar doar la cerere sau pe fișa persoanei
+            if (cuv.length) { var n = norm(x[5]); return cuv.every(function (w) { return n.indexOf(w) >= 0; }); }
+            return true;
+          }).sort(function (a, b) { return b[0].localeCompare(a[0]); });
+          var pe = {}, peT = {}; L.forEach(function (x) { pe[x[3]] = (pe[x[3]] || 0) + 1; x[6].forEach(function (t) { peT[t] = (peT[t] || 0) + 1; }); });
+          var top = Object.keys(pe).sort(function (a, b) { return pe[b] - pe[a]; }).slice(0, 14), maxP = top.length ? pe[top[0]] : 1;
+          var topT = Object.keys(peT).sort(function (a, b) { return peT[b] - peT[a]; }), maxT = topT.length ? peT[topT[0]] : 1;
+          var p = fp && P[fp];
+          var h = (p ? '<section class="card section"><h2>' + esc(p.nume) + ' <span class="muted">' + esc(SPUS_ROL[p.rol] || p.rol) + "</span></h2><p class=\"note\">" + nr(p.n) + " intervenții consemnate în total" +
+              (p.id ? ' · <a href="#consiliu/consilieri/' + encodeURIComponent(p.id) + '">fișa consilierului (prezență, voturi)</a>' : "") + "</p></section>" : "") +
+            '<section class="card section"><h2>' + (fp ? "Pe ce teme" : "Cine a vorbit cel mai mult") + ' <span class="nr-b n">' + nr(L.length) + "</span></h2>" +
+            (L.length ? '<div class="hbars">' + (fp ? topT.map(function (t) { return '<a class="hb hb-a" href="#" data-t="' + esc(t) + '"><span class="hb-l">' + esc(temeE[t] || t) + '</span><span class="hb-t"><i style="width:' + Math.round(100 * peT[t] / maxT) + '%"></i></span><span class="hb-v">' + peT[t] + "</span></a>"; }).join("")
+              : top.map(function (k) { return '<a class="hb hb-a" href="#" data-p="' + esc(k) + '"><span class="hb-l">' + esc((P[k] || {}).nume || k) + '</span><span class="hb-t"><i style="width:' + Math.round(100 * pe[k] / maxP) + '%"></i></span><span class="hb-v">' + pe[k] + "</span></a>"; }).join("")) + "</div>" : "") + "</section>" +
+            '<section class="card section"><div class="h-row"><h2>Intervenții</h2><button type="button" class="btn-s" id="sp-exp"' + (L.length ? "" : " disabled") + ">Descarcă lista pentru un chat (.md)</button></div>" +
+            (L.length ? '<div id="sp-l"></div><button class="more" id="sp-more" hidden>Arată mai multe</button>' : '<p class="empty">Nicio intervenție cu aceste filtre.</p>') + "</section>";
+          $("sp-out").innerHTML = h;
+          Array.prototype.forEach.call($("sp-out").querySelectorAll("a[data-p]"), function (a) { a.addEventListener("click", function (e) { e.preventDefault(); $("sp-p").value = a.dataset.p; arata(); }); });
+          Array.prototype.forEach.call($("sp-out").querySelectorAll("a[data-t]"), function (a) { a.addEventListener("click", function (e) { e.preventDefault(); $("sp-t").value = a.dataset.t; arata(); }); });
+          var shown = 0;
+          function mai(n) {
+            var b = L.slice(shown, shown + n); shown += b.length;
+            $("sp-l").insertAdjacentHTML("beforeend", b.map(function (x) {
+              var pp = P[x[3]] || {};
+              return '<div class="doc"><div class="h"><span class="id">' + esc(zi(x[0])) + "</span> <b>" + esc(pp.nume || x[3]) + "</b>" + (x[4] ? ' <span class="muted">' + esc(SPUS_ROL[x[4]] || x[4]) + "</span>" : "") +
+                x[7].map(function (t) { return ' <span class="tag">' + esc(SPUS_TIP[t] || t) + "</span>"; }).join("") + "</div>" +
+                (x[2] ? '<div class="m"><span class="muted">' + (x[1] === "diverse" ? "Diverse" : x[1] != null ? "Punctul " + x[1] : "Înainte de ordinea de zi") + ": " + esc(x[2]) + "</span></div>" : "") +
+                '<div class="t sp-tx">' + esc(x[5]) + '</div><div class="m">' + x[6].map(function (t) { return '<span class="tag">' + esc(temeE[t] || t) + "</span>"; }).join(" ") +
+                ' <a href="#consiliu/sedinte/' + esc(x[0]) + '">ședința</a>' + (safeUrl(x[9]) ? ' <a href="' + esc(safeUrl(x[9])) + '" rel="noopener">procesul-verbal (' + esc(x[8]) + ")</a>" : "") + "</div></div>";
+            }).join(""));
+            $("sp-more").hidden = shown >= L.length;
+          }
+          if (L.length) {
+            mai(40); $("sp-more").addEventListener("click", function () { mai(60); });
+            $("sp-exp").addEventListener("click", function () {
+              var M = L.slice(0, 600).reverse(), titlu = "Cine ce a spus" + (p ? " - " + p.nume : "") + (ft ? " - " + temeE[ft] : "");
+              var t = "# " + titlu + "\n\nGenerat la " + zi(new Date().toISOString().slice(0, 10)) + " din Monitorul local al Asociației Rădăuțiul Civic. Document intern, nu se distribuie.\n\n" +
+                "Sursa: procesele-verbale ale ședințelor Consiliului Local Rădăuți, publicate pe primariaradauti.ro. Procesul-verbal e rezumatul secretariatului, nu o stenogramă; textul e citit automat (OCR) și poate avea greșeli. " +
+                "Înainte de a cita pe cineva, verifică pe PDF și pe înregistrare. Perioada: " + Math.min(a1, a2) + " - " + Math.max(a1, a2) + ". Intervenții: " + M.length + (L.length > M.length ? " (cele mai recente din " + L.length + ")" : "") + ".\n\n" +
+                M.map(function (x) { var pp = P[x[3]] || {}; return "## " + zi(x[0]) + " - " + (pp.nume || x[3]) + (x[4] ? " (" + (SPUS_ROL[x[4]] || x[4]) + ")" : "") + "\n\n" +
+                  (x[2] ? (x[1] === "diverse" ? "Diverse" : x[1] != null ? "Punctul " + x[1] : "Înainte de ordinea de zi") + ": " + x[2] + "\n\n" : "") + "> " + x[5] + "\n\nFișier: " + x[8] + (x[9] ? " (" + x[9] + ")" : "") +
+                  (x[6].length ? ". Teme: " + x[6].map(function (k) { return temeE[k] || k; }).join(", ") : "") + ".\n"; }).join("\n");
+              var a = document.createElement("a");
+              a.href = URL.createObjectURL(new Blob([t.replace(/—/g, " - ")], { type: "text/markdown;charset=utf-8" })); a.download = titlu.replace(/[_\\/:*?"<>|]+/g, " ") + ".md";
+              document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+            });
+          }
+        });
+      }
+      ["sp-p", "sp-t", "sp-f", "sp-a1", "sp-a2"].forEach(function (id) { $(id).addEventListener("change", arata); });
+      var tq; $("sp-q").addEventListener("input", function () { clearTimeout(tq); tq = setTimeout(arata, 250); });
+      arata();
+    }).catch(function () { $("sp").innerHTML = '<p class="empty">Registrul nu e încă pregătit. Apare după următoarea colectare zilnică.</p>'; });
+  }
   // ---------- Dosar pe temă (doar intern): cauți, alegi documentele, descarci un fișier pentru un chat AI ----------
   var DOS = { intern: null, tr: null, sel: null, rez: null };
   var DOS_FEL = { dispozitii: "Dispoziție", rapoarte: "Raport", hcl_anexe: "Anexă la hotărâre", comunale: "Servicii Comunale", tr: "Transcriere ședință" };
@@ -5181,6 +5275,7 @@
     else if (id === "mesaje") mesajeIntern(el);
     else if (id === "analize") analizeIntern(el);
     else if (id === "dosar") dosarIntern(el, r);
+    else if (id === "spus") spusIntern(el, r);
     else if (id === "sarcini") sarciniIntern(el);
     else if (id === "semnale") semnaleIntern(el, r);
     else if (id === "declaratii" && INTERN) declaratiiIntern(el);
