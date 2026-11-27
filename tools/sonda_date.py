@@ -84,6 +84,16 @@ elif fel == "pdf-campuri":   # câmpurile de formular dintr-un PDF (ex. bilanțu
                 if n >= 400:
                     break
         break
+elif fel == "spus-stare":   # registrul intern „Cine ce a spus”: doar totaluri și numele nepotrivite (jurnalul e public, analiza nu)
+    import json
+    d = json.load(open("data/_intern/interventii-index.json", encoding="utf-8"))
+    P = d["persoane"]
+    print("generat:", d["generat_la"], "| pe ani:", d["ani"], "| persoane:", len(P))
+    print("legate de un consilier:", sum(1 for p in P if p["id"]), "| pe roluri:", {r: sum(1 for p in P if p["rol"] == r) for r in sorted({p["rol"] for p in P})})
+    print("ponderea intervențiilor legate de un consilier sau de o funcție:", round(100 * sum(p["n"] for p in P if p["id"] or p["rol"] != "altul") / max(1, sum(p["n"] for p in P))), "%")
+    print("nume nepotrivite cu un consilier (în ordine alfabetică):")
+    print("; ".join(sorted(p["nume"] for p in P if not p["id"] and p["rol"] == "altul")))
+    print("consilieri din fișe:", "; ".join(sorted(c["nume"] for c in json.load(open("data/intern-date/voturi.json", encoding="utf-8")).get("consilieri", []))))
 elif fel == "pv-lista":   # data ședinței -> fișierul procesului-verbal (pentru citări)
     for d, url in c.execute("SELECT t.session_date, d.url FROM documents d JOIN pv t ON t.wp_id=d.wp_id ORDER BY t.session_date"):
         print(d, "|", url.rsplit("/", 1)[-1])
