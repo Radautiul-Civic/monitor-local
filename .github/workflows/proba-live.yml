@@ -1,15 +1,8 @@
-name: Probă transmisiune live (temporar)
+name: Starea transcrierii în direct
 
-# Verifică dacă o înregistrare e încă în direct și dacă sunetul ei se poate lua pe bucăți, cu același instrument ca la transcriere.
+# Spune până unde a ajuns transcrierea în direct (doar cifre, fără conținut: jurnalul e public).
 on:
   workflow_dispatch:
-    inputs:
-      url:
-        description: "Linkul videoclipului"
-        required: true
-      secunde:
-        description: "Câte secunde de sunet să încerce (0 = doar starea)"
-        default: "0"
 
 permissions:
   contents: read
@@ -17,15 +10,19 @@ permissions:
 jobs:
   p:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - run: pip install -q yt-dlp && sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - uses: actions/checkout@v5
       - env:
-          URL: ${{ inputs.url }}
-          SEC: ${{ inputs.secunde }}
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
         run: |
-          yt-dlp --skip-download --print "titlu=%(title)s | stare=%(live_status)s | in_direct=%(is_live)s | durata=%(duration)s | incarcat=%(upload_date)s | id=%(id)s" "$URL" || echo "starea nu s-a putut citi"
-          if [ "$SEC" != "0" ]; then
-            timeout $((SEC + 60)) yt-dlp -f "bestaudio/best" --download-sections "*0-$SEC" -o "proba.%(ext)s" "$URL" 2>&1 | tail -4 || true
-            ls -la proba.* 2>/dev/null && ffprobe -hide_banner -loglevel error -show_entries format=duration -of csv=p=0 proba.* || echo "nu s-a descărcat nimic"
-          fi
+          python - <<'PY'
+          from monitor_colector.intern_ftp import Intern
+          with Intern() as I:
+              L = I.json("intern/date/live.json") or {}
+              T = I.json("intern/transcrieri/%s.json" % L.get("id")) if L.get("id") else None
+          S = (T or {}).get("segmente") or []
+          print("live:", {k: L.get(k) for k in ("id", "in_curs", "actualizat", "pana_la")}, "| fragmente:", len(S), "| caractere:", sum(len(s[2]) for s in S))
+          PY
