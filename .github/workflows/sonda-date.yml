@@ -28,6 +28,7 @@ jobs:
           path: data
           key: date-sonda-${{ github.run_id }}
           restore-keys: date-
+      - run: pip install -q pypdf
       - env:
           CERERE: ${{ inputs.cerere }}
         # mai multe cereri într-o rulare: despărțite prin „ ;; ”
