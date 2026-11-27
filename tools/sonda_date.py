@@ -94,6 +94,17 @@ elif fel == "spus-stare":   # registrul intern „Cine ce a spus”: doar totalu
     print("nume nepotrivite cu un consilier (în ordine alfabetică):")
     print("; ".join(sorted(p["nume"] for p in P if not p["id"] and p["rol"] == "altul")))
     print("consilieri din fișe:", "; ".join(sorted(c["nume"] for c in json.load(open("data/intern-date/voturi.json", encoding="utf-8")).get("consilieri", []))))
+elif fel == "pat-stare":   # terenuri și clădiri: totaluri pe ani și lista hotărârilor de licitație (date publice, din teme.json)
+    import json
+    from collections import Counter
+    P = json.load(open("data/teme.json", encoding="utf-8")).get("patrimoniu") or []
+    print("total:", len(P), "| pe ani:", dict(sorted(Counter(str(x["an"]) for x in P).items())))
+    print("fel:", dict(Counter(x["fel"] for x in P)), "| mod:", dict(Counter(x.get("mod") for x in P)), "| beneficiar:", dict(Counter(x.get("benef_tip") for x in P)))
+    print("cu valoare:", sum(1 for x in P if x.get("valoare")), "| stare:", dict(Counter(x.get("stare") for x in P)))
+    print("--- licitații (vânzare, concesionare, închiriere), fără modificări și respingeri:")
+    for x in sorted(P, key=lambda x: (x["an"], x["nr"])):
+        if x.get("mod") == "licitatie" and x["fel"] in ("vanzare", "concesionare", "inchiriere") and not x.get("stare"):
+            print(f"{x['nr']}/{x['an']} | {x.get('data') or ''} | {x['fel']} | {x.get('valoare') or ''} {x.get('moneda') or ''}{x.get('val_unitate') or ''} | {x['titlu'][:230]}")
 elif fel == "pv-lista":   # data ședinței -> fișierul procesului-verbal (pentru citări)
     for d, url in c.execute("SELECT t.session_date, d.url FROM documents d JOIN pv t ON t.wp_id=d.wp_id ORDER BY t.session_date"):
         print(d, "|", url.rsplit("/", 1)[-1])
