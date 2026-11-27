@@ -35,14 +35,19 @@ SEG = int(os.environ.get("MC_LIVE_SEG", "180"))   # secunde pe bucată
 
 
 def porneste_flux(url, folder="live-seg"):
-    """Un singur proces care descarcă transmisiunea de la început, continuu, și o taie în bucăți de SEG secunde (flac, mono, 16 kHz).
-    Descărcarea pe sărite („de la minutul X”) nu merge la o transmisiune în curs: de fiecare dată ar relua de la început."""
+    """ffmpeg citește direct manifestul transmisiunii (DASH) și îl urmărește cât timp e în direct, tăind sunetul în bucăți de SEG
+    secunde (flac, mono, 16 kHz). Descărcarea obișnuită nu merge la o transmisiune în curs: manifestul arată doar ultimele
+    secunde, iar descărcarea „de la minutul X” reia de fiecare dată de la început."""
     os.makedirs(folder, exist_ok=True)
     for f in os.listdir(folder):
         os.remove(os.path.join(folder, f))
-    cmd = (f"yt-dlp -q -f 'bestaudio/best' -o - '{url}' | ffmpeg -hide_banner -loglevel error -i pipe:0 -vn -ac 1 -ar 16000 "
-           f"-f segment -segment_time {SEG} -c:a flac {folder}/seg%05d.flac")
-    return subprocess.Popen(["bash", "-o", "pipefail", "-c", cmd]), folder
+    r = subprocess.run(["yt-dlp", "--skip-download", "-f", "bestaudio/best", "--print", "%(manifest_url)s", url], capture_output=True, text=True, timeout=120)
+    mpd = (r.stdout.strip().splitlines() or [""])[0]
+    if not mpd.startswith("http"):
+        raise RuntimeError("manifestul transmisiunii nu s-a putut citi: " + (r.stderr or r.stdout)[-200:])
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", mpd, "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000",
+           "-f", "segment", "-segment_time", str(SEG), "-c:a", "flac", f"{folder}/seg%05d.flac"]
+    return subprocess.Popen(cmd), folder
 
 
 def ruleaza(url, zi, intern, model_nume=None):
@@ -55,12 +60,13 @@ def ruleaza(url, zi, intern, model_nume=None):
         except Exception as e:   # noqa: BLE001
             print("modelul", nume, "nu s-a încărcat:", str(e)[:120], flush=True)
     cid, segmente, facute, start = f"live-{zi}", [], 0, time.time()
-    _, titlu = durata(url)
+    d0, titlu = durata(url)
     proc, folder = porneste_flux(url)
+    baza = None   # de unde începe sunetul primit: de la începutul transmisiunii (0) sau din momentul pornirii (d0)
 
     def scrie(in_curs):
         acum = datetime.now().isoformat(timespec="seconds")
-        pana = facute * SEG
+        pana = round((baza or 0) + facute * SEG)
         intern.scrie(f"{TRANSCRIERI}/{cid}.json", {"data": zi, "url": url, "titlu": titlu, "live": in_curs, "actualizat": acum, "pana_la": pana, "segmente": segmente})
         intern.scrie("intern/date/live.json", {"id": cid, "data": zi, "url": url, "titlu": titlu, "in_curs": in_curs, "actualizat": acum, "pana_la": pana})
 
@@ -71,7 +77,10 @@ def ruleaza(url, zi, intern, model_nume=None):
         complete = fisiere if gata else fisiere[:-1]   # ultima bucată e încă în scriere cât timp descărcarea merge
         if facute < len(complete):
             f = os.path.join(folder, complete[facute])
-            off = facute * SEG
+            if baza is None:   # prima bucată venită mult mai repede decât durează: ffmpeg citește de la începutul transmisiunii
+                baza = 0.0 if time.time() - start < 0.7 * SEG else float(d0 or 0)
+                print("sunetul începe de la secunda", int(baza), "a transmisiunii", flush=True)
+            off = baza + facute * SEG
             try:
                 segs, _ = model.transcribe(audio(f), language="ro", beam_size=3, vad_filter=True, condition_on_previous_text=False, initial_prompt=PROMPT)
                 noi = [[round(s.start + off, 1), round(s.end + off, 1), s.text.strip()] for s in segs]
@@ -82,7 +91,7 @@ def ruleaza(url, zi, intern, model_nume=None):
             facute += 1
             os.remove(f)
             scrie(True)
-            print(f"bucata {facute}: până la {facute * SEG} s; {len(noi)} fragmente; {len(complete) - facute} bucăți în așteptare; au trecut {int(time.time() - start)} s", flush=True)
+            print(f"bucata {facute}: până la {int(off + SEG)} s; {len(noi)} fragmente; {len(complete) - facute} bucăți în așteptare; au trecut {int(time.time() - start)} s", flush=True)
             continue
         if gata or time.time() - start > LIMITA:
             break
@@ -90,7 +99,7 @@ def ruleaza(url, zi, intern, model_nume=None):
     if proc.poll() is None:
         proc.terminate()
     scrie(False)
-    return {"id": cid, "secunde": facute * SEG, "fragmente": len(segmente), "iesire_descarcare": proc.poll()}
+    return {"id": cid, "de_la": baza, "secunde": facute * SEG, "fragmente": len(segmente), "iesire_descarcare": proc.poll()}
 
 
 def main(argv=None):
