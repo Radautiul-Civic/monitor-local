@@ -122,14 +122,12 @@ def main(argv=None):
 
     class Scriitor:   # o conexiune nouă la fiecare scriere: între bucăți trec minute, iar conexiunea FTP ar expira
         def scrie(self, p, d):
-            for _ in range(3):
-                try:
-                    with Intern() as I:
-                        I.scrie(p, d)
-                    return
-                except Exception as e:   # noqa: BLE001
-                    print("scrierea în zona internă a eșuat, reîncerc:", str(e)[:120], flush=True)
-                    time.sleep(10)
+            # o singură încercare: la bucata următoare se scrie oricum tot fișierul, iar așteptarea ar întârzia transcrierea
+            try:
+                with Intern() as I:
+                    I.scrie(p, d)
+            except Exception as e:   # noqa: BLE001
+                print("scrierea în zona internă a eșuat (se reia la bucata următoare):", str(e)[:120], flush=True)
 
     print(json.dumps(ruleaza(a[0], a[1], Scriitor(), os.environ.get("MC_LIVE_MODEL") or None), ensure_ascii=False))
     return 0
