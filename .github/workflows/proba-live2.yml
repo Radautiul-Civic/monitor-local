@@ -1,0 +1,26 @@
+name: Probă ffmpeg pe manifestul transmisiunii (temporar)
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        required: true
+permissions:
+  contents: read
+jobs:
+  p:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install -q yt-dlp
+      - env:
+          URL: ${{ inputs.url }}
+        run: |
+          yt-dlp --skip-download -f "bestaudio/best" --print "durata=%(duration)s | proto=%(protocol)s | fmt=%(format_id)s" "$URL"
+          M=$(yt-dlp --skip-download -f "bestaudio/best" --print "%(manifest_url)s" "$URL" | head -1)
+          echo "manifest: ${M:0:60}... lungime ${#M}"
+          curl -s "$M" | head -c 1500 | sed -E 's/(https?:\/\/[^"<]{0,40})[^"<]*/\1.../g'; echo
+          mkdir s; (timeout 150 ffmpeg -hide_banner -loglevel info -i "$M" -map 0:a:0 -vn -ac 1 -ar 16000 -f segment -segment_time 30 -c:a flac s/seg%05d.flac 2>&1 | grep -vE "^\s*(Metadata|Stream|major|minor|compat|creation|handler|vendor|encoder)" | tail -25 | cut -c1-200) || true
+          ls -la s | tail -8
+          for f in s/*.flac; do ffprobe -hide_banner -loglevel error -show_entries format=duration -of csv=p=0 "$f"; done | tr '\n' ' '
