@@ -45,8 +45,10 @@ def porneste_flux(url, folder="live-seg"):
     mpd = (r.stdout.strip().splitlines() or [""])[0]
     if not mpd.startswith("http"):
         raise RuntimeError("manifestul transmisiunii nu s-a putut citi: " + (r.stderr or r.stdout)[-200:])
+    # timpii din flux pornesc de la minutul transmisiunii și sar înapoi: îi refacem de la zero, altfel tăierea în bucăți nu se face
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", mpd, "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000",
-           "-f", "segment", "-segment_time", str(SEG), "-c:a", "flac", f"{folder}/seg%05d.flac"]
+           "-af", "aresample=async=1,asetpts=N/SR/TB", "-f", "segment", "-segment_time", str(SEG), "-reset_timestamps", "1",
+           "-c:a", "pcm_s16le", f"{folder}/seg%05d.wav"]
     return subprocess.Popen(cmd), folder
 
 
@@ -59,7 +61,7 @@ def ruleaza(url, zi, intern, model_nume=None):
             break
         except Exception as e:   # noqa: BLE001
             print("modelul", nume, "nu s-a încărcat:", str(e)[:120], flush=True)
-    cid, segmente, facute, start = f"live-{zi}", [], 0, time.time()
+    cid, segmente, facute, start = f"live-{zi}-{datetime.now().strftime('%H%M')}", [], 0, time.time()
     d0, titlu = durata(url)
     proc, folder = porneste_flux(url)
     baza = None   # de unde începe sunetul primit: de la începutul transmisiunii (0) sau din momentul pornirii (d0)
@@ -73,7 +75,7 @@ def ruleaza(url, zi, intern, model_nume=None):
     scrie(True)   # panoul arată imediat că a pornit
     while True:
         gata = proc.poll() is not None
-        fisiere = sorted(f for f in os.listdir(folder) if f.endswith(".flac"))
+        fisiere = sorted(f for f in os.listdir(folder) if f.endswith(".wav"))
         complete = fisiere if gata else fisiere[:-1]   # ultima bucată e încă în scriere cât timp descărcarea merge
         if facute < len(complete):
             f = os.path.join(folder, complete[facute])
