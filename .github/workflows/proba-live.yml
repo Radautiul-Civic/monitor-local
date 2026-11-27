@@ -1,0 +1,31 @@
+name: Probă transmisiune live (temporar)
+
+# Verifică dacă o înregistrare e încă în direct și dacă sunetul ei se poate lua pe bucăți, cu același instrument ca la transcriere.
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Linkul videoclipului"
+        required: true
+      secunde:
+        description: "Câte secunde de sunet să încerce (0 = doar starea)"
+        default: "0"
+
+permissions:
+  contents: read
+
+jobs:
+  p:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - run: pip install -q yt-dlp && sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - env:
+          URL: ${{ inputs.url }}
+          SEC: ${{ inputs.secunde }}
+        run: |
+          yt-dlp --skip-download --print "titlu=%(title)s | stare=%(live_status)s | in_direct=%(is_live)s | durata=%(duration)s | incarcat=%(upload_date)s | id=%(id)s" "$URL" || echo "starea nu s-a putut citi"
+          if [ "$SEC" != "0" ]; then
+            timeout $((SEC + 60)) yt-dlp -f "bestaudio/best" --download-sections "*0-$SEC" -o "proba.%(ext)s" "$URL" 2>&1 | tail -4 || true
+            ls -la proba.* 2>/dev/null && ffprobe -hide_banner -loglevel error -show_entries format=duration -of csv=p=0 proba.* || echo "nu s-a descărcat nimic"
+          fi
