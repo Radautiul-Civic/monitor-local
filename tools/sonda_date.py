@@ -66,6 +66,24 @@ elif fel == "doc-text":   # textul documentelor publice care conțin expresia (e
             n += 1
             if n >= 6:
                 break
+elif fel == "pdf-campuri":   # câmpurile de formular dintr-un PDF (ex. bilanțurile depuse pe formularul ANAF)
+    from pypdf import PdfReader
+    rx = re.compile(arg, re.I)
+    for url, lp in c.execute("SELECT url, local_path FROM documents WHERE local_path IS NOT NULL"):
+        if not rx.search(url) or not lp or not os.path.exists(lp):
+            continue
+        r = PdfReader(lp)
+        f = r.get_fields() or {}
+        print("=====", url, "câmpuri:", len(f), "| xfa:", bool(r.xfa))
+        n = 0
+        for k, v in f.items():
+            val = v.get("/V")
+            if val not in (None, "", "/Off"):
+                print(k, "=", ascunde(str(val))[:120], "|", str(v.get("/TU") or "")[:80])
+                n += 1
+                if n >= 400:
+                    break
+        break
 elif fel == "pv-lista":   # data ședinței -> fișierul procesului-verbal (pentru citări)
     for d, url in c.execute("SELECT t.session_date, d.url FROM documents d JOIN pv t ON t.wp_id=d.wp_id ORDER BY t.session_date"):
         print(d, "|", url.rsplit("/", 1)[-1])
